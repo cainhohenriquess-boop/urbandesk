@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" fill="none">
+  <!-- Ícone: pin de mapa com círculo interno -->
+  <g>
+    <!-- Sombra suave do pin -->
+    <ellipse cx="24" cy="44" rx="7" ry="2.5" fill="#192b8a" opacity="0.18"/>
+    <!-- Corpo do pin -->
+    <path
+      d="M24 4C15.163 4 8 11.163 8 20c0 10.5 14.25 23.1 15.3 24.03a.997.997 0 0 0 1.4 0C25.75 43.1 40 30.5 40 20 40 11.163 32.837 4 24 4z"
+      fill="url(#pin-grad)"
+    />
+    <!-- Círculo interno branco -->
+    <circle cx="24" cy="20" r="6" fill="white" opacity="0.95"/>
+    <!-- Ponto central -->
+    <circle cx="24" cy="20" r="2.5" fill="#3468f6"/>
+  </g>
+
+  <!-- Gradiente do pin -->
+  <defs>
+    <linearGradient id="pin-grad" x1="8" y1="4" x2="40" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#3468f6"/>
+      <stop offset="100%" stop-color="#192b8a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Texto: Urban -->
+  <text
+    x="52"
+    y="30"
+    font-family="system-ui, -apple-system, sans-serif"
+    font-size="22"
+    font-weight="700"
+    letter-spacing="-0.5"
+    fill="#0f172a"
+  >Urban</text>
+
+  <!-- Texto: Desk (cor brand) -->
+  <text
+    x="118"
+    y="30"
+    font-family="system-ui, -apple-system, sans-serif"
+    font-size="22"
+    font-weight="700"
+    letter-spacing="-0.5"
+    fill="#3468f6"
+  >Desk</text>
+</svg>
