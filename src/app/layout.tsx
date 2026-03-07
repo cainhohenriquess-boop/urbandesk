@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Syne, DM_Sans, JetBrains_Mono } from "next/font/google";
-import { SessionProvider } from "next-auth/react";
+// ❌ REMOVIDO: import { SessionProvider } from "next-auth/react";
+// ✅ ADICIONADO: A nossa nova importação do client component
+import { Providers } from "@/components/providers"; 
 import "./globals.css";
 
 // ─────────────────────────────────────────────
@@ -69,7 +71,8 @@ export default function RootLayout({
       className={`${fontDisplay.variable} ${fontSans.variable} ${fontMono.variable}`}
     >
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
-        <SessionProvider>{children}</SessionProvider>
+        {/* ✅ ADICIONADO: Usando o nosso novo componente Providers */}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
