@@ -1,0 +1,295 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────
+   TOKENS DE DESIGN — MODO CLARO
+   Compatível com Shadcn/ui (HSL sem hsl())
+───────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* Superfícies */
+    --background:          0 0% 98%;
+    --foreground:          222 47% 11%;
+
+    /* Cards */
+    --card:                0 0% 100%;
+    --card-foreground:     222 47% 11%;
+
+    /* Popover / Dropdown */
+    --popover:             0 0% 100%;
+    --popover-foreground:  222 47% 11%;
+
+    /* Primary → brand-700 */
+    --primary:             228 78% 46%;
+    --primary-foreground:  0 0% 100%;
+
+    /* Secondary → slate-100 */
+    --secondary:           214 32% 91%;
+    --secondary-foreground: 222 47% 11%;
+
+    /* Muted → slate-50 */
+    --muted:               210 40% 96%;
+    --muted-foreground:    215 16% 47%;
+
+    /* Borders & Inputs */
+    --border:              214 32% 91%;
+    --input:               214 32% 91%;
+    --ring:                228 78% 46%;
+
+    /* Raio global */
+    --radius:              0.5rem;
+
+    /* Sidebar */
+    --sidebar-background:          222 47% 11%;
+    --sidebar-foreground:          210 40% 90%;
+    --sidebar-primary:             228 78% 60%;
+    --sidebar-primary-foreground:  0 0% 100%;
+    --sidebar-accent:              222 40% 18%;
+    --sidebar-accent-foreground:   210 40% 96%;
+    --sidebar-border:              222 40% 16%;
+    --sidebar-ring:                228 78% 60%;
+
+    /* Charts */
+    --chart-1:  228 78% 46%;
+    --chart-2:  160 60% 40%;
+    --chart-3:  36 80% 50%;
+    --chart-4:  0 72% 51%;
+    --chart-5:  262 60% 58%;
+  }
+
+  /* ─────────────────────────────────────────────
+     TOKENS — MODO ESCURO
+  ───────────────────────────────────────────── */
+  .dark {
+    --background:          222 47% 7%;
+    --foreground:          210 40% 96%;
+
+    --card:                222 47% 10%;
+    --card-foreground:     210 40% 96%;
+
+    --popover:             222 47% 10%;
+    --popover-foreground:  210 40% 96%;
+
+    --primary:             228 78% 60%;
+    --primary-foreground:  222 47% 7%;
+
+    --secondary:           222 40% 16%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted:               222 40% 14%;
+    --muted-foreground:    215 16% 56%;
+
+    --border:              222 40% 16%;
+    --input:               222 40% 16%;
+    --ring:                228 78% 60%;
+
+    --sidebar-background:          222 47% 5%;
+    --sidebar-foreground:          210 40% 88%;
+    --sidebar-primary:             228 78% 62%;
+    --sidebar-primary-foreground:  0 0% 100%;
+    --sidebar-accent:              222 47% 10%;
+    --sidebar-accent-foreground:   210 40% 96%;
+    --sidebar-border:              222 47% 9%;
+    --sidebar-ring:                228 78% 62%;
+
+    --chart-1:  228 78% 62%;
+    --chart-2:  160 60% 50%;
+    --chart-3:  36 80% 58%;
+    --chart-4:  0 72% 60%;
+    --chart-5:  262 60% 66%;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   RESET BASE
+───────────────────────────────────────────── */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight;
+  }
+
+  /* Scrollbar customizada */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+
+  /* Focus ring acessível */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Seleção de texto */
+  ::selection {
+    @apply bg-primary/20 text-foreground;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   COMPONENTES UTILITÁRIOS GLOBAIS
+───────────────────────────────────────────── */
+@layer components {
+
+  /* Layout principal app (sidebar + conteúdo) */
+  .app-shell {
+    @apply flex h-screen overflow-hidden bg-background;
+  }
+
+  .app-content {
+    @apply flex flex-col flex-1 overflow-hidden min-w-0;
+  }
+
+  .app-main {
+    @apply flex-1 overflow-y-auto p-6;
+  }
+
+  /* KPI Card base */
+  .kpi-card {
+    @apply relative overflow-hidden rounded-xl border bg-card p-5 shadow-card
+           transition-shadow duration-200 hover:shadow-card-hover;
+  }
+
+  /* Badge de status */
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5
+           text-xs font-medium leading-none;
+  }
+
+  /* Mapa canvas — ocupa todo o espaço disponível */
+  .map-canvas {
+    @apply relative w-full h-full bg-slate-900;
+  }
+
+  /* Painel de camadas GIS */
+  .layer-panel {
+    @apply absolute right-4 top-16 z-toolbar w-64 rounded-xl border
+           bg-card/95 shadow-map backdrop-blur-sm;
+  }
+
+  /* Toolbar de desenho (floating) */
+  .drawing-toolbar {
+    @apply absolute left-4 top-1/2 z-toolbar -translate-y-1/2
+           flex flex-col gap-1 rounded-xl border bg-card/95
+           p-1.5 shadow-map backdrop-blur-sm;
+  }
+
+  /* Gradiente de overlay no mapa */
+  .map-overlay-top {
+    @apply pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-map z-map;
+  }
+
+  /* Formulário de campo (PWA mobile) */
+  .field-form {
+    @apply flex flex-col gap-4 p-4 pb-safe;
+  }
+
+  /* Linha de separação elegante */
+  .section-divider {
+    @apply my-6 border-t border-border/60;
+  }
+
+  /* Texto de coordenada GIS */
+  .geo-label {
+    @apply font-mono text-xs text-muted-foreground tabular-nums;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   UTILITÁRIOS EXTRAS
+───────────────────────────────────────────── */
+@layer utilities {
+
+  /* Safe area para PWA no iOS */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 1rem);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+
+  /* Texto com gradiente brand */
+  .text-gradient-brand {
+    @apply bg-gradient-brand bg-clip-text text-transparent;
+  }
+
+  /* Truncate inteligente (respeita largura) */
+  .text-truncate {
+    @apply truncate max-w-full;
+  }
+
+  /* Grid de dashboard responsivo */
+  .dashboard-grid {
+    @apply grid gap-4
+           grid-cols-1
+           sm:grid-cols-2
+           lg:grid-cols-4;
+  }
+
+  /* Animação de entrada para cards */
+  .animate-enter {
+    @apply animate-fade-in;
+  }
+
+  /* Número com fonte mono e alinhamento tabular */
+  .tabular-num {
+    @apply font-mono tabular-nums slashed-zero;
+  }
+
+  /* Indicador de ponto pulsante (status ao vivo) */
+  .live-dot::before {
+    content: "";
+    @apply inline-block w-2 h-2 rounded-full bg-accent-500 animate-pulse-dot mr-1.5;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   MAPBOX GL — Override de estilos padrão
+───────────────────────────────────────────── */
+.mapboxgl-ctrl-logo {
+  display: none !important;
+}
+
+.mapboxgl-ctrl-attrib {
+  @apply text-[10px] opacity-50;
+}
+
+.mapboxgl-popup-content {
+  @apply rounded-lg border bg-card text-card-foreground shadow-map p-3 text-sm;
+}
+
+.mapboxgl-popup-tip {
+  border-top-color: hsl(var(--card)) !important;
+}
+
+/* ─────────────────────────────────────────────
+   PRINT — Relatórios para secretaria
+───────────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+  body { @apply bg-white text-black; }
+  .app-shell { display: block; height: auto; overflow: visible; }
+}

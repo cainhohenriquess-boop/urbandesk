@@ -1,0 +1,225 @@
+// ─────────────────────────────────────────────
+// UrbanDesk — Prisma Schema
+// Banco: PostgreSQL + PostGIS
+// ─────────────────────────────────────────────
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum TenantStatus {
+  TRIAL
+  ATIVO
+  INADIMPLENTE
+  CANCELADO
+}
+
+enum TenantPlan {
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum UserRole {
+  SUPERADMIN
+  SECRETARIO
+  ENGENHEIRO
+  CAMPO
+}
+
+enum ProjectStatus {
+  PLANEJADO
+  EM_ANDAMENTO
+  PARALISADO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum AssetType {
+  PONTO       // Ativo pontual (hidrante, bueiro, luminária)
+  TRECHO      // Ativo linear (trecho de via, rede)
+  AREA        // Ativo poligonal (lote, praça)
+}
+
+// ─────────────────────────────────────────────
+// TENANT (Prefeitura / Município)
+// ─────────────────────────────────────────────
+model Tenant {
+  id           String       @id @default(cuid())
+  name         String                           // "Prefeitura de Fortaleza"
+  slug         String       @unique             // "fortaleza-ce"
+  cnpj         String       @unique
+  state        String       @db.Char(2)         // "CE"
+  plan         TenantPlan   @default(STARTER)
+  status       TenantStatus @default(TRIAL)
+  mrr          Decimal      @default(0)         @db.Decimal(12, 2)
+  trialEndsAt  DateTime?
+  logoUrl      String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // Relações
+  users        User[]
+  projects     Project[]
+  assets       Asset[]
+  invoices     Invoice[]
+
+  @@map("tenants")
+}
+
+// ─────────────────────────────────────────────
+// USER
+// ─────────────────────────────────────────────
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(CAMPO)
+  avatarUrl    String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Multi-tenancy (null = SUPERADMIN sem tenant)
+  tenantId     String?
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Relações
+  assetLogs    AssetLog[]
+  sessions     UserSession[]
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// PROJECT (Obra / Intervenção)
+// ─────────────────────────────────────────────
+model Project {
+  id           String        @id @default(cuid())
+  name         String
+  description  String?
+  status       ProjectStatus @default(PLANEJADO)
+  budget       Decimal?      @db.Decimal(15, 2)
+  startDate    DateTime?
+  endDate      DateTime?
+  completionPct Int           @default(0)       // 0-100
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Multi-tenancy
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Relações
+  assets       Asset[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("projects")
+}
+
+// ─────────────────────────────────────────────
+// ASSET (Ativo GIS — ponto, trecho ou área)
+// ─────────────────────────────────────────────
+model Asset {
+  id           String    @id @default(cuid())
+  name         String
+  type         AssetType
+  description  String?
+  photos       String[]  // URLs no storage
+  attributes   Json      @default("{}")  // Atributos customizados por tipo
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Geometria PostGIS (armazenada como texto WKT/GeoJSON para o Prisma)
+  // Queries espaciais reais usam $queryRaw com ST_ functions
+  geomWkt      String?   // WKT: "POINT(-38.5434 -3.7172)"
+  lat          Float?
+  lng          Float?
+  srid         Int       @default(4326) // WGS84
+
+  // Multi-tenancy
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Projeto associado (opcional)
+  projectId    String?
+  project      Project?  @relation(fields: [projectId], references: [id])
+
+  // Logs de campo
+  logs         AssetLog[]
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([type])
+  @@map("assets")
+}
+
+// ─────────────────────────────────────────────
+// ASSET LOG (Histórico de campo)
+// ─────────────────────────────────────────────
+model AssetLog {
+  id          String   @id @default(cuid())
+  note        String
+  photos      String[]
+  lat         Float?
+  lng         Float?
+  createdAt   DateTime @default(now())
+
+  assetId     String
+  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([assetId])
+  @@map("asset_logs")
+}
+
+// ─────────────────────────────────────────────
+// INVOICE (Financeiro SaaS — para SuperAdmin)
+// ─────────────────────────────────────────────
+model Invoice {
+  id          String   @id @default(cuid())
+  amount      Decimal  @db.Decimal(12, 2)
+  status      String   @default("PENDENTE") // PENDENTE | PAGO | VENCIDO
+  dueDate     DateTime
+  paidAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("invoices")
+}
+
+// ─────────────────────────────────────────────
+// USER SESSION (Auditoria de acessos)
+// ─────────────────────────────────────────────
+model UserSession {
+  id          String   @id @default(cuid())
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}
