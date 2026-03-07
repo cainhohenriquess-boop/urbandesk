@@ -46,6 +46,11 @@ interface MapStore {
   drawMode:    DrawMode;
   setDrawMode: (mode: DrawMode) => void;
 
+  // Contador de alterações não salvas
+  unsavedCount: number;
+  incrementUnsaved: () => void;
+  resetUnsaved: () => void;
+
   // Features salvas no mapa
   features:      DrawnFeature[];
   addFeature:    (feature: Omit<DrawnFeature, "id" | "createdAt">) => void;
@@ -89,6 +94,11 @@ export const useMapStore = create<MapStore>()(
       // ── Modo de desenho ──
       drawMode: "none",
       setDrawMode: (mode) => set({ drawMode: mode, draftPoints: [] }),
+
+      // ── Unsaved Count ──
+      unsavedCount: 0,
+      incrementUnsaved: () => set((s) => ({ unsavedCount: s.unsavedCount + 1 })),
+      resetUnsaved: () => set({ unsavedCount: 0 }),
 
       // ── Features ──
       features: [],
@@ -194,3 +204,5 @@ export const selectDraftPoints = (s: MapStore) => s.draftPoints;
 export const selectFeatureCount = (s: MapStore) => s.features.length;
 
 export const selectIsDrawing = (s: MapStore) => s.drawMode !== "none";
+
+export const selectUnsavedCount = (s: MapStore) => s.unsavedCount;
