@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils";
 // ─────────────────────────────────────────────
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2x4emhvYXJvMDBmMDJqc2c2cjVqcGZxNiJ9.dummy";
 
-// Usando URL de Fontes Open-Source para evitar bloqueios de Token
 const GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
 
 const BLANK_STYLE = {
@@ -107,6 +106,7 @@ export function MapCanvas() {
   const syncedAssets = assetFeatures.filter(f => f.synced);
   const unsyncedAssets = assetFeatures.filter(f => !f.synced);
 
+  // 🚀 O Mapa agora lê o estado correcto: se for "gis", usa o fundo limpo BLANK_STYLE
   const activeMapStyle = mapStyle === "topography" ? TOPO_STYLE : mapStyle === "satellite" ? SATELLITE_STYLE : BLANK_STYLE;
 
   const geometriesGeoJson = useMemo(() => {
@@ -142,8 +142,7 @@ export function MapCanvas() {
     };
   }, [syncedAssets]);
 
-  // Log de Debug Invisível: Se você apertar F12 (Console) no navegador, 
-  // vai ver exatamente quantos vetores o seu sistema está lendo!
+  // Log de Debug Invisível para vermos a contagem real das coordenadas
   useEffect(() => {
     if (baseLayersData && baseLayersData.length > 0) {
       baseLayersData.forEach(layer => {
@@ -166,18 +165,17 @@ export function MapCanvas() {
         <NavigationControl position="bottom-right" />
 
         {/* ── CAMADAS CARTOGRÁFICAS BLINDADAS ── */}
+        {/* Apenas renderiza se a chave "Base Cartográfica" estiver ligada no painel! */}
         {layers.basegis && baseLayersData.map((layer) => {
           const sourceId = `source-${layer.id}`;
           
-          // Tratamento de Dados Super Seguro
           let parsedData = typeof layer.geoJsonData === 'string' ? JSON.parse(layer.geoJsonData) : layer.geoJsonData;
-          if (Array.isArray(parsedData)) parsedData = parsedData[0]; // Corrige bug do shpjs
+          if (Array.isArray(parsedData)) parsedData = parsedData[0];
           
           const safeData = parsedData?.type === "FeatureCollection" ? parsedData : { type: "FeatureCollection", features: [] };
 
           return (
             <React.Fragment key={`frag-${layer.id}`}>
-              {/* O Source e o Layer agora são irmãos, isso impede o React de quebrar o ID do Mapbox */}
               <Source id={sourceId} type="geojson" data={safeData} />
               
               {/* LIMITE MUNICIPAL */}
