@@ -30,7 +30,11 @@ export default function CampoPage() {
   const [assetType, setAssetType] = useState<AssetType>("PONTO");
   const [name, setName]           = useState("");
   const [note, setNote]           = useState("");
-  const [photos, setPhotos]       = useState<string[]>([]);
+  
+  // ✅ NOVA LÓGICA DE FOTOS: Arquivos reais e previews leves
+  const [photos, setPhotos]       = useState<File[]>([]);
+  const [previews, setPreviews]   = useState<string[]>([]);
+  
   const [coords, setCoords]       = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError]   = useState<string | null>(null);
@@ -57,25 +61,66 @@ export default function CampoPage() {
     );
   }, []);
 
+  // ✅ CRIA PREVIEWS SEM GASTAR MEMÓRIA DO CELULAR
   const handlePhotoChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    Array.from(e.target.files ?? []).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        if (ev.target?.result) setPhotos((p) => [...p, ev.target!.result as string]);
-      };
-      reader.readAsDataURL(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+
+    setPhotos((prev) => {
+      const newPhotos = [...prev, ...files].slice(0, 5); // Máximo 5 fotos
+      return newPhotos;
+    });
+
+    setPreviews((prev) => {
+      const newPreviews = files.map(file => URL.createObjectURL(file));
+      return [...prev, ...newPreviews].slice(0, 5);
     });
   }, []);
+
+  // ✅ LIMPA A MEMÓRIA AO REMOVER FOTO
+  const removePhoto = (index: number) => {
+    URL.revokeObjectURL(previews[index]); 
+    setPhotos((p) => p.filter((_, i) => i !== index));
+    setPreviews((p) => p.filter((_, i) => i !== index));
+  };
 
   async function handleSubmit() {
     if (!name.trim()) return;
     setSubmitting(true);
+
+    let finalPhotoUrls: string[] = [];
+
+    // ✅ PASSO 1: UPLOAD PARA O STORAGE VIA FORMDATA
+    if (isOnline && photos.length > 0) {
+      const formData = new FormData();
+      photos.forEach((file) => formData.append("files", file));
+
+      try {
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+        const uploadData = await uploadRes.json();
+        if (uploadData.success) {
+          finalPhotoUrls = uploadData.urls;
+        }
+      } catch (err) {
+        console.error("Erro ao subir fotos:", err);
+      }
+    }
+
+    // Se estiver offline ou falhar, salva uma string temporária
+    if (finalPhotoUrls.length === 0 && photos.length > 0) {
+      finalPhotoUrls = previews; 
+    }
+
+    // ✅ PASSO 2: SALVA NO POSTGRESQL APENAS AS URLs LEVES
     const asset: CapturedAsset = {
       id: crypto.randomUUID(), type: assetType, name: name.trim(),
       note: note.trim(), lat: coords?.lat ?? null, lng: coords?.lng ?? null,
-      photos, createdAt: new Date().toISOString(), sync: isOnline ? "syncing" : "pending",
+      photos: finalPhotoUrls,
+      createdAt: new Date().toISOString(), sync: isOnline ? "syncing" : "pending",
     };
+    
     setQueue((prev) => [asset, ...prev]);
+
     if (isOnline) {
       try {
         await fetch("/api/gis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(asset) });
@@ -84,7 +129,12 @@ export default function CampoPage() {
         setQueue((prev) => prev.map((a) => a.id === asset.id ? { ...a, sync: "error" } : a));
       }
     }
-    setName(""); setNote(""); setPhotos([]); setCoords(null);
+
+    // Reset Form
+    setName(""); setNote(""); 
+    previews.forEach(url => URL.revokeObjectURL(url)); // Limpa memória
+    setPhotos([]); setPreviews([]); 
+    setCoords(null);
     setSubmitting(false); setSubmitted(true);
     setTimeout(() => setSubmitted(false), 3000);
   }
@@ -92,7 +142,7 @@ export default function CampoPage() {
   const pendingCount = queue.filter((a) => a.sync === "pending" || a.sync === "error").length;
 
   return (
-    <div className="mx-auto max-w-lg space-y-4">
+    <div className="mx-auto max-w-lg space-y-4 pb-20">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -129,7 +179,7 @@ export default function CampoPage() {
                 <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <p className="text-sm text-accent-700 font-medium">
-                Ativo salvo! {isOnline ? "Enviando ao servidor…" : "Será sincronizado quando houver conexão."}
+                Ativo salvo! {isOnline ? "Enviado ao servidor com sucesso." : "Será sincronizado quando houver conexão."}
               </p>
             </div>
           )}
@@ -198,8 +248,8 @@ export default function CampoPage() {
           {/* Fotos */}
           <div className="rounded-xl border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Fotos ({photos.length}/5)</p>
-              {photos.length < 5 && (
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Fotos ({previews.length}/5)</p>
+              {previews.length < 5 && (
                 <button onClick={() => fileInputRef.current?.click()}
                   className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 transition-colors">
                   <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -210,7 +260,7 @@ export default function CampoPage() {
               )}
             </div>
             <input ref={fileInputRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handlePhotoChange} />
-            {photos.length === 0 ? (
+            {previews.length === 0 ? (
               <button onClick={() => fileInputRef.current?.click()}
                 className="flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border py-8 text-muted-foreground hover:border-brand-400 hover:text-brand-600 transition-all">
                 <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -220,11 +270,11 @@ export default function CampoPage() {
               </button>
             ) : (
               <div className="grid grid-cols-3 gap-2">
-                {photos.map((src, i) => (
+                {previews.map((src, i) => (
                   <div key={i} className="group relative aspect-square overflow-hidden rounded-lg">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={src} alt={`Foto ${i + 1}`} className="h-full w-full object-cover" />
-                    <button onClick={() => setPhotos((p) => p.filter((_, idx) => idx !== i))}
+                    <button onClick={() => removePhoto(i)}
                       className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100">
                       <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                         <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
@@ -232,14 +282,6 @@ export default function CampoPage() {
                     </button>
                   </div>
                 ))}
-                {photos.length < 5 && (
-                  <button onClick={() => fileInputRef.current?.click()}
-                    className="aspect-square rounded-lg border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:border-brand-400 hover:text-brand-600 transition-all">
-                    <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-                    </svg>
-                  </button>
-                )}
               </div>
             )}
           </div>
@@ -248,9 +290,8 @@ export default function CampoPage() {
           <button onClick={handleSubmit} disabled={!name.trim() || submitting}
             className={cn("w-full rounded-xl py-4 text-sm font-600 font-display transition-all duration-200 shadow-[0_4px_12px_rgba(52,104,246,0.3)]",
               name.trim() && !submitting ? "bg-brand-600 text-white hover:bg-brand-500 active:scale-[0.98]" : "bg-muted text-muted-foreground cursor-not-allowed")}>
-            {submitting ? "Salvando…" : "Salvar Ativo"}
+            {submitting ? "Salvando e Enviando…" : "Salvar Ativo no Servidor"}
           </button>
-          <div className="pb-safe" />
         </div>
       )}
 
@@ -298,20 +339,11 @@ export default function CampoPage() {
                         {sync.label}
                       </div>
                     </div>
-                    {asset.photos.length > 0 && (
-                      <div className="mt-3 flex gap-2 overflow-x-auto">
-                        {asset.photos.map((src, i) => (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img key={i} src={src} alt="" className="h-12 w-12 shrink-0 rounded-md object-cover" />
-                        ))}
-                      </div>
-                    )}
                   </div>
                 );
               })}
             </>
           )}
-          <div className="pb-safe" />
         </div>
       )}
     </div>
