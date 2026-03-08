@@ -16,7 +16,7 @@ const LAYER_DEFS = [
 ];
 
 const MAP_STYLES = [
-  { id:"streets"    as const, label:"Ruas",        icon:"🗺" },
+  { id:"streets"    as const, label:"Ruas (OSM)",  icon:"🗺" },
   { id:"satellite"  as const, label:"Satélite",    icon:"🛰" },
   { id:"topography" as const, label:"Topografia",  icon:"⛰" },
 ];
@@ -40,7 +40,6 @@ export function LayerPanel({ onExportGeoJSON, className }: LayerPanelProps) {
   const features   = useMapStore((s) => s.features);
 
   const allOn  = Object.values(layers).every(Boolean);
-  const allOff = Object.values(layers).every((v) => !v);
 
   if (!open) {
     return (
@@ -160,18 +159,23 @@ export function LayerPanel({ onExportGeoJSON, className }: LayerPanelProps) {
             </button>
           </div>
           <div className="max-h-24 overflow-y-auto space-y-1">
-            {features.map((f) => (
-              <div key={f.id} className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span>{f.type==="point"?"📍":f.type==="line"?"➖":"⬡"}</span>
-                <span className="truncate">{f.label || `${f.type} #${f.id.slice(-4)}`}</span>
-                <button
-                  onClick={() => useMapStore.getState().removeFeature(f.id)}
-                  className="ml-auto shrink-0 text-danger-500 hover:text-danger-600 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+            {features.map((f) => {
+              // Correção na lógica dos ícones
+              const isGeometry = f.type === "line" || f.type === "polygon";
+              const icon = f.type === "line" ? "➖" : f.type === "polygon" ? "⬡" : "📍";
+              return (
+                <div key={f.id} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span>{icon}</span>
+                  <span className="truncate">{f.label || `${f.type.replace("_", " ")} #${f.id.slice(-4)}`}</span>
+                  <button
+                    onClick={() => useMapStore.getState().removeFeature(f.id)}
+                    className="ml-auto shrink-0 text-danger-500 hover:text-danger-600 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

@@ -6,9 +6,40 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { useMapStore } from "@/store/useMapStore";
 import { cn } from "@/lib/utils";
 
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1IjoiZGVtbyIsImEiOiJjbHh6aG9hcm8wMGYwMmpzZzZyNWpwZnE2In0.mock-token-substitua-no-env";
+// Não precisa de token válido para tiles raster de terceiros, 
+// mas a biblioteca exige a prop. Passamos um dummy.
+const MAPBOX_TOKEN = "pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2x4emhvYXJvMDBmMDJqc2c2cjVqcGZxNiJ9.dummy";
 
-// Refatoração: Adicionado 'hex' para que a Engine WebGL consiga pintar as cores massivamente
+// ─────────────────────────────────────────────
+// Estilos de Mapas (Raster Tiles Gratuitos)
+// ─────────────────────────────────────────────
+const OSM_STYLE = {
+  version: 8,
+  sources: {
+    osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "© OpenStreetMap" }
+  },
+  layers: [{ id: "osm-layer", type: "raster", source: "osm", minzoom: 0, maxzoom: 19 }]
+};
+
+const SATELLITE_STYLE = {
+  version: 8,
+  sources: {
+    satellite: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Tiles © Esri" }
+  },
+  layers: [{ id: "satellite-layer", type: "raster", source: "satellite", minzoom: 0, maxzoom: 19 }]
+};
+
+const TOPO_STYLE = {
+  version: 8,
+  sources: {
+    topo: { type: "raster", tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "© OpenTopoMap" }
+  },
+  layers: [{ id: "topo-layer", type: "raster", source: "topo", minzoom: 0, maxzoom: 17 }]
+};
+
+// ─────────────────────────────────────────────
+// Estilização de Ativos B2G
+// ─────────────────────────────────────────────
 const ASSET_STYLES = {
   BOCA_LOBO:      { color: "bg-blue-500",    hex: "#3b82f6", ring: "ring-blue-500/50",    icon: "💧" },
   POCO_VISITA:    { color: "bg-slate-600",   hex: "#475569", ring: "ring-slate-600/50",   icon: "🕳️" },
@@ -27,10 +58,9 @@ const ASSET_STYLES = {
 export function MapCanvas() {
   const { 
     features, drawMode, viewState, setViewState, 
-    addDraftPoint, finishDraft, layers, mapStyle 
+    addDraftPoint, draftPoints, finishDraft, layers, mapStyle 
   } = useMapStore();
 
-  // Refatoração: Tipagem forte contra quebras de API
   const handleMapClick = (e: MapLayerMouseEvent) => {
     if (drawMode === "SELECT") return;
     addDraftPoint({ lng: e.lngLat.lng, lat: e.lngLat.lat });
@@ -46,29 +76,69 @@ export function MapCanvas() {
   const geometryFeatures = features.filter(f => f.type === "line" || f.type === "polygon");
   const assetFeatures = features.filter(f => f.type !== "line" && f.type !== "polygon");
 
-  // Divisão estratégica:
-  // - Sincronizados vão para a Engine WebGL (Performance absurda para milhares de pontos)
-  // - Não Sincronizados (pendentes) continuam como HTML Markers para exibir a animação de pulso
   const syncedAssets = assetFeatures.filter(f => f.synced);
   const unsyncedAssets = assetFeatures.filter(f => !f.synced);
 
+  // Seleciona o estilo JSON correspondente
+  const activeMapStyle = mapStyle === "satellite" ? SATELLITE_STYLE 
+                       : mapStyle === "topography" ? TOPO_STYLE 
+                       : OSM_STYLE;
+
+  // 1. Camada de Obras (Polígonos e Linhas já concluídos)
   const geometriesGeoJson = useMemo(() => {
     return {
       type: "FeatureCollection",
-      features: geometryFeatures.map(f => ({
-        type: "Feature",
-        geometry: {
-          type: f.type === "line" ? "LineString" : "Polygon",
-          coordinates: f.type === "line" 
-            ? f.coords.map(c => [c.lng, c.lat]) 
-            : [f.coords.map(c => [c.lng, c.lat])]
-        },
-        properties: { id: f.id, color: f.color || "#3468f6" }
-      }))
+      features: geometryFeatures.map(f => {
+        // Polígonos no GeoJSON exigem que a primeira e a última coordenada sejam idênticas para fechar.
+        const coords = f.coords.map(c => [c.lng, c.lat]);
+        if (f.type === "polygon" && coords.length > 2) {
+          coords.push([f.coords[0].lng, f.coords[0].lat]); // fecha o polígono
+        }
+
+        return {
+          type: "Feature",
+          geometry: {
+            type: f.type === "line" ? "LineString" : "Polygon",
+            coordinates: f.type === "line" ? coords : [coords]
+          },
+          properties: { id: f.id, color: f.color || "#3468f6" }
+        }
+      })
     };
   }, [geometryFeatures]);
 
-  // NOVO: Fonte de dados de alta performance para a GPU compilar os ícones da cidade inteira
+  // 2. Camada de Rascunho (Feedback Visual MUDANDO TUDO!)
+  // Isso desenha vértices e linhas em tempo real à medida que o usuário clica
+  const draftGeoJson = useMemo(() => {
+    if (draftPoints.length === 0 || (drawMode !== "line" && drawMode !== "polygon")) return null;
+    
+    const coords = draftPoints.map(p => [p.lng, p.lat]);
+    const feats: any[] = [];
+
+    // Desenha os vértices (pontinhos clicados)
+    coords.forEach(c => feats.push({ type: "Feature", geometry: { type: "Point", coordinates: c } }));
+
+    // Desenha as linhas conectando os pontos
+    if (coords.length > 1) {
+      if (drawMode === "polygon" && coords.length > 2) {
+        // Polígono dinâmico
+        feats.push({
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: [[...coords, coords[0]]] }
+        });
+      } else {
+        // Linha simples (ou início de um polígono)
+        feats.push({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: coords }
+        });
+      }
+    }
+
+    return { type: "FeatureCollection", features: feats };
+  }, [draftPoints, drawMode]);
+
+  // 3. Fonte de dados GPU para ativos massivos
   const syncedAssetsGeoJson = useMemo(() => {
     return {
       type: "FeatureCollection",
@@ -91,23 +161,31 @@ export function MapCanvas() {
     };
   }, [syncedAssets]);
 
-  const mapboxStyleUrl = mapStyle === "streets" ? "mapbox://styles/mapbox/streets-v12" 
-                       : mapStyle === "satellite" ? "mapbox://styles/mapbox/satellite-streets-v12"
-                       : "mapbox://styles/mapbox/dark-v11";
-
   return (
-    <div className="h-full w-full relative bg-[#0a0f1e]" onContextMenu={handleContextMenu}>
+    <div className="h-full w-full relative bg-[#e5e7eb]" onContextMenu={handleContextMenu}>
       <Map
         {...viewState}
         onMove={evt => setViewState(evt.viewState)}
-        mapStyle={mapboxStyleUrl}
+        mapStyle={activeMapStyle as any}
         mapboxAccessToken={MAPBOX_TOKEN}
         onClick={handleMapClick}
         cursor={drawMode !== "SELECT" ? "crosshair" : "grab"}
       >
         <NavigationControl position="bottom-right" />
 
-        {/* 1. RENDERIZA LINHAS E POLÍGONOS (Via WebGL) */}
+        {/* --- DRAFT (Feedback Visual em Tempo Real) --- */}
+        {draftGeoJson && (
+          <Source id="draft-source" type="geojson" data={draftGeoJson as any}>
+            {/* O preenchimento transparente do polígono rascunho */}
+            <Layer id="draft-polygon-fill" type="fill" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "fill-color": "#10b981", "fill-opacity": 0.3 }} />
+            {/* As linhas (tracejadas) indicando o rascunho */}
+            <Layer id="draft-line" type="line" filter={["in", ["geometry-type"], ["literal", ["LineString", "Polygon"]]]} paint={{ "line-color": "#10b981", "line-width": 3, "line-dasharray": [2, 2] }} />
+            {/* Os vértices clicados */}
+            <Layer id="draft-points" type="circle" filter={["==", ["geometry-type"], "Point"]} paint={{ "circle-color": "#ffffff", "circle-radius": 5, "circle-stroke-width": 2, "circle-stroke-color": "#10b981" }} />
+          </Source>
+        )}
+
+        {/* --- LINHAS E POLÍGONOS FINALIZADOS --- */}
         {layers.obras && (
           <Source id="geometries" type="geojson" data={geometriesGeoJson as any}>
             <Layer 
@@ -128,7 +206,7 @@ export function MapCanvas() {
           </Source>
         )}
 
-        {/* 2. RENDERIZA ATIVOS B2G SINCRONIZADOS (Via WebGL - Suporta 100k+ pontos sem travar) */}
+        {/* --- ATIVOS SINCRONIZADOS (WebGL Massivo) --- */}
         {layers.ativos && (
           <Source id="synced-assets" type="geojson" data={syncedAssetsGeoJson as any}>
             <Layer 
@@ -155,7 +233,7 @@ export function MapCanvas() {
           </Source>
         )}
 
-        {/* 3. RENDERIZA ATIVOS PENDENTES/RASCUNHOS (DOM Markers com animação Tailwind) */}
+        {/* --- ATIVOS PENDENTES (Animação UI) --- */}
         {layers.ativos && unsyncedAssets.map((feature) => {
           const style = ASSET_STYLES[feature.type as keyof typeof ASSET_STYLES];
           if (!style || !feature.coords[0]) return null;
@@ -194,11 +272,10 @@ export function MapCanvas() {
         })}
       </Map>
       
-      {/* Refatoração: Adicionado pointer-events-none para não bloquear os cliques no mapa! */}
       {drawMode !== "SELECT" && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full border border-brand-400 bg-brand-600/90 backdrop-blur-md px-6 py-2.5 text-sm font-bold text-white shadow-2xl animate-bounce flex items-center gap-2 pointer-events-none">
           {drawMode === "line" || drawMode === "polygon" ? (
-            <>Clique para adicionar vértices. <kbd className="bg-white/20 px-1 rounded">Botão Direito</kbd> finaliza.</>
+            <>Clique para adicionar vértices. <kbd className="bg-white/20 px-1 text-black font-mono font-bold rounded">Botão Direito</kbd> finaliza.</>
           ) : (
             <>Clique no mapa para fixar: {drawMode.replace("_", " ")}</>
           )}

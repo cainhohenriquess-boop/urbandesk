@@ -45,7 +45,8 @@ const TOOL_GROUPS: { title: string; items: { id: DrawMode; label: string; icon: 
 
 export function DrawingToolbar() {
   const mode = useMapStore((s) => s.drawMode);
-  const setMode = useMapStore((s) => s.setMode);
+  // CORREÇÃO: A função no store se chama setDrawMode, não setMode.
+  const setDrawMode = useMapStore((s) => s.setDrawMode);
 
   return (
     <div className="absolute left-4 top-4 bottom-4 z-10 flex flex-col rounded-xl border border-border bg-card/95 shadow-2xl backdrop-blur-md animate-fade-in w-14 overflow-hidden">
@@ -61,7 +62,7 @@ export function DrawingToolbar() {
               return (
                 <button
                   key={tool.id}
-                  onClick={() => setMode(tool.id)}
+                  onClick={() => setDrawMode(tool.id)}
                   className={cn(
                     "group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
                     isActive ? "bg-brand-100 text-brand-700 shadow-inner dark:bg-brand-900/50 dark:text-brand-300" : "text-muted-foreground hover:bg-muted hover:text-foreground"
