@@ -7,26 +7,20 @@ import { useMapStore } from "@/store/useMapStore";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────
-// Estilos de Mapa Base e Motor de Fontes
+// Configurações e Motor de Mapas
+// Puxa o Token real do seu .env para autorizar o download de Fontes
 // ─────────────────────────────────────────────
-const MAPBOX_TOKEN = "pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2x4emhvYXJvMDBmMDJqc2c2cjVqcGZxNiJ9.dummy";
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2x4emhvYXJvMDBmMDJqc2c2cjVqcGZxNiJ9.dummy";
 
-// 🚀 OBRIGATÓRIO: Motor de Fontes para renderizar os textos dos Shapefiles
 const GLYPHS_URL = "mapbox://fonts/mapbox/{fontstack}/{range}.pbf";
 
-// Fundo Cartográfico Limpo (Substitui o OSM Comercial)
 const BLANK_STYLE = {
   version: 8,
   name: "Base Cartográfica",
   glyphs: GLYPHS_URL,
+  sprite: "mapbox://sprites/mapbox/light-v10",
   sources: {},
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: { "background-color": "#f8fafc" } // Fundo cinza ultraclaro profissional
-    }
-  ]
+  layers: [{ id: "background", type: "background", paint: { "background-color": "#f8fafc" } }]
 };
 
 const SATELLITE_STYLE = { 
@@ -61,111 +55,33 @@ const ASSET_STYLES = {
   BURACO:         { color: "bg-amber-600",   hex: "#d97706", ring: "ring-amber-600/50",   icon: "🚧", label: "Buraco" },
 };
 
-// ─────────────────────────────────────────────
-// Painel de Engenharia (Staging)
-// ─────────────────────────────────────────────
 function EngineeringPanel() {
   const { pendingFeature, cancelPendingFeature, confirmPendingFeature } = useMapStore();
-  const [formData, setFormData] = useState({
-    nome: "",
-    status: "PROJETADO",
-    custoEstimado: "",
-    material: "CONCRETO",
-    observacoes: ""
-  });
+  const [formData, setFormData] = useState({ nome: "", status: "PROJETADO", custoEstimado: "", material: "CONCRETO", observacoes: "" });
 
   if (!pendingFeature) return null;
 
   const isGeometry = pendingFeature.type === "line" || pendingFeature.type === "polygon";
-  const title = isGeometry 
-    ? (pendingFeature.type === "line" ? "Nova Rede/Trecho" : "Nova Área/Lote")
-    : ASSET_STYLES[pendingFeature.type as keyof typeof ASSET_STYLES]?.label || pendingFeature.type;
+  const title = isGeometry ? (pendingFeature.type === "line" ? "Nova Rede/Trecho" : "Nova Área/Lote") : ASSET_STYLES[pendingFeature.type as keyof typeof ASSET_STYLES]?.label || pendingFeature.type;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    confirmPendingFeature(
-      {
-        status: formData.status,
-        custo: formData.custoEstimado ? Number(formData.custoEstimado) : 0,
-        material: formData.material,
-        obs: formData.observacoes,
-      },
-      formData.nome
-    );
+    confirmPendingFeature({ status: formData.status, custo: formData.custoEstimado ? Number(formData.custoEstimado) : 0, material: formData.material, obs: formData.observacoes }, formData.nome);
   };
 
   return (
     <div className="absolute top-0 right-0 bottom-0 w-80 bg-card/95 backdrop-blur-md border-l border-border shadow-2xl z-50 flex flex-col animate-slide-left">
       <div className="p-4 border-b border-border bg-muted/30">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-brand-500 bg-brand-500/10 px-2 py-0.5 rounded">
-            Modo Projeto
-          </span>
-          <button onClick={cancelPendingFeature} className="text-muted-foreground hover:text-danger-500 transition-colors">✕</button>
-        </div>
+        <div className="flex items-center justify-between mb-1"><span className="text-[10px] font-bold uppercase tracking-widest text-brand-500 bg-brand-500/10 px-2 py-0.5 rounded">Modo Projeto</span><button onClick={cancelPendingFeature} className="text-muted-foreground hover:text-danger-500">✕</button></div>
         <h2 className="font-display text-lg font-bold text-foreground">{title}</h2>
-        <p className="text-xs text-muted-foreground">Preencha os dados técnicos do ativo.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground uppercase">Identificação / Nome</label>
-          <input 
-            type="text" required value={formData.nome} onChange={e => setFormData(s => ({...s, nome: e.target.value}))}
-            placeholder="Ex: Rede Pluvial Rua A" className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500 transition-colors"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground uppercase">Status da Obra</label>
-          <select 
-            value={formData.status} onChange={e => setFormData(s => ({...s, status: e.target.value}))}
-            className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500 transition-colors"
-          >
-            <option value="PROJETADO">Projetado (Não iniciado)</option>
-            <option value="EM_EXECUCAO">Em Execução</option>
-            <option value="CONCLUIDO">Concluído</option>
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground uppercase">Custo Estimado (R$)</label>
-          <input 
-            type="number" step="0.01" value={formData.custoEstimado} onChange={e => setFormData(s => ({...s, custoEstimado: e.target.value}))}
-            placeholder="0.00" className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500 transition-colors"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground uppercase">Material Principal</label>
-          <select 
-            value={formData.material} onChange={e => setFormData(s => ({...s, material: e.target.value}))}
-            className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500 transition-colors"
-          >
-            <option value="CONCRETO">Concreto</option>
-            <option value="PVC">PVC / Plástico</option>
-            <option value="METAL">Metal / Ferro Fundido</option>
-            <option value="ASFALTO">Asfalto</option>
-            <option value="OUTRO">Outro</option>
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground uppercase">Observações Técnicas</label>
-          <textarea 
-            rows={3} value={formData.observacoes} onChange={e => setFormData(s => ({...s, observacoes: e.target.value}))}
-            placeholder="Detalhes adicionais da operação..." className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500 resize-none transition-colors"
-          />
-        </div>
-
-        <div className="pt-4 border-t border-border flex gap-2">
-          <button type="button" onClick={cancelPendingFeature} className="flex-1 py-2 rounded-md bg-muted text-foreground text-sm font-medium hover:bg-muted/80 transition-colors">
-            Cancelar
-          </button>
-          <button type="submit" className="flex-1 py-2 rounded-md bg-brand-600 text-white text-sm font-bold hover:bg-brand-700 shadow-sm transition-colors">
-            Salvar Projeto
-          </button>
-        </div>
+      <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div><label className="text-xs font-semibold text-muted-foreground uppercase">Nome</label><input type="text" required value={formData.nome} onChange={e => setFormData(s => ({...s, nome: e.target.value}))} className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500" /></div>
+        <div><label className="text-xs font-semibold text-muted-foreground uppercase">Status</label><select value={formData.status} onChange={e => setFormData(s => ({...s, status: e.target.value}))} className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500"><option value="PROJETADO">Projetado</option><option value="EM_EXECUCAO">Em Execução</option><option value="CONCLUIDO">Concluído</option></select></div>
+        <div><label className="text-xs font-semibold text-muted-foreground uppercase">Custo (R$)</label><input type="number" step="0.01" value={formData.custoEstimado} onChange={e => setFormData(s => ({...s, custoEstimado: e.target.value}))} className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500" /></div>
+        <div><label className="text-xs font-semibold text-muted-foreground uppercase">Material</label><select value={formData.material} onChange={e => setFormData(s => ({...s, material: e.target.value}))} className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500"><option value="CONCRETO">Concreto</option><option value="PVC">PVC / Plástico</option><option value="ASFALTO">Asfalto</option><option value="OUTRO">Outro</option></select></div>
+        <div className="pt-4 flex gap-2"><button type="button" onClick={cancelPendingFeature} className="flex-1 py-2 rounded-md bg-muted font-medium">Cancelar</button><button type="submit" className="flex-1 py-2 rounded-md bg-brand-600 text-white font-bold">Salvar Projeto</button></div>
       </form>
     </div>
   );
@@ -175,11 +91,7 @@ function EngineeringPanel() {
 // Map Canvas Principal
 // ─────────────────────────────────────────────
 export function MapCanvas() {
-  const { 
-    features, drawMode, viewState, setViewState, 
-    addDraftPoint, draftPoints, finishDraft, layers, mapStyle,
-    isFullscreen, toggleFullscreen, baseLayersData
-  } = useMapStore();
+  const { features, drawMode, viewState, setViewState, addDraftPoint, draftPoints, finishDraft, layers, mapStyle, isFullscreen, toggleFullscreen, baseLayersData } = useMapStore();
 
   const handleMapClick = (e: MapLayerMouseEvent) => {
     if (drawMode === "SELECT") return;
@@ -188,146 +100,100 @@ export function MapCanvas() {
 
   const handleContextMenu = (e: MapLayerMouseEvent) => {
     e.preventDefault();
-    if (drawMode === "line" || drawMode === "polygon") {
-      finishDraft();
-    }
+    if (drawMode === "line" || drawMode === "polygon") finishDraft();
   };
 
   const geometryFeatures = features.filter(f => f.type === "line" || f.type === "polygon");
   const assetFeatures = features.filter(f => f.type !== "line" && f.type !== "polygon");
-
   const syncedAssets = assetFeatures.filter(f => f.synced);
   const unsyncedAssets = assetFeatures.filter(f => !f.synced);
 
-  // 🚀 O Mapa Padrão agora é o BLANK_STYLE (Fundo Cartográfico Branco) caso "streets" seja selecionado
   const activeMapStyle = mapStyle === "topography" ? TOPO_STYLE : mapStyle === "satellite" ? SATELLITE_STYLE : BLANK_STYLE;
 
-  // 1. Obras (Linhas e Polígonos Salvos)
   const geometriesGeoJson = useMemo(() => {
     return {
       type: "FeatureCollection",
       features: geometryFeatures.map(f => {
         const coords = f.coords.map(c => [c.lng, c.lat]);
         if (f.type === "polygon" && coords.length > 2) coords.push([f.coords[0].lng, f.coords[0].lat]);
-        return {
-          type: "Feature",
-          geometry: {
-            type: f.type === "line" ? "LineString" : "Polygon",
-            coordinates: f.type === "line" ? coords : [coords]
-          },
-          properties: { id: f.id, color: f.color || "#3b82f6" }
-        }
+        return { type: "Feature", geometry: { type: f.type === "line" ? "LineString" : "Polygon", coordinates: f.type === "line" ? coords : [coords] }, properties: { id: f.id, color: f.color || "#3b82f6" } }
       })
     };
   }, [geometryFeatures]);
 
-  // 2. Rascunho Atual (Feedback visual)
   const draftGeoJson = useMemo(() => {
     if (draftPoints.length === 0 || (drawMode !== "line" && drawMode !== "polygon")) return null;
     const coords = draftPoints.map(p => [p.lng, p.lat]);
     const feats: any[] = [];
-
     coords.forEach(c => feats.push({ type: "Feature", geometry: { type: "Point", coordinates: c } }));
-
     if (coords.length > 1) {
-      if (drawMode === "polygon" && coords.length > 2) {
-        feats.push({ type: "Feature", geometry: { type: "Polygon", coordinates: [[...coords, coords[0]]] } });
-      } else {
-        feats.push({ type: "Feature", geometry: { type: "LineString", coordinates: coords } });
-      }
+      if (drawMode === "polygon" && coords.length > 2) feats.push({ type: "Feature", geometry: { type: "Polygon", coordinates: [[...coords, coords[0]]] } });
+      else feats.push({ type: "Feature", geometry: { type: "LineString", coordinates: coords } });
     }
     return { type: "FeatureCollection", features: feats };
   }, [draftPoints, drawMode]);
 
-  // 3. Ativos Sincronizados (WebGL Massivo)
   const syncedAssetsGeoJson = useMemo(() => {
     return {
       type: "FeatureCollection",
       features: syncedAssets.map(f => {
         const style = ASSET_STYLES[f.type as keyof typeof ASSET_STYLES];
-        return {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [f.coords[0].lng, f.coords[0].lat] },
-          properties: { id: f.id, type: f.type, icon: style?.icon || "📍", color: style?.hex || "#ffffff" }
-        };
+        return { type: "Feature", geometry: { type: "Point", coordinates: [f.coords[0].lng, f.coords[0].lat] }, properties: { id: f.id, type: f.type, icon: style?.icon || "📍", color: style?.hex || "#ffffff" } };
       })
     };
   }, [syncedAssets]);
 
   return (
     <div className="h-full w-full relative bg-[#f8fafc] overflow-hidden" onContextMenu={handleContextMenu}>
-      
       <EngineeringPanel />
 
-      {/* Botão de Tela Cheia */}
-      <button 
-        onClick={toggleFullscreen}
-        className="absolute top-4 right-14 z-40 bg-card/90 backdrop-blur-md text-foreground border border-border p-2 rounded-lg shadow-md hover:bg-muted transition-colors"
-        title="Tela Cheia"
-      >
-        {isFullscreen ? (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0v4m0-4h4m6 5l5-5m0 0v4m0-4h-4m-6 5l-5 5m0 0v-4m0 4h4m6-5l5 5m0 0v-4m0 4h-4" /></svg>
-        ) : (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-        )}
+      <button onClick={toggleFullscreen} className="absolute top-4 right-14 z-40 bg-card/90 backdrop-blur-md text-foreground border border-border p-2 rounded-lg shadow-md hover:bg-muted transition-colors">
+        {isFullscreen ? <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0v4m0-4h4m6 5l5-5m0 0v4m0-4h-4m-6 5l-5 5m0 0v-4m0 4h4m6-5l5 5m0 0v-4m0 4h-4" /></svg> : <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>}
       </button>
 
-      <Map
-        {...viewState}
-        onMove={evt => setViewState(evt.viewState)}
-        mapStyle={activeMapStyle as any}
-        mapboxAccessToken={MAPBOX_TOKEN}
-        onClick={handleMapClick}
-        cursor={drawMode !== "SELECT" ? "crosshair" : "grab"}
-      >
+      <Map {...viewState} onMove={evt => setViewState(evt.viewState)} mapStyle={activeMapStyle as any} mapboxAccessToken={MAPBOX_TOKEN} onClick={handleMapClick} cursor={drawMode !== "SELECT" ? "crosshair" : "grab"}>
         <NavigationControl position="bottom-right" />
 
         {/* ── CAMADAS CARTOGRÁFICAS (SHAPEFILES) ── */}
-        {layers.basegis && baseLayersData.map((layer) => (
-          <Source key={`src-${layer.id}`} id={`source-${layer.id}`} type="geojson" data={layer.geoJsonData}>
-            
-            {/* LIMITE DO MUNICÍPIO */}
-            {layer.type === "BOUNDARY" && (
-               <>
-                 <Layer id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#e2e8f0", "fill-opacity": 0.3 }} />
-                 <Layer id={`line-${layer.id}`} type="line" paint={{ "line-color": "#0ea5e9", "line-width": 3, "line-dasharray": [2, 4] }} />
-               </>
-            )}
+        {layers.basegis && baseLayersData.map((layer) => {
+          const sourceId = `source-${layer.id}`;
+          // Segurança Extra: Garante que os dados sejam formatados corretamente se vierem como string do BD
+          const geoData = typeof layer.geoJsonData === 'string' ? JSON.parse(layer.geoJsonData) : layer.geoJsonData;
 
-            {/* BUFFERS DE RUAS (Polígonos) */}
-            {layer.type === "STREETS" && (
-               <>
-                 <Layer id={`street-fill-${layer.id}`} type="fill" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "fill-color": "#f1f5f9", "fill-opacity": 0.8 }} />
-                 <Layer id={`street-border-${layer.id}`} type="line" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "line-color": "#cbd5e1", "line-width": 1.5 }} />
-               </>
-            )}
+          return (
+            <Source key={`src-${layer.id}`} id={sourceId} type="geojson" data={geoData}>
+              
+              {/* LIMITE DO MUNICÍPIO: Agora aceita Polygon e MultiPolygon sem bugar */}
+              {layer.type === "BOUNDARY" && <Layer source={sourceId} id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#0ea5e9", "fill-opacity": 0.05 }} />}
+              {layer.type === "BOUNDARY" && <Layer source={sourceId} id={`line-${layer.id}`} type="line" paint={{ "line-color": "#0ea5e9", "line-width": 3, "line-dasharray": [2, 4] }} />}
 
-            {/* NOMES DAS RUAS 
-                O uso de text-font com fontes nativas garante que o WebGL renderize as letras
-                O symbol-placement "line" faz a letra seguir a curva da rua!
-            */}
-            {layer.type === "STREET_NAMES" && (
-               <Layer 
-                 id={`street-name-${layer.id}`} 
-                 type="symbol" 
-                 filter={["==", ["geometry-type"], "LineString"]} 
-                 layout={{ 
-                   "text-field": ["coalesce", ["get", "name"], ["get", "NAME"], ["get", "NOME"], ["get", "Rua"]], 
-                   "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
-                   "text-size": 13, 
-                   "symbol-placement": "line", 
-                   "text-letter-spacing": 0.1,
-                   "text-max-angle": 30
-                 }} 
-                 paint={{ 
-                   "text-color": "#334155", 
-                   "text-halo-color": "#ffffff", 
-                   "text-halo-width": 2 
-                 }} 
-               />
-            )}
-          </Source>
-        ))}
+              {/* BUFFERS DE RUAS */}
+              {layer.type === "STREETS" && <Layer source={sourceId} id={`street-fill-${layer.id}`} type="fill" paint={{ "fill-color": "#f1f5f9", "fill-opacity": 0.8 }} />}
+              {layer.type === "STREETS" && <Layer source={sourceId} id={`street-border-${layer.id}`} type="line" paint={{ "line-color": "#94a3b8", "line-width": 1.5 }} />}
+
+              {/* NOMES DAS RUAS (Usa a fonte padrão nativa da Mapbox para garantir a renderização) */}
+              {layer.type === "STREET_NAMES" && (
+                 <Layer 
+                   source={sourceId}
+                   id={`street-name-${layer.id}`} 
+                   type="symbol" 
+                   layout={{ 
+                     "text-field": ["coalesce", ["get", "name"], ["get", "NAME"], ["get", "NOME"], ["get", "Rua"]], 
+                     "text-font": ["Open Sans Bold", "Arial Unicode MS Regular"],
+                     "text-size": 13, 
+                     "symbol-placement": "line", 
+                     "text-max-angle": 38
+                   }} 
+                   paint={{ 
+                     "text-color": "#1e293b", 
+                     "text-halo-color": "#ffffff", 
+                     "text-halo-width": 2 
+                   }} 
+                 />
+              )}
+            </Source>
+          );
+        })}
 
         {/* ── RASCUNHOS ── */}
         {draftGeoJson && (
@@ -338,7 +204,7 @@ export function MapCanvas() {
           </Source>
         )}
 
-        {/* ── OBRAS FINALIZADOS ── */}
+        {/* ── OBRAS FINALIZADAS ── */}
         {layers.obras && (
           <Source id="geometries" type="geojson" data={geometriesGeoJson as any}>
             <Layer id="lines" type="line" filter={["==", ["geometry-type"], "LineString"]} paint={{ "line-color": ["get", "color"], "line-width": 4 }} />
@@ -355,11 +221,10 @@ export function MapCanvas() {
           </Source>
         )}
 
-        {/* ── ATIVOS PENDENTES (HTML) ── */}
+        {/* ── ATIVOS PENDENTES ── */}
         {layers.ativos && unsyncedAssets.map((feature) => {
           const style = ASSET_STYLES[feature.type as keyof typeof ASSET_STYLES];
           if (!style || !feature.coords[0]) return null;
-          
           return (
             <Marker key={feature.id} longitude={feature.coords[0].lng} latitude={feature.coords[0].lat} anchor="bottom">
               <div className="relative group flex flex-col items-center cursor-pointer">
@@ -369,9 +234,7 @@ export function MapCanvas() {
                 </div>
                 <div className="relative flex h-8 w-8 items-center justify-center">
                   <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", style.color)} />
-                  <div className={cn("relative z-10 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[13px] shadow-[0_4px_12px_rgba(0,0,0,0.5)] transition-transform group-hover:scale-125 ring-4", style.color, style.ring)}>
-                    {style.icon}
-                  </div>
+                  <div className={cn("relative z-10 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[13px] shadow-[0_4px_12px_rgba(0,0,0,0.5)] transition-transform group-hover:scale-125 ring-4", style.color, style.ring)}>{style.icon}</div>
                 </div>
                 <div className="h-3 w-[2px] bg-white/90 shadow-sm rounded-b-full" />
               </div>
@@ -382,11 +245,7 @@ export function MapCanvas() {
       
       {drawMode !== "SELECT" && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full border border-brand-400 bg-brand-600/90 backdrop-blur-md px-6 py-2.5 text-sm font-bold text-white shadow-2xl animate-bounce flex items-center gap-2 pointer-events-none z-40">
-          {drawMode === "line" || drawMode === "polygon" ? (
-            <>Clique para adicionar vértices. <kbd className="bg-white/20 px-1 text-black font-mono font-bold rounded">Botão Direito</kbd> finaliza.</>
-          ) : (
-            <>Clique no mapa para projetar: {ASSET_STYLES[drawMode as keyof typeof ASSET_STYLES]?.label}</>
-          )}
+          {drawMode === "line" || drawMode === "polygon" ? <>Clique para adicionar vértices. <kbd className="bg-white/20 px-1 text-black font-mono font-bold rounded">Botão Direito</kbd> finaliza.</> : <>Clique no mapa para projetar: {ASSET_STYLES[drawMode as keyof typeof ASSET_STYLES]?.label}</>}
         </div>
       )}
     </div>
