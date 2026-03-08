@@ -1,20 +1,17 @@
 "use client";
 
 import React, { useMemo, useState, useEffect } from "react";
-import Map, { Marker, Source, Layer, NavigationControl, MapLayerMouseEvent } from "react-map-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
+// 🚀 MUDANÇA CRÍTICA: Importando do MapLibre em vez do Mapbox padrão
+import Map, { Marker, Source, Layer, NavigationControl, MapLayerMouseEvent } from "react-map-gl/maplibre";
+import "maplibre-gl/dist/maplibre-gl.css"; 
 import { useMapStore } from "@/store/useMapStore";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────
-// Configurações e Motor de Mapas
+// Configurações Open-Source (SEM TOKENS, SEM MAPBOX)
 // ─────────────────────────────────────────────
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2x4emhvYXJvMDBmMDJqc2c2cjVqcGZxNiJ9.dummy";
-
-// Fonte Open-Source para evitar que a Mapbox bloqueie a renderização dos nomes de ruas
 const GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
 
-// 🚀 O Fundo Branco Limpo Oficial
 const BLANK_STYLE = {
   version: 8,
   name: "Base Cartográfica",
@@ -23,6 +20,7 @@ const BLANK_STYLE = {
   layers: [{ id: "background", type: "background", paint: { "background-color": "#f8fafc" } }]
 };
 
+// Mapas base livres de Token
 const SATELLITE_STYLE = { 
   version: 8, 
   glyphs: GLYPHS_URL,
@@ -108,7 +106,6 @@ export function MapCanvas() {
   const syncedAssets = assetFeatures.filter(f => f.synced);
   const unsyncedAssets = assetFeatures.filter(f => !f.synced);
 
-  // 🚀 O Mapa Padrão agora é o BLANK_STYLE caso mapStyle seja "gis"
   const activeMapStyle = mapStyle === "topography" ? TOPO_STYLE : mapStyle === "satellite" ? SATELLITE_STYLE : BLANK_STYLE;
 
   const geometriesGeoJson = useMemo(() => {
@@ -144,7 +141,6 @@ export function MapCanvas() {
     };
   }, [syncedAssets]);
 
-  // Log de Debug Invisível: Útil para ver quantos vetores estão na memória
   useEffect(() => {
     if (baseLayersData && baseLayersData.length > 0) {
       baseLayersData.forEach(layer => {
@@ -163,14 +159,19 @@ export function MapCanvas() {
         {isFullscreen ? <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0v4m0-4h4m6 5l5-5m0 0v4m0-4h-4m-6 5l-5 5m0 0v-4m0 4h4m6-5l5 5m0 0v-4m0 4h-4" /></svg> : <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>}
       </button>
 
-      <Map {...viewState} onMove={evt => setViewState(evt.viewState)} mapStyle={activeMapStyle as any} mapboxAccessToken={MAPBOX_TOKEN} onClick={handleMapClick} cursor={drawMode !== "SELECT" ? "crosshair" : "grab"}>
+      {/* 🚀 Renderizador do Mapa agora Roda via MapLibre, totalmente independente */}
+      <Map 
+        {...viewState} 
+        onMove={evt => setViewState(evt.viewState)} 
+        mapStyle={activeMapStyle as any} 
+        onClick={handleMapClick} 
+        cursor={drawMode !== "SELECT" ? "crosshair" : "grab"}
+      >
         <NavigationControl position="bottom-right" />
 
-        {/* ── CAMADAS CARTOGRÁFICAS BLINDADAS ── */}
         {layers.basegis && baseLayersData.map((layer) => {
           const sourceId = `source-${layer.id}`;
           
-          // Tratamento de Dados Super Seguro (Lida com o bug do `shpjs` devolvendo Array)
           let parsedData = typeof layer.geoJsonData === 'string' ? JSON.parse(layer.geoJsonData) : layer.geoJsonData;
           if (Array.isArray(parsedData)) parsedData = parsedData[0];
           
@@ -178,10 +179,8 @@ export function MapCanvas() {
 
           return (
             <React.Fragment key={`frag-${layer.id}`}>
-              {/* O Source e o Layer como irmãos impedem o React de quebrar o fluxo interno do Mapbox */}
               <Source id={sourceId} type="geojson" data={safeData} />
               
-              {/* LIMITE MUNICIPAL */}
               {layer.type === "BOUNDARY" && (
                 <>
                   <Layer source={sourceId} id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#0ea5e9", "fill-opacity": 0.05 }} filter={["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]]} />
@@ -189,7 +188,6 @@ export function MapCanvas() {
                 </>
               )}
 
-              {/* BUFFERS DE RUAS */}
               {layer.type === "STREETS" && (
                 <>
                   <Layer source={sourceId} id={`street-fill-${layer.id}`} type="fill" paint={{ "fill-color": "#f1f5f9", "fill-opacity": 0.8 }} filter={["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]]} />
@@ -197,7 +195,6 @@ export function MapCanvas() {
                 </>
               )}
 
-              {/* NOMES DAS RUAS */}
               {layer.type === "STREET_NAMES" && (
                  <Layer 
                    source={sourceId}
@@ -221,7 +218,6 @@ export function MapCanvas() {
           );
         })}
 
-        {/* ── RASCUNHOS ── */}
         {draftGeoJson && (
           <Source id="draft-source" type="geojson" data={draftGeoJson as any}>
             <Layer id="draft-polygon-fill" type="fill" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "fill-color": "#10b981", "fill-opacity": 0.3 }} />
@@ -230,7 +226,6 @@ export function MapCanvas() {
           </Source>
         )}
 
-        {/* ── OBRAS FINALIZADAS ── */}
         {layers.obras && (
           <Source id="geometries" type="geojson" data={geometriesGeoJson as any}>
             <Layer id="lines" type="line" filter={["==", ["geometry-type"], "LineString"]} paint={{ "line-color": ["get", "color"], "line-width": 4 }} />
@@ -239,7 +234,6 @@ export function MapCanvas() {
           </Source>
         )}
 
-        {/* ── ATIVOS WEBGL ── */}
         {layers.ativos && (
           <Source id="synced-assets" type="geojson" data={syncedAssetsGeoJson as any}>
             <Layer id="synced-assets-circle" type="circle" paint={{ "circle-color": ["get", "color"], "circle-radius": 14, "circle-stroke-width": 2, "circle-stroke-color": "#ffffff", "circle-pitch-alignment": "map" }} />
@@ -247,7 +241,6 @@ export function MapCanvas() {
           </Source>
         )}
 
-        {/* ── ATIVOS PENDENTES ── */}
         {layers.ativos && unsyncedAssets.map((feature) => {
           const style = ASSET_STYLES[feature.type as keyof typeof ASSET_STYLES];
           if (!style || !feature.coords[0]) return null;
