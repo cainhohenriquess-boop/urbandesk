@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import Map, { Marker, Source, Layer, NavigationControl, MapLayerMouseEvent } from "react-map-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useMapStore } from "@/store/useMapStore";
@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 // ─────────────────────────────────────────────
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2x4emhvYXJvMDBmMDJqc2c2cjVqcGZxNiJ9.dummy";
 
-const GLYPHS_URL = "mapbox://fonts/mapbox/{fontstack}/{range}.pbf";
+// Usando URL de Fontes Open-Source para evitar bloqueios de Token
+const GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
 
 const BLANK_STYLE = {
   version: 8,
@@ -141,6 +142,18 @@ export function MapCanvas() {
     };
   }, [syncedAssets]);
 
+  // Log de Debug Invisível: Se você apertar F12 (Console) no navegador, 
+  // vai ver exatamente quantos vetores o seu sistema está lendo!
+  useEffect(() => {
+    if (baseLayersData && baseLayersData.length > 0) {
+      baseLayersData.forEach(layer => {
+        let p = typeof layer.geoJsonData === 'string' ? JSON.parse(layer.geoJsonData) : layer.geoJsonData;
+        if (Array.isArray(p)) p = p[0];
+        console.log(`[UrbanDesk GIS] Camada Lida: ${layer.name} | Formato: ${layer.type} | Total de Geometrias: ${p?.features?.length || 0}`);
+      });
+    }
+  }, [baseLayersData]);
+
   return (
     <div className="h-full w-full relative bg-[#f8fafc] overflow-hidden" onContextMenu={handleContextMenu}>
       <EngineeringPanel />
@@ -155,39 +168,45 @@ export function MapCanvas() {
         {/* ── CAMADAS CARTOGRÁFICAS BLINDADAS ── */}
         {layers.basegis && baseLayersData.map((layer) => {
           const sourceId = `source-${layer.id}`;
-          const geoData = typeof layer.geoJsonData === 'string' ? JSON.parse(layer.geoJsonData) : layer.geoJsonData;
+          
+          // Tratamento de Dados Super Seguro
+          let parsedData = typeof layer.geoJsonData === 'string' ? JSON.parse(layer.geoJsonData) : layer.geoJsonData;
+          if (Array.isArray(parsedData)) parsedData = parsedData[0]; // Corrige bug do shpjs
+          
+          const safeData = parsedData?.type === "FeatureCollection" ? parsedData : { type: "FeatureCollection", features: [] };
 
           return (
-            <Source key={`src-${layer.id}`} id={sourceId} type="geojson" data={geoData}>
+            <React.Fragment key={`frag-${layer.id}`}>
+              {/* O Source e o Layer agora são irmãos, isso impede o React de quebrar o ID do Mapbox */}
+              <Source id={sourceId} type="geojson" data={safeData} />
               
               {/* LIMITE MUNICIPAL */}
               {layer.type === "BOUNDARY" && (
                 <>
-                  <Layer id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#0ea5e9", "fill-opacity": 0.05 }} />
-                  <Layer id={`line-${layer.id}`} type="line" paint={{ "line-color": "#0ea5e9", "line-width": 3, "line-dasharray": [2, 4] }} />
+                  <Layer source={sourceId} id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#0ea5e9", "fill-opacity": 0.05 }} filter={["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]]} />
+                  <Layer source={sourceId} id={`line-${layer.id}`} type="line" paint={{ "line-color": "#0ea5e9", "line-width": 3, "line-dasharray": [2, 4] }} filter={["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon", "LineString", "MultiLineString"]]]} />
                 </>
               )}
 
-              {/* BUFFERS DE RUAS (Renderiza bordas independente se for Polygon, MultiPolygon ou LineString) */}
+              {/* BUFFERS DE RUAS */}
               {layer.type === "STREETS" && (
                 <>
-                  {/* Tenta renderizar preenchimento caso seja Polígono */}
-                  <Layer id={`street-fill-${layer.id}`} type="fill" paint={{ "fill-color": "#f1f5f9", "fill-opacity": 0.8 }} />
-                  {/* Tenta renderizar linhas de contorno (aceita tanto polígonos quanto linhas perfeitamente) */}
-                  <Layer id={`street-border-${layer.id}`} type="line" paint={{ "line-color": "#94a3b8", "line-width": 1.5 }} />
+                  <Layer source={sourceId} id={`street-fill-${layer.id}`} type="fill" paint={{ "fill-color": "#f1f5f9", "fill-opacity": 0.8 }} filter={["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]]} />
+                  <Layer source={sourceId} id={`street-border-${layer.id}`} type="line" paint={{ "line-color": "#94a3b8", "line-width": 1.5 }} filter={["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon", "LineString", "MultiLineString"]]]} />
                 </>
               )}
 
-              {/* NOMES DAS RUAS (Procura por diversas colunas comuns: name, NAME, NOME, Rua) */}
+              {/* NOMES DAS RUAS */}
               {layer.type === "STREET_NAMES" && (
                  <Layer 
+                   source={sourceId}
                    id={`street-name-${layer.id}`} 
                    type="symbol" 
+                   filter={["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString", "Polygon", "MultiPolygon"]]]}
                    layout={{ 
                      "text-field": ["coalesce", ["get", "name"], ["get", "NAME"], ["get", "NOME"], ["get", "Rua"], ["get", "rua"]], 
-                     "text-font": ["Open Sans Bold", "Arial Unicode MS Regular"],
                      "text-size": 13, 
-                     "symbol-placement": "line", 
+                     "symbol-placement": "line-center", 
                      "text-max-angle": 38
                    }} 
                    paint={{ 
@@ -197,7 +216,7 @@ export function MapCanvas() {
                    }} 
                  />
               )}
-            </Source>
+            </React.Fragment>
           );
         })}
 
