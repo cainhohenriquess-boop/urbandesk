@@ -11,8 +11,10 @@ import { cn } from "@/lib/utils";
 // ─────────────────────────────────────────────
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2x4emhvYXJvMDBmMDJqc2c2cjVqcGZxNiJ9.dummy";
 
+// Fonte Open-Source para evitar que a Mapbox bloqueie a renderização dos nomes de ruas
 const GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
 
+// 🚀 O Fundo Branco Limpo Oficial
 const BLANK_STYLE = {
   version: 8,
   name: "Base Cartográfica",
@@ -106,7 +108,7 @@ export function MapCanvas() {
   const syncedAssets = assetFeatures.filter(f => f.synced);
   const unsyncedAssets = assetFeatures.filter(f => !f.synced);
 
-  // 🚀 O Mapa agora lê o estado correcto: se for "gis", usa o fundo limpo BLANK_STYLE
+  // 🚀 O Mapa Padrão agora é o BLANK_STYLE caso mapStyle seja "gis"
   const activeMapStyle = mapStyle === "topography" ? TOPO_STYLE : mapStyle === "satellite" ? SATELLITE_STYLE : BLANK_STYLE;
 
   const geometriesGeoJson = useMemo(() => {
@@ -142,7 +144,7 @@ export function MapCanvas() {
     };
   }, [syncedAssets]);
 
-  // Log de Debug Invisível para vermos a contagem real das coordenadas
+  // Log de Debug Invisível: Útil para ver quantos vetores estão na memória
   useEffect(() => {
     if (baseLayersData && baseLayersData.length > 0) {
       baseLayersData.forEach(layer => {
@@ -165,10 +167,10 @@ export function MapCanvas() {
         <NavigationControl position="bottom-right" />
 
         {/* ── CAMADAS CARTOGRÁFICAS BLINDADAS ── */}
-        {/* Apenas renderiza se a chave "Base Cartográfica" estiver ligada no painel! */}
         {layers.basegis && baseLayersData.map((layer) => {
           const sourceId = `source-${layer.id}`;
           
+          // Tratamento de Dados Super Seguro (Lida com o bug do `shpjs` devolvendo Array)
           let parsedData = typeof layer.geoJsonData === 'string' ? JSON.parse(layer.geoJsonData) : layer.geoJsonData;
           if (Array.isArray(parsedData)) parsedData = parsedData[0];
           
@@ -176,6 +178,7 @@ export function MapCanvas() {
 
           return (
             <React.Fragment key={`frag-${layer.id}`}>
+              {/* O Source e o Layer como irmãos impedem o React de quebrar o fluxo interno do Mapbox */}
               <Source id={sourceId} type="geojson" data={safeData} />
               
               {/* LIMITE MUNICIPAL */}
