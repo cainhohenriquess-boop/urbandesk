@@ -7,14 +7,18 @@ import { useMapStore } from "@/store/useMapStore";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────
-// Estilos de Mapa Base
+// Estilos de Mapa Base e Motor de Fontes
 // ─────────────────────────────────────────────
 const MAPBOX_TOKEN = "pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2x4emhvYXJvMDBmMDJqc2c2cjVqcGZxNiJ9.dummy";
 
-// 🚀 NOVO: Fundo Cartográfico Limpo (Substitui o OSM Comercial)
+// 🚀 OBRIGATÓRIO: Motor de Fontes para renderizar os textos dos Shapefiles
+const GLYPHS_URL = "mapbox://fonts/mapbox/{fontstack}/{range}.pbf";
+
+// Fundo Cartográfico Limpo (Substitui o OSM Comercial)
 const BLANK_STYLE = {
   version: 8,
   name: "Base Cartográfica",
+  glyphs: GLYPHS_URL,
   sources: {},
   layers: [
     {
@@ -25,8 +29,19 @@ const BLANK_STYLE = {
   ]
 };
 
-const SATELLITE_STYLE = { version: 8, sources: { satellite: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Tiles © Esri" } }, layers: [{ id: "satellite-layer", type: "raster", source: "satellite", minzoom: 0, maxzoom: 19 }] };
-const TOPO_STYLE = { version: 8, sources: { topo: { type: "raster", tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "© OpenTopoMap" } }, layers: [{ id: "topo-layer", type: "raster", source: "topo", minzoom: 0, maxzoom: 17 }] };
+const SATELLITE_STYLE = { 
+  version: 8, 
+  glyphs: GLYPHS_URL,
+  sources: { satellite: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Tiles © Esri" } }, 
+  layers: [{ id: "satellite-layer", type: "raster", source: "satellite", minzoom: 0, maxzoom: 19 }] 
+};
+
+const TOPO_STYLE = { 
+  version: 8, 
+  glyphs: GLYPHS_URL,
+  sources: { topo: { type: "raster", tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "© OpenTopoMap" } }, 
+  layers: [{ id: "topo-layer", type: "raster", source: "topo", minzoom: 0, maxzoom: 17 }] 
+};
 
 // ─────────────────────────────────────────────
 // Estilos de Ativos Urbanos
@@ -184,7 +199,7 @@ export function MapCanvas() {
   const syncedAssets = assetFeatures.filter(f => f.synced);
   const unsyncedAssets = assetFeatures.filter(f => !f.synced);
 
-  // 🚀 Se "streets" for escolhido no painel, ele renderiza o BLANK_STYLE (Fundo Cartográfico Branco)
+  // 🚀 O Mapa Padrão agora é o BLANK_STYLE (Fundo Cartográfico Branco) caso "streets" seja selecionado
   const activeMapStyle = mapStyle === "topography" ? TOPO_STYLE : mapStyle === "satellite" ? SATELLITE_STYLE : BLANK_STYLE;
 
   // 1. Obras (Linhas e Polígonos Salvos)
@@ -247,7 +262,7 @@ export function MapCanvas() {
       {/* Botão de Tela Cheia */}
       <button 
         onClick={toggleFullscreen}
-        className="absolute top-4 right-14 z-40 bg-card text-foreground border border-border p-2 rounded-lg shadow-md hover:bg-muted transition-colors"
+        className="absolute top-4 right-14 z-40 bg-card/90 backdrop-blur-md text-foreground border border-border p-2 rounded-lg shadow-md hover:bg-muted transition-colors"
         title="Tela Cheia"
       >
         {isFullscreen ? (
@@ -271,7 +286,7 @@ export function MapCanvas() {
         {layers.basegis && baseLayersData.map((layer) => (
           <Source key={`src-${layer.id}`} id={`source-${layer.id}`} type="geojson" data={layer.geoJsonData}>
             
-            {/* LIMITE DO MUNICÍPIO: Preenchimento translúcido com borda tracejada forte */}
+            {/* LIMITE DO MUNICÍPIO */}
             {layer.type === "BOUNDARY" && (
                <>
                  <Layer id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#e2e8f0", "fill-opacity": 0.3 }} />
@@ -279,7 +294,7 @@ export function MapCanvas() {
                </>
             )}
 
-            {/* BUFFERS DE RUAS: Polígonos de ruas desenhados no solo */}
+            {/* BUFFERS DE RUAS (Polígonos) */}
             {layer.type === "STREETS" && (
                <>
                  <Layer id={`street-fill-${layer.id}`} type="fill" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "fill-color": "#f1f5f9", "fill-opacity": 0.8 }} />
@@ -287,9 +302,29 @@ export function MapCanvas() {
                </>
             )}
 
-            {/* NOMES DAS RUAS */}
+            {/* NOMES DAS RUAS 
+                O uso de text-font com fontes nativas garante que o WebGL renderize as letras
+                O symbol-placement "line" faz a letra seguir a curva da rua!
+            */}
             {layer.type === "STREET_NAMES" && (
-               <Layer id={`street-name-${layer.id}`} type="symbol" filter={["==", ["geometry-type"], "LineString"]} layout={{ "text-field": ["get", "name"], "text-size": 12, "symbol-placement": "line", "text-letter-spacing": 0.1 }} paint={{ "text-color": "#334155", "text-halo-color": "#ffffff", "text-halo-width": 2 }} />
+               <Layer 
+                 id={`street-name-${layer.id}`} 
+                 type="symbol" 
+                 filter={["==", ["geometry-type"], "LineString"]} 
+                 layout={{ 
+                   "text-field": ["coalesce", ["get", "name"], ["get", "NAME"], ["get", "NOME"], ["get", "Rua"]], 
+                   "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+                   "text-size": 13, 
+                   "symbol-placement": "line", 
+                   "text-letter-spacing": 0.1,
+                   "text-max-angle": 30
+                 }} 
+                 paint={{ 
+                   "text-color": "#334155", 
+                   "text-halo-color": "#ffffff", 
+                   "text-halo-width": 2 
+                 }} 
+               />
             )}
           </Source>
         ))}
@@ -303,7 +338,7 @@ export function MapCanvas() {
           </Source>
         )}
 
-        {/* ── OBRAS FINALIZADAS ── */}
+        {/* ── OBRAS FINALIZADOS ── */}
         {layers.obras && (
           <Source id="geometries" type="geojson" data={geometriesGeoJson as any}>
             <Layer id="lines" type="line" filter={["==", ["geometry-type"], "LineString"]} paint={{ "line-color": ["get", "color"], "line-width": 4 }} />

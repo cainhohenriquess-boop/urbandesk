@@ -7,7 +7,7 @@ import { DrawingToolbar } from "@/components/map/drawing-toolbar";
 import { LayerPanel } from "@/components/map/layer-panel";
 
 // ─────────────────────────────────────────────
-// Conversores WKT (Well-Known Text) <-> JSON
+// Conversores WKT <-> JSON
 // ─────────────────────────────────────────────
 function coordsToWkt(feature: DrawnFeature): string {
   if (feature.type === "line") {
@@ -32,18 +32,43 @@ function wktToCoords(wkt: string | null) {
 }
 
 // ─────────────────────────────────────────────
-// Workspace Principal de Projetos
+// Motor de Bounding Box (Acha o centro de qualquer Shapefile)
+// ─────────────────────────────────────────────
+function getGeoJsonCenter(geojson: any) {
+  let minLng = 180, maxLng = -180, minLat = 90, maxLat = -90;
+  let found = false;
+
+  function extract(coords: any[]) {
+    if (typeof coords[0] === 'number') {
+      minLng = Math.min(minLng, coords[0]); maxLng = Math.max(maxLng, coords[0]);
+      minLat = Math.min(minLat, coords[1]); maxLat = Math.max(maxLat, coords[1]);
+      found = true;
+    } else if (Array.isArray(coords)) {
+      coords.forEach(extract);
+    }
+  }
+
+  if (geojson.features) {
+    geojson.features.forEach((f: any) => { if (f.geometry) extract(f.geometry.coordinates); });
+  } else if (geojson.geometry) {
+    extract(geojson.geometry.coordinates);
+  }
+
+  if (found) return { lng: (minLng + maxLng) / 2, lat: (minLat + maxLat) / 2 };
+  return null;
+}
+
+// ─────────────────────────────────────────────
+// Workspace Principal
 // ─────────────────────────────────────────────
 export default function ProjetosPage() {
   const { features, unsavedCount, syncAll, setBaseLayersData, flyToCity } = useMapStore();
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Carrega os dados desenhados e os Shapefiles
   useEffect(() => {
     async function loadData() {
       try {
-        // 1. Busca os Ativos Desenhados
         const resGis = await fetch("/api/gis");
         const jsonGis = await resGis.json();
 
@@ -59,33 +84,24 @@ export default function ProjetosPage() {
           useMapStore.setState({ features: parsedFeatures, unsavedCount: 0 });
         }
 
-        // 2. Busca as Camadas Base (Shapefiles GeoJSON)
         const resBase = await fetch("/api/baselayers");
         const jsonBase = await resBase.json();
         
         if (jsonBase.data && jsonBase.data.length > 0) {
           setBaseLayersData(jsonBase.data);
           
-          // 🚀 MÁGICA: Encontra o limite da cidade no Shapefile e voa o mapa para lá automaticamente!
-          const boundary = jsonBase.data.find((l: BaseLayerData) => l.type === "BOUNDARY");
-          if (boundary && boundary.geoJsonData && boundary.geoJsonData.features?.length > 0) {
-             try {
-                // Pega a primeira coordenada real do polígono
-                let coords;
-                const geom = boundary.geoJsonData.features[0].geometry;
-                if (geom.type === "Polygon") coords = geom.coordinates[0][0];
-                if (geom.type === "MultiPolygon") coords = geom.coordinates[0][0][0];
-                
-                if (coords && coords.length >= 2) {
-                   // O GeoJSON usa o formato [lng, lat]. Damos um zoom 12.5 padrão de município.
-                   flyToCity(coords[0], coords[1], 12.5);
-                }
-             } catch (e) {
-                console.error("Erro ao calcular o centro geográfico do município", e);
-             }
+          // Busca o limite da cidade (BOUNDARY) ou as ruas para centralizar o mapa
+          const targetLayer = jsonBase.data.find((l: BaseLayerData) => l.type === "BOUNDARY") 
+                           || jsonBase.data.find((l: BaseLayerData) => l.type === "STREETS");
+                           
+          if (targetLayer && targetLayer.geoJsonData) {
+            const center = getGeoJsonCenter(targetLayer.geoJsonData);
+            if (center) {
+              // Voa exatamente para o centro calculado com Zoom 13
+              flyToCity(center.lng, center.lat, 13);
+            }
           }
         }
-
       } catch (err) {
         console.error("Erro ao carregar mapa:", err);
       } finally {
@@ -95,7 +111,6 @@ export default function ProjetosPage() {
     loadData();
   }, [setBaseLayersData, flyToCity]);
 
-  // Sincroniza dados com o Banco
   const handleSync = async () => {
     const unsaved = features.filter((f) => !f.synced);
     if (unsaved.length === 0) return;
@@ -133,7 +148,7 @@ export default function ProjetosPage() {
           <h1 className="font-display text-lg font-bold text-foreground">Gestão de Projetos GIS</h1>
           {isLoading && (
             <span className="flex items-center gap-2 text-xs text-brand-500 font-medium">
-              <span className="h-2 w-2 rounded-full bg-brand-500 animate-pulse" /> Processando cartografia oficial...
+              <span className="h-2 w-2 rounded-full bg-brand-500 animate-pulse" /> Processando cartografia...
             </span>
           )}
         </div>
