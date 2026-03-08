@@ -15,7 +15,7 @@ datasource db {
 }
 
 // ─────────────────────────────────────────────
-// ENUMS (Adicione o InvoiceStatus aqui)
+// ENUMS
 // ─────────────────────────────────────────────
 
 enum TenantStatus {
@@ -47,12 +47,11 @@ enum ProjectStatus {
 }
 
 enum AssetType {
-  PONTO
-  TRECHO
-  AREA
+  PONTO   
+  TRECHO      
+  AREA        
 }
 
-// NOVO: Garantia de integridade para faturas
 enum InvoiceStatus {
   PENDENTE
   PAGO
@@ -64,26 +63,48 @@ enum InvoiceStatus {
 // TENANT (Prefeitura / Município)
 // ─────────────────────────────────────────────
 model Tenant {
-  id          String       @id @default(cuid())
-  name        String // "Prefeitura de Fortaleza"
-  slug        String       @unique // "fortaleza-ce"
-  cnpj        String       @unique
-  state       String       @db.Char(2) // "CE"
-  plan        TenantPlan   @default(STARTER)
-  status      TenantStatus @default(TRIAL)
-  mrr         Decimal      @default(0) @db.Decimal(12, 2)
-  trialEndsAt DateTime?
-  logoUrl     String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id           String       @id @default(cuid())
+  name         String
+  slug         String       @unique
+  cnpj         String       @unique
+  state        String       @db.Char(2)
+  plan         TenantPlan   @default(STARTER)
+  status       TenantStatus @default(TRIAL)
+  mrr          Decimal      @default(0)         @db.Decimal(12, 2)
+  trialEndsAt  DateTime?
+  logoUrl      String?
 
-  // Relações
-  users    User[]
-  projects Project[]
-  assets   Asset[]
-  invoices Invoice[]
+  // NOVO: Centro geográfico do município para o mapa voar (FlyTo)
+  mapLat       Float?       // Ex: -3.7319 (Fortaleza)
+  mapLng       Float?       // Ex: -38.5267
+  mapZoom      Float?       @default(12)
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  users        User[]
+  projects     Project[]
+  assets       Asset[]
+  invoices     Invoice[]
+  baseLayers   BaseLayer[]  // Shapefiles da Prefeitura
 
   @@map("tenants")
+}
+
+// NOVO: Tabela para armazenar os Shapefiles (Ruas e Limites) do SuperAdmin
+model BaseLayer {
+  id          String   @id @default(cuid())
+  name        String   // Ex: "Malha Viária Centro" ou "Limite Municipal"
+  type        String   // Ex: "STREETS", "BOUNDARY"
+  geoJsonData Json     // O shapefile convertido armazenado de forma hiper-rápida para o frontend ler
+  
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("base_layers")
 }
 
 // ─────────────────────────────────────────────
@@ -100,39 +121,39 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  // Multi-tenancy (null = SUPERADMIN sem tenant)
-  tenantId String?
-  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId     String?
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  // Relações
-  assetLogs AssetLog[]
-  sessions  UserSession[]
+  assetLogs    AssetLog[]
+  sessions     UserSession[]
 
   @@index([tenantId])
   @@map("users")
 }
 
 // ─────────────────────────────────────────────
-// PROJECT (Obra / Intervenção)
+// PROJECT (Obra / Intervenção / Área de Projeto)
 // ─────────────────────────────────────────────
 model Project {
-  id            String        @id @default(cuid())
-  name          String
-  description   String?
-  status        ProjectStatus @default(PLANEJADO)
-  budget        Decimal?      @db.Decimal(15, 2)
-  startDate     DateTime?
-  endDate       DateTime?
-  completionPct Int           @default(0) // 0-100
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id           String        @id @default(cuid())
+  name         String
+  description  String?
+  status       ProjectStatus @default(PLANEJADO)
+  budget       Decimal?      @db.Decimal(15, 2)
+  startDate    DateTime?
+  endDate      DateTime?
+  completionPct Int          @default(0)
 
-  // Multi-tenancy
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // NOVO: Polígono que delimita onde os técnicos podem operar
+  geomWkt      String?       // Polígono do Loteamento/Área
 
-  // Relações
-  assets Asset[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  assets       Asset[]
 
   @@index([tenantId])
   @@index([status])
@@ -140,30 +161,30 @@ model Project {
 }
 
 // ─────────────────────────────────────────────
-// ASSET (Ativo GIS)
+// ASSET (Ativos Projetados: Tubulações, Bocas de Lobo, etc)
 // ─────────────────────────────────────────────
 model Asset {
-  id          String    @id @default(cuid())
-  name        String
-  type        AssetType
-  description String?
-  photos      String[]
-  attributes  Json      @default("{}")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  name         String
+  type         AssetType
+  description  String?
+  photos       String[]  
+  
+  // AQUI É A MÁGICA DOS FORMULÁRIOS: Um JSON dinâmico que vai guardar os atributos de engenharia (custo, material, diâmetro da tubulação)
+  attributes   Json      @default("{}")  
+  
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  // Geometria PostGIS (Single Source of Truth)
-  geomWkt String? // WKT: "POINT(-38.5434 -3.7172)"
-  srid    Int     @default(4326) // WGS84
-  // NOTA DA REFATORAÇÃO: Campos 'lat' e 'lng' removidos para evitar anomalias de atualização.
+  geomWkt      String?   
+  srid         Int       @default(4326) 
 
-  // Multi-tenancy
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  projectId String?
-  project   Project?   @relation(fields: [projectId], references: [id])
-  logs      AssetLog[]
+  projectId    String?
+  project      Project?  @relation(fields: [projectId], references: [id])
+  logs         AssetLog[]
 
   @@index([tenantId])
   @@index([projectId])
@@ -171,57 +192,48 @@ model Asset {
   @@map("assets")
 }
 
-// ─────────────────────────────────────────────
-// ASSET LOG (Histórico de campo)
-// ─────────────────────────────────────────────
 model AssetLog {
-  id        String   @id @default(cuid())
-  note      String
-  photos    String[]
-  lat       Float?
-  lng       Float?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  note        String
+  photos      String[]
+  lat         Float?
+  lng         Float?
+  createdAt   DateTime @default(now())
 
-  assetId String
-  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetId     String
+  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
 
   @@index([assetId])
   @@map("asset_logs")
 }
 
-// ─────────────────────────────────────────────
-// INVOICE (Financeiro SaaS)
-// ─────────────────────────────────────────────
 model Invoice {
-  id        String        @id @default(cuid())
-  amount    Decimal       @db.Decimal(12, 2)
-  status    InvoiceStatus @default(PENDENTE) // Substituição da String mágica
-  dueDate   DateTime
-  paidAt    DateTime?
-  createdAt DateTime      @default(now())
+  id          String        @id @default(cuid())
+  amount      Decimal       @db.Decimal(12, 2)
+  status      InvoiceStatus @default(PENDENTE)
+  dueDate     DateTime
+  paidAt      DateTime?
+  createdAt   DateTime      @default(now())
 
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId    String
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([status])
   @@map("invoices")
 }
 
-// ─────────────────────────────────────────────
-// USER SESSION (Auditoria de acessos)
-// ─────────────────────────────────────────────
 model UserSession {
-  id        String   @id @default(cuid())
-  ip        String?
-  userAgent String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("user_sessions")
