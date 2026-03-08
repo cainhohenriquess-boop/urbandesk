@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -89,13 +89,21 @@ function LoginContent() {
       return;
     }
 
-    // ✅ NOVO REDIRECIONAMENTO INTELIGENTE
-    if (email === "admin@urbandesk.com.br") {
+    // ✅ BUSCA A SESSÃO PARA DESCOBRIR O CARGO (ROLE)
+    const session = await getSession();
+    const role = session?.user?.role;
+
+    // ✅ REDIRECIONAMENTO INTELIGENTE BASEADO NO CARGO
+    if (role === "SUPERADMIN" || email === "admin@urbandesk.com.br") {
       router.push("/superadmin");
+    } else if (role === "ENGENHARIA") {
+      router.push("/app/projetos"); // Manda o engenheiro para o mapa
+    } else if (role === "CAMPO") {
+      router.push("/app/campo"); // Manda o funcionário de campo para a câmera/GPS
     } else {
-      router.push(callbackUrl); // Manda pro painel da prefeitura (ex: /app/secretaria)
+      router.push("/app/secretaria"); // Manda o secretário para o dashboard da prefeitura
     }
-    
+
     router.refresh();
   }
 
