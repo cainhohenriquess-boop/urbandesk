@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // ─────────────────────────────────────────────
-// GET /api/gis — Busca ativos GIS do tenant
+// GET /api/gis — Busca ativos GIS da nuvem
 // ─────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
@@ -27,12 +27,10 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = req.nextUrl;
     const type = searchParams.get("type");
-    const projectId = searchParams.get("projectId");
-    const limit = Math.min(500, Number(searchParams.get("limit") ?? 200));
+    const limit = Math.min(2000, Number(searchParams.get("limit") ?? 1000)); // Carga pesada para GIS
 
     const where: any = { tenantId: targetTenantId };
     if (type) where.type = type;
-    if (projectId) where.projectId = projectId;
 
     const assets = await prisma.asset.findMany({
       where,
@@ -45,27 +43,21 @@ export async function GET(req: NextRequest) {
         geomWkt: true,
         attributes: true,
         projectId: true,
-        createdAt: true,
       },
     });
 
+    // Transformação para GeoJSON DTO
     const geojson = {
       type: "FeatureCollection",
       features: assets.map((a) => {
-        let coordinates = null;
-        if (a.geomWkt && a.geomWkt.startsWith("POINT")) {
-          const match = a.geomWkt.match(/POINT\(([^ ]+)\s+([^)]+)\)/);
-          if (match) {
-            coordinates = [parseFloat(match[1]), parseFloat(match[2])];
-          }
-        }
         return {
           type: "Feature",
-          geometry: coordinates ? { type: "Point", coordinates } : null,
+          geometry: null, // A geometria será montada no front-end via WKT para suportar polígonos complexos
           properties: {
             id: a.id,
             name: a.name,
             type: a.type,
+            geomWkt: a.geomWkt, // Enviando o WKT puro para o motor gráfico
             projectId: a.projectId,
             ...((a.attributes as object) ?? {}),
           },
@@ -98,7 +90,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, type, geomWkt, attributes, projectId, description } = body;
+    const { name, type, geomWkt, attributes, projectId } = body;
 
     if (!name || !type) {
       return NextResponse.json({ error: "name e type são obrigatórios" }, { status: 400 });
@@ -107,8 +99,7 @@ export async function POST(req: NextRequest) {
     const asset = await prisma.asset.create({
       data: {
         name,
-        type,
-        description,
+        type, // PONTO, TRECHO ou AREA
         geomWkt: geomWkt ?? null,
         attributes: attributes ?? {},
         tenantId: body.tenantId ?? tenantId,
@@ -141,6 +132,7 @@ export async function DELETE(req: NextRequest) {
 
     const asset = await prisma.asset.findUnique({ where: { id } });
     if (!asset) return NextResponse.json({ error: "Ativo não encontrado" }, { status: 404 });
+    
     if (user.role !== "SUPERADMIN" && asset.tenantId !== tenantId) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
     }

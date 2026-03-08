@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 // ─────────────────────────────────────────────
-// Força a página a ser dinâmica (evita erros de cache da Vercel)
+// Força a página a ser dinâmica e desativa o cache rígido
 // ─────────────────────────────────────────────
 export const dynamic = "force-dynamic";
 
@@ -49,18 +49,21 @@ export default async function SuperAdminPage({
 }: {
   searchParams?: { [key: string]: string | string[] | undefined };
 }) {
-  // 1. Defesa contra searchParams nulo
   const safeParams = searchParams || {};
   const q = typeof safeParams.q === "string" ? safeParams.q : "";
   const filterStatus = typeof safeParams.status === "string" ? safeParams.status : "";
+  
   const isModalOpen = safeParams.modal === "new";
+  const isUploadModalOpen = safeParams.modal === "upload";
+  const targetTenantId = typeof safeParams.tenantId === "string" ? safeParams.tenantId : null;
 
-  // 2. SERVER ACTION (Protegida)
+  // ─────────────────────────────────────────────
+  // SERVER ACTION: Criar Nova Prefeitura
+  // ─────────────────────────────────────────────
   async function createTenantAction(formData: FormData) {
     "use server";
     const name = formData.get("name") as string;
     const plan = formData.get("plan") as string;
-
     if (!name) return;
 
     let mrr = 890;
@@ -81,7 +84,52 @@ export default async function SuperAdminPage({
     redirect("/superadmin");
   }
 
-  // 3. BLOCO TRY-CATCH DE RESILIÊNCIA
+  // ─────────────────────────────────────────────
+  // SERVER ACTION: Upload de Shapefile Zipado (Enterprise GIS)
+  // ─────────────────────────────────────────────
+  async function uploadShapefileAction(formData: FormData) {
+    "use server";
+    try {
+      // Import dinâmico para garantir compatibilidade com o runtime da Vercel
+      const shp = (await import("shpjs")).default;
+      
+      const file = formData.get("file") as File;
+      const tenantId = formData.get("tenantId") as string;
+      const name = formData.get("name") as string;
+      const type = formData.get("type") as string; // BOUNDARY ou STREETS
+
+      if (!file || !tenantId || file.size === 0) return;
+
+      // Converte o arquivo da requisição em Buffer binário
+      const buffer = await file.arrayBuffer();
+
+      // MÁGICA: A engine SHPJS extrai o .zip e compila para GeoJSON instantaneamente
+      const geojson = await shp(buffer);
+
+      // Em alguns casos o zip tem múltiplos shapefiles, pegamos o primeiro (ou o consolidado)
+      const geoJsonData = Array.isArray(geojson) ? geojson[0] : geojson;
+
+      // Salva no PostgreSQL
+      await prisma.baseLayer.create({
+        data: {
+          name,
+          type,
+          tenantId,
+          geoJsonData: geoJsonData as any,
+        }
+      });
+
+    } catch (error: any) {
+      console.error("ERRO GRAVE NO PROCESSAMENTO DO SHAPEFILE:", error);
+    }
+    
+    revalidatePath("/superadmin");
+    redirect("/superadmin");
+  }
+
+  // ─────────────────────────────────────────────
+  // Consultas de Banco de Dados Blindadas
+  // ─────────────────────────────────────────────
   let dbTenants: any[] = [];
   let allTenants: any[] = [];
   let dbError = null;
@@ -92,35 +140,28 @@ export default async function SuperAdminPage({
 
     dbTenants = await prisma.tenant.findMany({
       where: whereClause,
-      include: { _count: { select: { users: true, assets: true } } },
+      include: { 
+        _count: { select: { users: true, assets: true } },
+        baseLayers: { select: { id: true } } // Conta os shapefiles
+      },
       orderBy: { createdAt: "desc" }
     });
 
-    allTenants = await prisma.tenant.findMany({ 
-      select: { mrr: true, status: true, plan: true } 
-    });
+    allTenants = await prisma.tenant.findMany({ select: { mrr: true, status: true, plan: true } });
   } catch (error: any) {
-    console.error("ERRO NO BANCO DE DADOS (SuperAdmin):", error);
+    console.error("ERRO NO BANCO (SuperAdmin):", error);
     dbError = error.message;
   }
 
-  // SE HOUVE ERRO, MOSTRA NA TELA EM VEZ DE QUEBRAR O SERVIDOR (Erro 500)
   if (dbError) {
     return (
-      <div className="p-8 max-w-4xl mx-auto mt-10">
-        <div className="bg-red-50 border border-red-200 text-red-800 p-6 rounded-xl shadow-sm">
-          <h2 className="text-lg font-bold mb-2 flex items-center gap-2">
-            <span>⚠️</span> Erro de Conexão com o Banco de Dados
-          </h2>
-          <p className="text-sm mb-4">O Prisma encontrou uma falha ao tentar carregar a lista de Prefeituras. O erro exato retornado foi:</p>
-          <pre className="bg-red-900/10 p-4 rounded text-xs font-mono overflow-auto">{dbError}</pre>
-          <p className="text-sm mt-4 text-red-600 font-medium">Copie este erro e envie para a análise!</p>
-        </div>
+      <div className="p-8 max-w-4xl mx-auto mt-10 bg-red-50 border border-red-200 text-red-800 p-6 rounded-xl shadow-sm">
+        <h2 className="text-lg font-bold mb-2">⚠️ Erro de Banco de Dados</h2>
+        <pre className="bg-red-900/10 p-4 rounded text-xs font-mono overflow-auto">{dbError}</pre>
       </div>
     );
   }
 
-  // 4. Mapeamento Seguro de Dados
   const RECENT_TENANTS = dbTenants.map((t) => ({
     id: t.id,
     name: t.name || "Sem Nome",
@@ -130,7 +171,7 @@ export default async function SuperAdminPage({
     mrr: Number(t.mrr) || 0,
     users: t._count?.users || 0,
     assetsCount: t._count?.assets || 0,
-    // Data formatada de forma nativa e ultra segura
+    layersCount: t.baseLayers?.length || 0, // NOVO
     createdAt: t.createdAt ? new Date(t.createdAt).toLocaleDateString('pt-BR') : "Data desconhecida",
   }));
 
@@ -138,11 +179,6 @@ export default async function SuperAdminPage({
   const ativas = allTenants.filter(t => t.status === "ATIVO").length;
   const inadimplentes = allTenants.filter(t => t.status === "INADIMPLENTE").length;
   const trials = allTenants.filter(t => t.status === "TRIAL").length;
-
-  const mrrEnterprise = allTenants.filter(t => t.plan === "ENTERPRISE").reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
-  const mrrPro        = allTenants.filter(t => t.plan === "PRO").reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
-  const mrrStarter    = allTenants.filter(t => t.plan === "STARTER").reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
-  const divisor = mrrTotal > 0 ? mrrTotal : 1;
 
   const KPI_DATA = [
     { label: "MRR Total", value: formatBRLCompact(mrrTotal), change: "Atualizado em tempo real", up: true, icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", color: "text-emerald-600", bg: "bg-emerald-50" },
@@ -167,59 +203,8 @@ export default async function SuperAdminPage({
         </div>
       </div>
 
-      {/* KPIs Dinâmicos */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {KPI_DATA.map((kpi) => <KpiCard key={kpi.label} {...kpi} />)}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Receita por plano */}
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="font-display text-base font-bold text-foreground mb-5">Distribuição de Receita</h2>
-          <div className="space-y-4">
-            {[
-              { plan: "Enterprise", mrr: mrrEnterprise, pct: mrrEnterprise / divisor, color: "bg-brand-600" },
-              { plan: "Pro",        mrr: mrrPro,        pct: mrrPro / divisor,        color: "bg-brand-400" },
-              { plan: "Starter",    mrr: mrrStarter,    pct: mrrStarter / divisor,    color: "bg-brand-200" },
-            ].map((row) => (
-              <div key={row.plan} className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-foreground">{row.plan}</span>
-                  <span className="tabular-num text-muted-foreground font-medium">
-                    {formatBRLCompact(row.mrr)} <span className="text-xs text-muted-foreground/60">({formatPercent(row.pct, 1)})</span>
-                  </span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                  <div className={`h-full rounded-full ${row.color} transition-all duration-500`} style={{ width: `${row.pct * 100}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Saúde da Infraestrutura */}
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="font-display text-base font-bold text-foreground mb-5">Saúde da Infraestrutura</h2>
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-foreground">Banco de Dados</span>
-                <span className="tabular-num text-foreground font-bold">12%</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                <div className="h-full rounded-full bg-blue-500 w-[12%]" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Alertas */}
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="font-display text-base font-bold text-foreground mb-4">Alertas Operacionais</h2>
-          <div className="space-y-3 text-sm text-muted-foreground">
-            Monitoramento de instâncias ativado. Sem alertas críticos no momento.
-          </div>
-        </div>
       </div>
 
       {/* Tabela de Gestão de Clientes */}
@@ -239,14 +224,14 @@ export default async function SuperAdminPage({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40">
-                {["Município", "Plano", "Status", "MRR", "Usuários", "Ativos", "Ações"].map((h) => (
+                {["Município", "Status", "MRR", "Usuários", "Shapefiles", "Ações Técnicas"].map((h) => (
                   <th key={h} className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {RECENT_TENANTS.length === 0 ? (
-                <tr><td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">Nenhuma prefeitura encontrada.</td></tr>
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">Nenhuma prefeitura encontrada.</td></tr>
               ) : (
                 RECENT_TENANTS.map((tenant) => {
                   const s = STATUS_STYLES[tenant.status] || STATUS_STYLES.CANCELADO;
@@ -254,15 +239,21 @@ export default async function SuperAdminPage({
                     <tr key={tenant.id} className="transition-colors hover:bg-muted/30">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <p className="font-bold text-foreground">{tenant.name}</p>
-                        <p className="text-xs text-muted-foreground">{tenant.state} • {tenant.createdAt}</p>
+                        <p className="text-xs text-muted-foreground">Plano {tenant.plan} • {tenant.createdAt}</p>
                       </td>
-                      <td className="px-6 py-4"><span className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground">{tenant.plan}</span></td>
                       <td className="px-6 py-4"><span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${s.className}`}>{s.label}</span></td>
                       <td className="px-6 py-4 tabular-num font-medium text-foreground">{tenant.mrr === 0 ? "—" : formatBRLCompact(tenant.mrr)}</td>
                       <td className="px-6 py-4 tabular-num text-muted-foreground">{formatNumber(tenant.users)}</td>
-                      <td className="px-6 py-4 tabular-num text-muted-foreground">{formatNumber(tenant.assetsCount)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <Link href={`/api/auth/impersonate?tenantId=${tenant.id}`} className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md">Acessar</Link>
+                      <td className="px-6 py-4 tabular-num font-bold text-brand-600">{tenant.layersCount} Camadas</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-xs font-bold flex justify-end gap-3 items-center h-[72px]">
+                        {/* NOVO BOTÃO: Adicionar Shapefile */}
+                        <Link href={`?modal=upload&tenantId=${tenant.id}`} className="text-brand-600 hover:text-brand-800 transition-colors bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-md flex items-center gap-1">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                          Subir Mapa
+                        </Link>
+                        <Link href={`/api/auth/impersonate?tenantId=${tenant.id}`} className="text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors flex items-center gap-1">
+                          Acessar <span className="text-lg leading-none">→</span>
+                        </Link>
                       </td>
                     </tr>
                   );
@@ -273,6 +264,7 @@ export default async function SuperAdminPage({
         </div>
       </div>
 
+      {/* ── MODAL 1: CRIAR NOVA PREFEITURA ── */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0f1e]/80 backdrop-blur-sm p-4 animate-fade-in">
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-card p-6 shadow-2xl relative overflow-hidden">
@@ -293,6 +285,50 @@ export default async function SuperAdminPage({
               <div className="flex gap-3 pt-4 border-t border-border mt-6">
                 <Link href="/superadmin" className="flex-1 rounded-lg py-2.5 text-center text-sm font-medium text-muted-foreground hover:bg-muted">Cancelar</Link>
                 <button type="submit" className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-medium text-white hover:bg-brand-700">Gerar Ambiente</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 2: UPLOAD DE SHAPEFILE (ENTERPRISE) ── */}
+      {isUploadModalOpen && targetTenantId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0f1e]/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl border border-brand-500/30 bg-card p-6 shadow-2xl relative overflow-hidden">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-brand-100 text-brand-600 p-2 rounded-lg">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+              </div>
+              <h3 className="font-display text-xl font-bold text-foreground">Importar Base GIS</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-6">Envie o arquivo ZIP contendo as extensões (.shp, .dbf, .shx) para compilar a cartografia desta prefeitura.</p>
+            
+            <form action={uploadShapefileAction} className="space-y-5">
+              <input type="hidden" name="tenantId" value={targetTenantId} />
+              
+              <div>
+                <label className="block text-xs font-bold uppercase text-muted-foreground mb-1.5">Nome da Camada</label>
+                <input name="name" type="text" required placeholder="Ex: Malha Viária Centro" className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-muted-foreground mb-1.5">Tipo de Geografia</label>
+                <select name="type" className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500">
+                  <option value="BOUNDARY">Limites do Município / Setores (Polígonos)</option>
+                  <option value="STREETS">Ruas e Avenidas (Linhas)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-brand-600 mb-1.5">Arquivo Shapefile (.zip) *</label>
+                <input name="file" type="file" accept=".zip" required className="w-full text-sm text-muted-foreground file:mr-4 file:py-2.5 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 file:cursor-pointer cursor-pointer border border-dashed border-border p-2 rounded-lg" />
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-border mt-6">
+                <Link href="/superadmin" className="flex-1 rounded-lg py-2.5 text-center text-sm font-medium text-muted-foreground hover:bg-muted">Cancelar</Link>
+                <button type="submit" className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-bold text-white hover:bg-brand-700 shadow-md">
+                  Processar Mapa
+                </button>
               </div>
             </form>
           </div>
