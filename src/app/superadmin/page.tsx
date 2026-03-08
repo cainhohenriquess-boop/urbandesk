@@ -70,12 +70,11 @@ export default async function SuperAdminPage({
 }: {
   searchParams: { [key: string]: string | string[] | undefined };
 }) {
-  // 1. Lendo parâmetros da URL para Filtros e Busca
   const q = typeof searchParams.q === "string" ? searchParams.q : "";
   const filterStatus = typeof searchParams.status === "string" ? searchParams.status : "";
   const isModalOpen = searchParams.modal === "new";
 
-  // 2. SERVER ACTION: Criar Nova Prefeitura no Banco
+  // SERVER ACTION: Criar Nova Prefeitura no Banco
   async function createTenantAction(formData: FormData) {
     "use server";
     const name = formData.get("name") as string;
@@ -87,10 +86,17 @@ export default async function SuperAdminPage({
     if (plan === "PRO") mrr = 2400;
     if (plan === "ENTERPRISE") mrr = 4800;
 
+    // CORREÇÃO: Geramos um slug e cnpj para não quebrar a obrigatoriedade do banco de dados
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Date.now().toString().slice(-4);
+    const cnpj = Math.floor(10000000000000 + Math.random() * 90000000000000).toString();
+
     await prisma.tenant.create({
       data: {
         name,
-        plan,
+        slug,
+        cnpj,
+        state: "SP",
+        plan: plan as any,
         status: "TRIAL",
         mrr,
         trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 dias
@@ -101,7 +107,6 @@ export default async function SuperAdminPage({
     redirect("/superadmin");
   }
 
-  // 3. Busca no Banco de Dados aplicando Filtros
   const whereClause: any = { name: { contains: q, mode: "insensitive" } };
   if (filterStatus) whereClause.status = filterStatus;
 
@@ -114,7 +119,7 @@ export default async function SuperAdminPage({
   const RECENT_TENANTS: TenantData[] = dbTenants.map((t) => ({
     id: t.id,
     name: t.name,
-    state: "BR", 
+    state: t.state || "BR", 
     plan: t.plan,
     status: t.status as TenantStatus,
     mrr: Number(t.mrr) || 0,
@@ -123,7 +128,6 @@ export default async function SuperAdminPage({
     createdAt: t.createdAt.toISOString(),
   }));
 
-  // 4. Cálculos para os Gráficos (Baseado em todos os clientes, independente do filtro)
   const allTenants = await prisma.tenant.findMany({ select: { mrr: true, status: true, plan: true } });
   
   const mrrTotal = allTenants.reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
