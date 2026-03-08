@@ -96,7 +96,7 @@ function LoginContent() {
     // ✅ REDIRECIONAMENTO INTELIGENTE BASEADO NO CARGO
     if (role === "SUPERADMIN" || email === "admin@urbandesk.com.br") {
       router.push("/superadmin");
-    } else if (role === "ENGENHARIA") {
+    } else if (role === "ENGENHEIRO") {
       router.push("/app/projetos"); // Manda o engenheiro para o mapa
     } else if (role === "CAMPO") {
       router.push("/app/campo"); // Manda o funcionário de campo para a câmera/GPS
