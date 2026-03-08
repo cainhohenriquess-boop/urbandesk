@@ -32,13 +32,16 @@ function wktToCoords(wkt: string | null) {
 }
 
 // ─────────────────────────────────────────────
-// Motor de Bounding Box (Acha o centro de qualquer Shapefile)
+// Motor de Bounding Box Blindado (Acha o centro de qualquer Shapefile)
 // ─────────────────────────────────────────────
 function getGeoJsonCenter(geojson: any) {
+  if (!geojson) return null;
+  
   let minLng = 180, maxLng = -180, minLat = 90, maxLat = -90;
   let found = false;
 
   function extract(coords: any[]) {
+    if (!coords || !coords.length) return;
     if (typeof coords[0] === 'number') {
       minLng = Math.min(minLng, coords[0]); maxLng = Math.max(maxLng, coords[0]);
       minLat = Math.min(minLat, coords[1]); maxLat = Math.max(maxLat, coords[1]);
@@ -48,10 +51,14 @@ function getGeoJsonCenter(geojson: any) {
     }
   }
 
-  if (geojson.features) {
-    geojson.features.forEach((f: any) => { if (f.geometry) extract(f.geometry.coordinates); });
-  } else if (geojson.geometry) {
-    extract(geojson.geometry.coordinates);
+  try {
+    if (geojson.features) {
+      geojson.features.forEach((f: any) => { if (f.geometry) extract(f.geometry.coordinates); });
+    } else if (geojson.geometry) {
+      extract(geojson.geometry.coordinates);
+    }
+  } catch(e) {
+    console.error("Erro ao extrair centro:", e);
   }
 
   if (found) return { lng: (minLng + maxLng) / 2, lat: (minLat + maxLat) / 2 };
@@ -69,6 +76,7 @@ export default function ProjetosPage() {
   useEffect(() => {
     async function loadData() {
       try {
+        // 1. Carrega os Ativos
         const resGis = await fetch("/api/gis");
         const jsonGis = await resGis.json();
 
@@ -84,24 +92,63 @@ export default function ProjetosPage() {
           useMapStore.setState({ features: parsedFeatures, unsavedCount: 0 });
         }
 
+        // 2. Carrega as Camadas Base (Shapefiles e Limites)
         const resBase = await fetch("/api/baselayers");
         const jsonBase = await resBase.json();
         
+        let targetCenter = null;
+        let activeLayers = [];
+
         if (jsonBase.data && jsonBase.data.length > 0) {
-          setBaseLayersData(jsonBase.data);
+          activeLayers = jsonBase.data;
           
-          // Busca o limite da cidade (BOUNDARY) ou as ruas para centralizar o mapa
+          // Tenta achar o Limite Municipal ou as Ruas para centralizar a câmera
           const targetLayer = jsonBase.data.find((l: BaseLayerData) => l.type === "BOUNDARY") 
-                           || jsonBase.data.find((l: BaseLayerData) => l.type === "STREETS");
+                           || jsonBase.data.find((l: BaseLayerData) => l.type === "STREETS")
+                           || jsonBase.data.find((l: BaseLayerData) => l.type === "STREET_NAMES");
                            
           if (targetLayer && targetLayer.geoJsonData) {
-            const center = getGeoJsonCenter(targetLayer.geoJsonData);
-            if (center) {
-              // Voa exatamente para o centro calculado com Zoom 13
-              flyToCity(center.lng, center.lat, 13);
-            }
+            // 🚀 CORREÇÃO DE PARSING: Transforma a String do Prisma em Objeto JSON real
+            let geoData = typeof targetLayer.geoJsonData === "string" ? JSON.parse(targetLayer.geoJsonData) : targetLayer.geoJsonData;
+            if (Array.isArray(geoData)) geoData = geoData[0]; // Previne bug do array do shpjs
+            
+            targetCenter = getGeoJsonCenter(geoData);
           }
         }
+
+        // 3. MÁGICA DE FALLBACK (Se falhar, puxa o limite via OSM/IBGE online pelo nome do Tenant)
+        if (!targetCenter) {
+           console.log("Limite não encontrado no BD. Tentando auto-descobrir via OpenStreetMap...");
+           const tenantRes = await fetch("/api/auth/session"); // Forma rápida de pegar o nome da prefeitura
+           const sessionData = await tenantRes.json();
+           const tenantName = sessionData?.user?.tenantName;
+           
+           if (tenantName && tenantName !== "Prefeitura") {
+              const osmUrl = `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(tenantName)}&country=Brazil&polygon_geojson=1&format=json`;
+              const osmRes = await fetch(osmUrl);
+              const osmData = await osmRes.json();
+              
+              if (osmData && osmData.length > 0) {
+                const autoGeojson = osmData[0].geojson;
+                targetCenter = getGeoJsonCenter(autoGeojson);
+                
+                // Injeta esse limite virtual no mapa para ele aparecer desenhado!
+                activeLayers.push({
+                  id: "auto-boundary-osm",
+                  name: `Limite Automático (${tenantName})`,
+                  type: "BOUNDARY",
+                  geoJsonData: { type: "FeatureCollection", features: [{ type: "Feature", geometry: autoGeojson, properties: {} }] }
+                });
+              }
+           }
+        }
+
+        // Salva as camadas (seja do banco ou a virtual do OSM) e Voa!
+        setBaseLayersData(activeLayers);
+        if (targetCenter) {
+          flyToCity(targetCenter.lng, targetCenter.lat, 13);
+        }
+
       } catch (err) {
         console.error("Erro ao carregar mapa:", err);
       } finally {
