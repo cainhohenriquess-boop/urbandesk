@@ -2,10 +2,16 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
 // ─────────────────────────────────────────────
-// Tipos exportados
+// Tipos de Ativos B2G
 // ─────────────────────────────────────────────
-export type DrawMode = "none" | "point" | "line" | "polygon";
-export type MapStyle = "streets" | "satellite" | "topography";
+export type AssetCategory = 
+  | "BOCA_LOBO" | "POCO_VISITA" | "HIDRANTE" 
+  | "SEMAFORO" | "PLACA_TRANSITO" | "LOMBADA" | "PONTO_ONIBUS" | "RADAR"
+  | "POSTE_LUZ" | "ARVORE" | "LIXEIRA" | "BURACO";
+
+// DrawMode agora une suas geometrias básicas + os ativos técnicos
+export type DrawMode = "SELECT" | "line" | "polygon" | AssetCategory;
+export type MapStyle = "streets" | "satellite" | "topography" | "dark";
 
 export interface GeoPoint {
   lat: number;
@@ -14,11 +20,12 @@ export interface GeoPoint {
 
 export interface DrawnFeature {
   id:         string;
-  type:       "point" | "line" | "polygon";
+  type:       "line" | "polygon" | AssetCategory;
   coords:     GeoPoint[];
   label?:     string;
   projectId?: string;
   color?:     string;
+  synced:     boolean; // Adicionado para animação de envio
   createdAt:  number;
 }
 
@@ -42,45 +49,38 @@ export interface LayerVisibility {
 // Interface do store
 // ─────────────────────────────────────────────
 interface MapStore {
-  // Modo de desenho ativo
   drawMode:    DrawMode;
   setDrawMode: (mode: DrawMode) => void;
 
-  // Contador de alterações não salvas
   unsavedCount: number;
   incrementUnsaved: () => void;
   resetUnsaved: () => void;
 
-  // Features salvas no mapa
   features:      DrawnFeature[];
-  addFeature:    (feature: Omit<DrawnFeature, "id" | "createdAt">) => void;
+  addFeature:    (feature: Omit<DrawnFeature, "id" | "createdAt" | "synced">) => void;
   updateFeature: (id: string, data: Partial<DrawnFeature>) => void;
   removeFeature: (id: string) => void;
   clearFeatures: () => void;
+  syncAll:       () => void; // Dispara quando clica em Salvar
 
-  // Feature selecionada
   selectedId:    string | null;
   setSelectedId: (id: string | null) => void;
 
-  // Pontos em construção (linha/polígono em progresso)
   draftPoints:      GeoPoint[];
   addDraftPoint:    (point: GeoPoint) => void;
   clearDraftPoints: () => void;
+  finishDraft:      () => void; // Finaliza polígonos/linhas
 
-  // Viewport do mapa
   viewState:    MapViewState;
   setViewState: (vs: MapViewState) => void;
 
-  // Visibilidade das camadas
   layers:      LayerVisibility;
   toggleLayer: (key: keyof LayerVisibility) => void;
   setLayerAll: (visible: boolean) => void;
 
-  // Estilo base do mapa
   mapStyle:    MapStyle;
   setMapStyle: (style: MapStyle) => void;
 
-  // Projeto ativo para filtro
   activeProjectId:    string | null;
   setActiveProjectId: (id: string | null) => void;
 }
@@ -91,118 +91,108 @@ interface MapStore {
 export const useMapStore = create<MapStore>()(
   devtools(
     (set, get) => ({
-      // ── Modo de desenho ──
-      drawMode: "none",
+      drawMode: "SELECT",
       setDrawMode: (mode) => set({ drawMode: mode, draftPoints: [] }),
 
-      // ── Unsaved Count ──
       unsavedCount: 0,
       incrementUnsaved: () => set((s) => ({ unsavedCount: s.unsavedCount + 1 })),
       resetUnsaved: () => set({ unsavedCount: 0 }),
 
-      // ── Features ──
-      features: [],
+      features: [
+        // Mock inicial B2G para testes visuais
+        { id: "m1", type: "BOCA_LOBO", coords: [{ lng: -38.5270, lat: -3.7319 }], synced: true, createdAt: Date.now() },
+        { id: "m2", type: "SEMAFORO",  coords: [{ lng: -38.5285, lat: -3.7325 }], synced: true, createdAt: Date.now() },
+      ],
 
       addFeature: (data) => {
         const feature: DrawnFeature = {
           ...data,
-          id:        `feat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          synced: false,
+          id: `feat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           createdAt: Date.now(),
         };
-        set((s) => ({ features: [...s.features, feature] }));
+        set((s) => ({ features: [...s.features, feature], unsavedCount: s.unsavedCount + 1 }));
       },
 
       updateFeature: (id, data) =>
         set((s) => ({
           features: s.features.map((f) => (f.id === id ? { ...f, ...data } : f)),
+          unsavedCount: s.unsavedCount + 1
         })),
 
       removeFeature: (id) =>
         set((s) => ({
-          features:   s.features.filter((f) => f.id !== id),
+          features: s.features.filter((f) => f.id !== id),
           selectedId: s.selectedId === id ? null : s.selectedId,
+          unsavedCount: s.unsavedCount + 1
         })),
 
       clearFeatures: () => set({ features: [], selectedId: null, draftPoints: [] }),
+      
+      syncAll: () => set((s) => ({
+        features: s.features.map(f => ({ ...f, synced: true })),
+        unsavedCount: 0
+      })),
 
-      // ── Seleção ──
-      selectedId:    null,
+      selectedId: null,
       setSelectedId: (id) => set({ selectedId: id }),
 
-      // ── Draft ──
       draftPoints: [],
 
       addDraftPoint: (point) => {
-        const { drawMode, draftPoints } = get();
+        const { drawMode, draftPoints, addFeature } = get();
 
-        // Ponto único: salva direto e volta ao modo none
-        if (drawMode === "point") {
-          get().addFeature({ type: "point", coords: [point] });
-          set({ draftPoints: [], drawMode: "none" });
+        // Se for um ATIVO (ponto único normatizado), salva na hora
+        if (drawMode !== "SELECT" && drawMode !== "line" && drawMode !== "polygon") {
+          addFeature({ type: drawMode, coords: [point] });
           return;
         }
 
+        // Se for linha/polígono, guarda no rascunho
         set({ draftPoints: [...draftPoints, point] });
+      },
+
+      finishDraft: () => {
+        const { drawMode, draftPoints, addFeature } = get();
+        if (draftPoints.length > 1 && (drawMode === "line" || drawMode === "polygon")) {
+          addFeature({ type: drawMode, coords: draftPoints, color: "#3468f6" });
+        }
+        set({ draftPoints: [], drawMode: "SELECT" });
       },
 
       clearDraftPoints: () => set({ draftPoints: [] }),
 
-      // ── Viewport ──
       viewState: {
         longitude: -38.5267,
         latitude:  -3.7319,
-        zoom:       13,
-        bearing:    0,
-        pitch:      0,
+        zoom:      15,
+        bearing:   -17,
+        pitch:     45,
       },
       setViewState: (vs) => set({ viewState: vs }),
 
-      // ── Camadas ──
       layers: {
-        ativos:     true,
-        obras:      true,
-        alertas:    true,
-        viario:     false,
-        topografia: false,
+        ativos: true, obras: true, alertas: true, viario: false, topografia: false,
       },
+      toggleLayer: (key) => set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
+      setLayerAll: (visible) => set((s) => ({
+        layers: Object.fromEntries(Object.keys(s.layers).map((k) => [k, visible])) as LayerVisibility,
+      })),
 
-      toggleLayer: (key) =>
-        set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
-
-      setLayerAll: (visible) =>
-        set((s) => ({
-          layers: Object.fromEntries(
-            Object.keys(s.layers).map((k) => [k, visible])
-          ) as LayerVisibility,
-        })),
-
-      // ── Estilo de mapa ──
-      mapStyle:    "streets",
+      mapStyle: "dark", // Estilo escuro combina melhor com a UI B2G
       setMapStyle: (style) => set({ mapStyle: style }),
 
-      // ── Projeto ativo ──
-      activeProjectId:    null,
+      activeProjectId: null,
       setActiveProjectId: (id) => set({ activeProjectId: id }),
     }),
     { name: "UrbanDesk · MapStore" }
   )
 );
 
-// ─────────────────────────────────────────────
-// Seletores (evitam re-renders desnecessários)
-// ─────────────────────────────────────────────
-export const selectDrawMode  = (s: MapStore) => s.drawMode;
-export const selectFeatures  = (s: MapStore) => s.features;
-export const selectLayers    = (s: MapStore) => s.layers;
-export const selectViewState = (s: MapStore) => s.viewState;
-
-export const selectSelectedFeature = (s: MapStore) =>
-  s.features.find((f) => f.id === s.selectedId) ?? null;
-
-export const selectDraftPoints = (s: MapStore) => s.draftPoints;
-
-export const selectFeatureCount = (s: MapStore) => s.features.length;
-
-export const selectIsDrawing = (s: MapStore) => s.drawMode !== "none";
-
+// Seletores
+export const selectDrawMode   = (s: MapStore) => s.drawMode;
+export const selectFeatures   = (s: MapStore) => s.features;
+export const selectLayers     = (s: MapStore) => s.layers;
+export const selectViewState  = (s: MapStore) => s.viewState;
+export const selectDraftPoints= (s: MapStore) => s.draftPoints;
 export const selectUnsavedCount = (s: MapStore) => s.unsavedCount;
