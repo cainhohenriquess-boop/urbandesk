@@ -89,7 +89,13 @@ function LoginContent() {
       return;
     }
 
-    router.push(callbackUrl);
+    // ✅ NOVO REDIRECIONAMENTO INTELIGENTE
+    if (email === "admin@urbandesk.com.br") {
+      router.push("/superadmin");
+    } else {
+      router.push(callbackUrl); // Manda pro painel da prefeitura (ex: /app/secretaria)
+    }
+    
     router.refresh();
   }
 
