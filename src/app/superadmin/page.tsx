@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { formatBRLCompact, formatNumber, formatPercent, formatRelativeTime } from "@/lib/utils";
+import Link from "next/link";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 // ─────────────────────────────────────────────
 // Tipos
@@ -60,53 +63,116 @@ function KpiCard({ label, value, change, up, icon, color, bg }: any) {
 }
 
 // ─────────────────────────────────────────────
-// Page (Server Component Seguro - Next.js 14)
+// Page (Server Component Next.js 14)
 // ─────────────────────────────────────────────
 export default async function SuperAdminPage({
   searchParams,
 }: {
   searchParams: { [key: string]: string | string[] | undefined };
 }) {
-  // Captura o termo de pesquisa de forma blindada
+  // 1. Lendo parâmetros da URL para Filtros e Busca
   const q = typeof searchParams.q === "string" ? searchParams.q : "";
+  const filterStatus = typeof searchParams.status === "string" ? searchParams.status : "";
+  const isModalOpen = searchParams.modal === "new";
 
-  // 1. Busca Segura no Banco de Dados
+  // 2. SERVER ACTION: Criar Nova Prefeitura no Banco
+  async function createTenantAction(formData: FormData) {
+    "use server";
+    const name = formData.get("name") as string;
+    const plan = formData.get("plan") as string;
+
+    if (!name) return;
+
+    let mrr = 890;
+    if (plan === "PRO") mrr = 2400;
+    if (plan === "ENTERPRISE") mrr = 4800;
+
+    await prisma.tenant.create({
+      data: {
+        name,
+        plan,
+        status: "TRIAL",
+        mrr,
+        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 dias
+      }
+    });
+
+    revalidatePath("/superadmin");
+    redirect("/superadmin");
+  }
+
+  // 3. Busca no Banco de Dados aplicando Filtros
+  const whereClause: any = { name: { contains: q, mode: "insensitive" } };
+  if (filterStatus) whereClause.status = filterStatus;
+
   const dbTenants = await prisma.tenant.findMany({
-    where: { name: { contains: q, mode: "insensitive" } },
+    where: whereClause,
     include: { _count: { select: { users: true, assets: true } } },
     orderBy: { createdAt: "desc" }
   });
 
-  // 2. Mapeia para manter a sua interface exata
   const RECENT_TENANTS: TenantData[] = dbTenants.map((t) => ({
     id: t.id,
     name: t.name,
-    state: "BR", // O Prisma não tinha essa coluna nativa
+    state: "BR", 
     plan: t.plan,
     status: t.status as TenantStatus,
     mrr: Number(t.mrr) || 0,
     users: t._count.users,
     assetsCount: t._count.assets,
-    trialEndsAt: t.trialEndsAt?.toISOString(),
     createdAt: t.createdAt.toISOString(),
   }));
 
-  // 3. Cálculos Dinâmicos (Substituindo o Mock)
-  const mrrTotal = RECENT_TENANTS.reduce((acc, t) => acc + t.mrr, 0);
-  const ativas = RECENT_TENANTS.filter(t => t.status === "ATIVO").length;
-  const inadimplentes = RECENT_TENANTS.filter(t => t.status === "INADIMPLENTE").length;
-  const trials = RECENT_TENANTS.filter(t => t.status === "TRIAL").length;
+  // 4. Cálculos para os Gráficos (Baseado em todos os clientes, independente do filtro)
+  const allTenants = await prisma.tenant.findMany({ select: { mrr: true, status: true, plan: true } });
+  
+  const mrrTotal = allTenants.reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
+  const ativas = allTenants.filter(t => t.status === "ATIVO").length;
+  const inadimplentes = allTenants.filter(t => t.status === "INADIMPLENTE").length;
+  const trials = allTenants.filter(t => t.status === "TRIAL").length;
 
-  const mrrEnterprise = RECENT_TENANTS.filter(t => t.plan === "ENTERPRISE").reduce((acc, t) => acc + t.mrr, 0);
-  const mrrPro        = RECENT_TENANTS.filter(t => t.plan === "PRO").reduce((acc, t) => acc + t.mrr, 0);
-  const mrrStarter    = RECENT_TENANTS.filter(t => t.plan === "STARTER").reduce((acc, t) => acc + t.mrr, 0);
+  const mrrEnterprise = allTenants.filter(t => t.plan === "ENTERPRISE").reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
+  const mrrPro        = allTenants.filter(t => t.plan === "PRO").reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
+  const mrrStarter    = allTenants.filter(t => t.plan === "STARTER").reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
   const divisor = mrrTotal > 0 ? mrrTotal : 1;
 
   const KPI_DATA = [
-    { label: "MRR Total", value: formatBRLCompact(mrrTotal), change: "Dados em tempo real", up: true, icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", color: "text-emerald-600", bg: "bg-emerald-50" },
-    { label: "Prefeituras Ativas", value: ativas.toString(), change: `${RECENT_TENANTS.length} no total`, up: true, icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4", color: "text-brand-600", bg: "bg-brand-50" },
-    { label: "Inadimplentes", value: inadimplentes.toString(), change: "Requer atenção", up: false, icon: "M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414", color: "text-danger-600", bg: "bg-danger-50" },
-    { label: "Em Trial", value: trials.toString(), change: "Potenciais clientes", up: true, icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z", color: "text-warning-600", bg: "bg-warning-50" },
+    {
+      label:  "MRR Total",
+      value:  formatBRLCompact(mrrTotal),
+      change: "Atualizado em tempo real",
+      up:     true,
+      icon:   "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+      color:  "text-emerald-600",
+      bg:     "bg-emerald-50",
+    },
+    {
+      label:  "Prefeituras Ativas",
+      value:  ativas.toString(),
+      change: `${allTenants.length} cadastradas no total`,
+      up:     true,
+      icon:   "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
+      color:  "text-brand-600",
+      bg:     "bg-brand-50",
+    },
+    {
+      label:  "Inadimplentes",
+      value:  inadimplentes.toString(),
+      change: "Requer atenção",
+      up:     false,
+      icon:   "M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414",
+      color:  "text-danger-600",
+      bg:     "bg-danger-50",
+    },
+    {
+      label:  "Em Trial",
+      value:  trials.toString(),
+      change: "Potenciais conversões",
+      up:     true,
+      icon:   "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+      color:  "text-warning-600",
+      bg:     "bg-warning-50",
+    },
   ];
 
   return (
@@ -123,18 +189,18 @@ export default async function SuperAdminPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors">
+          <a href="mailto:suporte@urbandesk.com.br" className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors">
             <svg className="h-4 w-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
             Suporte (12)
-          </button>
-          <button className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors shadow-sm">
+          </a>
+          <Link href="?modal=new" className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors shadow-sm">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
             Nova Prefeitura
-          </button>
+          </Link>
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs Dinâmicos */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {KPI_DATA.map((kpi) => (
           <KpiCard key={kpi.label} {...kpi} />
@@ -216,9 +282,21 @@ export default async function SuperAdminPage({
           </h2>
           <div className="space-y-3">
             {[
-              { type: "danger",  message: "Prefeitura de Cuiabá com fatura atrasada há 5 dias", action: "Cobrar" },
-              { type: "warning", message: "Maringá atinge limite do plano Trial amanhã", action: "Fazer Upgrade" },
-              { type: "info",    message: "Pico de uso de API detectado em Campinas", action: "Ver Logs" },
+              {
+                type:    "danger",
+                message: "Prefeitura de Cuiabá com fatura atrasada há 5 dias",
+                action:  "Cobrar",
+              },
+              {
+                type:    "warning",
+                message: "Maringá atinge limite do plano Trial amanhã",
+                action:  "Fazer Upgrade",
+              },
+              {
+                type:    "info",
+                message: "Pico de uso de API detectado em Campinas",
+                action:  "Ver Logs",
+              },
             ].map((alert, i) => {
               const styles = {
                 warning: "border-warning-200 bg-warning-50 text-warning-800",
@@ -240,27 +318,60 @@ export default async function SuperAdminPage({
 
       {/* Tabela de Gestão de Clientes */}
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-border">
-          <div>
-            <h2 className="font-display text-base font-bold text-foreground">
-              Gestão de Prefeituras (Tenants)
-            </h2>
-            <p className="text-xs text-muted-foreground mt-1">Gerencie acessos, planos e suporte técnico.</p>
+        
+        {/* Cabeçalho da Tabela com Busca e Filtros */}
+        <div className="border-b border-border p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="font-display text-base font-bold text-foreground">
+                Gestão de Prefeituras (Tenants)
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1">Gerencie acessos, planos e suporte técnico.</p>
+            </div>
+            
+            <form action="/superadmin" method="GET" className="flex items-center gap-2">
+              {/* Preserva o status atual na busca */}
+              {filterStatus && <input type="hidden" name="status" value={filterStatus} />}
+              <input 
+                type="text" 
+                name="q"
+                defaultValue={q}
+                placeholder="Buscar cidade..." 
+                className="px-3 py-1.5 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+              <button type="submit" className="text-sm font-medium text-brand-600 hover:text-brand-500 px-3 py-1.5 border border-transparent hover:bg-brand-50 rounded-md transition-colors">
+                Buscar
+              </button>
+            </form>
           </div>
-          
-          {/* A Busca funcional mantendo os estilos originais */}
-          <form className="flex items-center gap-2">
-            <input 
-              type="text" 
-              name="q"
-              defaultValue={q}
-              placeholder="Buscar cidade..." 
-              className="px-3 py-1.5 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-            />
-            <button type="submit" className="text-sm font-medium text-brand-600 hover:text-brand-500 px-3 py-1.5 border border-transparent hover:bg-brand-50 rounded-md transition-colors">
-              Buscar
-            </button>
-          </form>
+
+          {/* Abas de Filtro Funcionais */}
+          <div className="flex items-center gap-2 text-sm border-t border-border pt-4">
+            <Link 
+              href="?" 
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${!filterStatus ? "bg-background shadow-sm border border-border text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Todos
+            </Link>
+            <Link 
+              href="?status=ATIVO" 
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${filterStatus === "ATIVO" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Ativos
+            </Link>
+            <Link 
+              href="?status=TRIAL" 
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${filterStatus === "TRIAL" ? "bg-brand-50 text-brand-700 border border-brand-200" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Trial
+            </Link>
+            <Link 
+              href="?status=INADIMPLENTE" 
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${filterStatus === "INADIMPLENTE" ? "bg-danger-50 text-danger-700 border border-danger-200" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Inadimplentes
+            </Link>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -278,7 +389,7 @@ export default async function SuperAdminPage({
               {RECENT_TENANTS.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
-                    Nenhuma prefeitura encontrada.
+                    Nenhuma prefeitura encontrada para este filtro.
                   </td>
                 </tr>
               ) : (
@@ -310,14 +421,13 @@ export default async function SuperAdminPage({
                         {formatNumber(tenant.assetsCount)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-xs font-bold">
-                        {/* Botões restabelecidos 100% originais para não gerar links quebrados */}
                         <button className="text-brand-600 hover:text-brand-800 mr-4 transition-colors">
                           Editar Tenant
                         </button>
-                        <button className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors">
+                        <Link href={`/api/auth/impersonate?tenantId=${tenant.id}`} className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors">
                           <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
                           Acessar como...
-                        </button>
+                        </Link>
                       </td>
                     </tr>
                   );
@@ -327,6 +437,44 @@ export default async function SuperAdminPage({
           </table>
         </div>
       </div>
+
+      {/* ── MODAL NOVA PREFEITURA ── */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0f1e]/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-card p-6 shadow-2xl relative overflow-hidden">
+            <h3 className="font-display text-xl font-bold text-foreground mb-1">Cadastrar Nova Prefeitura</h3>
+            <p className="text-sm text-muted-foreground mb-6">O ambiente será gerado imediatamente no banco de dados.</p>
+            
+            <form action={createTenantAction} className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Nome do Município *</label>
+                <input 
+                  name="name" type="text" required placeholder="Ex: Prefeitura de São Paulo"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-1 transition-all"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Plano Assinado *</label>
+                <select name="plan" className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-1 transition-all">
+                  <option value="STARTER">Starter (R$ 890/mês)</option>
+                  <option value="PRO">Pro (R$ 2.400/mês)</option>
+                  <option value="ENTERPRISE">Enterprise (Sob Consulta)</option>
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-border mt-6">
+                <Link href="/superadmin" className="flex-1 rounded-lg py-2.5 text-center text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">
+                  Cancelar
+                </Link>
+                <button type="submit" className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors shadow-sm">
+                  Gerar Ambiente
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
