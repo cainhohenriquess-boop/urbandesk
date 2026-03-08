@@ -1,57 +1,50 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
-export type AssetCategory = 
-  | "BOCA_LOBO" | "POCO_VISITA" | "HIDRANTE" 
-  | "SEMAFORO" | "PLACA_TRANSITO" | "LOMBADA" | "PONTO_ONIBUS" | "RADAR"
-  | "POSTE_LUZ" | "ARVORE" | "LIXEIRA" | "BURACO";
-
+export type AssetCategory = "BOCA_LOBO" | "POCO_VISITA" | "HIDRANTE" | "SEMAFORO" | "PLACA_TRANSITO" | "LOMBADA" | "PONTO_ONIBUS" | "RADAR" | "POSTE_LUZ" | "ARVORE" | "LIXEIRA" | "BURACO";
 export type DrawMode = "SELECT" | "line" | "polygon" | AssetCategory;
 export type MapStyle = "streets" | "satellite" | "topography" | "dark";
 
-export interface GeoPoint {
-  lat: number;
-  lng: number;
-}
+export interface GeoPoint { lat: number; lng: number; }
 
 export interface DrawnFeature {
-  id:         string;
-  type:       "line" | "polygon" | AssetCategory;
-  coords:     GeoPoint[];
-  label?:     string;
+  id: string;
+  type: "line" | "polygon" | AssetCategory;
+  coords: GeoPoint[];
+  label?: string;
   projectId?: string;
-  color?:     string;
-  synced:     boolean; 
-  createdAt:  number;
-  // NOVO: Dicionário dinâmico para tabelas de engenharia
-  attributes?: Record<string, any>; 
+  color?: string;
+  synced: boolean;
+  createdAt: number;
+  attributes?: Record<string, any>;
+}
+
+export interface BaseLayerData {
+  id: string;
+  name: string;
+  type: "BOUNDARY" | "STREETS";
+  geoJsonData: any;
 }
 
 export interface MapViewState {
   longitude: number;
-  latitude:  number;
-  zoom:      number;
-  bearing?:  number;
-  pitch?:    number;
+  latitude: number;
+  zoom: number;
+  bearing?: number;
+  pitch?: number;
 }
 
 export interface LayerVisibility {
-  ativos:     boolean;
-  obras:      boolean;
-  alertas:    boolean;
-  viario:     boolean;
-  topografia: boolean;
+  ativos: boolean; obras: boolean; alertas: boolean; viario: boolean; topografia: boolean; basegis: boolean;
 }
 
 interface MapStore {
   isFullscreen: boolean;
   toggleFullscreen: () => void;
 
-  drawMode:    DrawMode;
+  drawMode: DrawMode;
   setDrawMode: (mode: DrawMode) => void;
 
-  // NOVO: Quando terminamos o rascunho, ele vem pra cá antes de ir pro array oficial.
-  // Isso serve para abrir o Painel de Propriedades (Formulário).
   pendingFeature: Omit<DrawnFeature, "id" | "createdAt" | "synced"> | null;
   cancelPendingFeature: () => void;
   confirmPendingFeature: (attributes: Record<string, any>, label?: string) => void;
@@ -60,32 +53,36 @@ interface MapStore {
   incrementUnsaved: () => void;
   resetUnsaved: () => void;
 
-  features:      DrawnFeature[];
+  features: DrawnFeature[];
   updateFeature: (id: string, data: Partial<DrawnFeature>) => void;
   removeFeature: (id: string) => void;
   clearFeatures: () => void;
-  syncAll:       () => void; 
+  syncAll: () => void;
 
-  selectedId:    string | null;
+  // NOVO: Armazena os Shapefiles
+  baseLayersData: BaseLayerData[];
+  setBaseLayersData: (layers: BaseLayerData[]) => void;
+
+  selectedId: string | null;
   setSelectedId: (id: string | null) => void;
 
-  draftPoints:      GeoPoint[];
-  addDraftPoint:    (point: GeoPoint) => void;
+  draftPoints: GeoPoint[];
+  addDraftPoint: (point: GeoPoint) => void;
   clearDraftPoints: () => void;
-  finishDraft:      () => void; 
+  finishDraft: () => void;
 
-  viewState:    MapViewState;
+  viewState: MapViewState;
   setViewState: (vs: MapViewState) => void;
-  flyToCity:    (lng: number, lat: number, zoom?: number) => void; // NOVO
+  flyToCity: (lng: number, lat: number, zoom?: number) => void;
 
-  layers:      LayerVisibility;
+  layers: LayerVisibility;
   toggleLayer: (key: keyof LayerVisibility) => void;
   setLayerAll: (visible: boolean) => void;
 
-  mapStyle:    MapStyle;
+  mapStyle: MapStyle;
   setMapStyle: (style: MapStyle) => void;
 
-  activeProjectId:    string | null;
+  activeProjectId: string | null;
   setActiveProjectId: (id: string | null) => void;
 }
 
@@ -97,12 +94,7 @@ export const useMapStore = create<MapStore>()(
         const doc = window.document;
         const docEl = doc.documentElement;
         const isFull = get().isFullscreen;
-
-        if (!isFull) {
-          docEl.requestFullscreen?.();
-        } else {
-          doc.exitFullscreen?.();
-        }
+        if (!isFull) docEl.requestFullscreen?.(); else doc.exitFullscreen?.();
         set({ isFullscreen: !isFull });
       },
 
@@ -112,26 +104,14 @@ export const useMapStore = create<MapStore>()(
       pendingFeature: null,
       cancelPendingFeature: () => set({ pendingFeature: null, drawMode: "SELECT" }),
       
-      // Quando o engenheiro preenche o formulário lateral e clica em Salvar:
       confirmPendingFeature: (attributes, label) => {
         const { pendingFeature, features, unsavedCount } = get();
         if (!pendingFeature) return;
-
         const newFeature: DrawnFeature = {
-          ...pendingFeature,
-          label: label || pendingFeature.label,
-          attributes,
-          synced: false,
-          id: `feat-${crypto.randomUUID()}`,
-          createdAt: Date.now(),
+          ...pendingFeature, label: label || pendingFeature.label, attributes, synced: false,
+          id: `feat-${crypto.randomUUID()}`, createdAt: Date.now(),
         };
-
-        set({ 
-          features: [...features, newFeature], 
-          unsavedCount: unsavedCount + 1,
-          pendingFeature: null,
-          drawMode: "SELECT"
-        });
+        set({ features: [...features, newFeature], unsavedCount: unsavedCount + 1, pendingFeature: null, drawMode: "SELECT" });
       },
 
       unsavedCount: 0,
@@ -139,79 +119,42 @@ export const useMapStore = create<MapStore>()(
       resetUnsaved: () => set({ unsavedCount: 0 }),
 
       features: [],
-
-      updateFeature: (id, data) =>
-        set((s) => ({
-          features: s.features.map((f) => (f.id === id ? { ...f, ...data } : f)),
-          unsavedCount: s.unsavedCount + 1
-        })),
-
-      removeFeature: (id) =>
-        set((s) => ({
-          features: s.features.filter((f) => f.id !== id),
-          selectedId: s.selectedId === id ? null : s.selectedId,
-          unsavedCount: s.unsavedCount + 1
-        })),
-
+      updateFeature: (id, data) => set((s) => ({ features: s.features.map((f) => (f.id === id ? { ...f, ...data } : f)), unsavedCount: s.unsavedCount + 1 })),
+      removeFeature: (id) => set((s) => ({ features: s.features.filter((f) => f.id !== id), selectedId: s.selectedId === id ? null : s.selectedId, unsavedCount: s.unsavedCount + 1 })),
       clearFeatures: () => set({ features: [], selectedId: null, draftPoints: [], pendingFeature: null }),
-      
-      syncAll: () => set((s) => ({
-        features: s.features.map(f => ({ ...f, synced: true })),
-        unsavedCount: 0
-      })),
+      syncAll: () => set((s) => ({ features: s.features.map(f => ({ ...f, synced: true })), unsavedCount: 0 })),
+
+      // NOVO
+      baseLayersData: [],
+      setBaseLayersData: (layers) => set({ baseLayersData: layers }),
 
       selectedId: null,
       setSelectedId: (id) => set({ selectedId: id }),
 
       draftPoints: [],
-
       addDraftPoint: (point) => {
         const { drawMode, draftPoints } = get();
-
-        // Se for ATIVO DE PONTO, joga direto pro Staging (abre o form)
         if (drawMode !== "SELECT" && drawMode !== "line" && drawMode !== "polygon") {
           set({ pendingFeature: { type: drawMode, coords: [point] } });
           return;
         }
-
-        // Se for linha/polígono, guarda no rascunho pra ir desenhando
         set({ draftPoints: [...draftPoints, point] });
       },
-
       finishDraft: () => {
         const { drawMode, draftPoints } = get();
         if (draftPoints.length > 1 && (drawMode === "line" || drawMode === "polygon")) {
-          // Joga a rede/polígono pro Staging (abre o form)
-          set({ 
-            pendingFeature: { type: drawMode, coords: draftPoints, color: "#3b82f6" },
-            draftPoints: [] 
-          });
-        } else {
-          set({ draftPoints: [], drawMode: "SELECT" });
-        }
+          set({ pendingFeature: { type: drawMode, coords: draftPoints, color: "#3b82f6" }, draftPoints: [] });
+        } else set({ draftPoints: [], drawMode: "SELECT" });
       },
-
       clearDraftPoints: () => set({ draftPoints: [] }),
 
-      viewState: {
-        longitude: -38.5267,
-        latitude:  -3.7319,
-        zoom:      12,
-        bearing:   0,
-        pitch:     0,
-      },
+      viewState: { longitude: -38.5267, latitude: -3.7319, zoom: 12, bearing: 0, pitch: 0 },
       setViewState: (vs) => set({ viewState: vs }),
-      flyToCity: (lng, lat, zoom = 14) => set((s) => ({
-        viewState: { ...s.viewState, longitude: lng, latitude: lat, zoom, transitionDuration: 2000 }
-      })),
+      flyToCity: (lng, lat, zoom = 14) => set((s) => ({ viewState: { ...s.viewState, longitude: lng, latitude: lat, zoom, transitionDuration: 2000 } })),
 
-      layers: {
-        ativos: true, obras: true, alertas: true, viario: true, topografia: false,
-      },
+      layers: { ativos: true, obras: true, alertas: true, viario: true, topografia: false, basegis: true },
       toggleLayer: (key) => set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
-      setLayerAll: (visible) => set((s) => ({
-        layers: Object.fromEntries(Object.keys(s.layers).map((k) => [k, visible])) as LayerVisibility,
-      })),
+      setLayerAll: (visible) => set((s) => ({ layers: Object.fromEntries(Object.keys(s.layers).map((k) => [k, visible])) as LayerVisibility })),
 
       mapStyle: "satellite",
       setMapStyle: (style) => set({ mapStyle: style }),
@@ -222,11 +165,3 @@ export const useMapStore = create<MapStore>()(
     { name: "UrbanDesk · MapStore" }
   )
 );
-
-export const selectDrawMode   = (s: MapStore) => s.drawMode;
-export const selectFeatures   = (s: MapStore) => s.features;
-export const selectLayers     = (s: MapStore) => s.layers;
-export const selectViewState  = (s: MapStore) => s.viewState;
-export const selectDraftPoints= (s: MapStore) => s.draftPoints;
-export const selectUnsavedCount = (s: MapStore) => s.unsavedCount;
-export const selectPendingFeature = (s: MapStore) => s.pendingFeature;
