@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────
 // Configurações e Motor de Mapas
-// Puxa o Token real do seu .env para autorizar o download de Fontes
 // ─────────────────────────────────────────────
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2x4emhvYXJvMDBmMDJqc2c2cjVqcGZxNiJ9.dummy";
 
@@ -18,7 +17,6 @@ const BLANK_STYLE = {
   version: 8,
   name: "Base Cartográfica",
   glyphs: GLYPHS_URL,
-  sprite: "mapbox://sprites/mapbox/light-v10",
   sources: {},
   layers: [{ id: "background", type: "background", paint: { "background-color": "#f8fafc" } }]
 };
@@ -154,31 +152,39 @@ export function MapCanvas() {
       <Map {...viewState} onMove={evt => setViewState(evt.viewState)} mapStyle={activeMapStyle as any} mapboxAccessToken={MAPBOX_TOKEN} onClick={handleMapClick} cursor={drawMode !== "SELECT" ? "crosshair" : "grab"}>
         <NavigationControl position="bottom-right" />
 
-        {/* ── CAMADAS CARTOGRÁFICAS (SHAPEFILES) ── */}
+        {/* ── CAMADAS CARTOGRÁFICAS BLINDADAS ── */}
         {layers.basegis && baseLayersData.map((layer) => {
           const sourceId = `source-${layer.id}`;
-          // Segurança Extra: Garante que os dados sejam formatados corretamente se vierem como string do BD
           const geoData = typeof layer.geoJsonData === 'string' ? JSON.parse(layer.geoJsonData) : layer.geoJsonData;
 
           return (
             <Source key={`src-${layer.id}`} id={sourceId} type="geojson" data={geoData}>
               
-              {/* LIMITE DO MUNICÍPIO: Agora aceita Polygon e MultiPolygon sem bugar */}
-              {layer.type === "BOUNDARY" && <Layer source={sourceId} id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#0ea5e9", "fill-opacity": 0.05 }} />}
-              {layer.type === "BOUNDARY" && <Layer source={sourceId} id={`line-${layer.id}`} type="line" paint={{ "line-color": "#0ea5e9", "line-width": 3, "line-dasharray": [2, 4] }} />}
+              {/* LIMITE MUNICIPAL */}
+              {layer.type === "BOUNDARY" && (
+                <>
+                  <Layer id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#0ea5e9", "fill-opacity": 0.05 }} />
+                  <Layer id={`line-${layer.id}`} type="line" paint={{ "line-color": "#0ea5e9", "line-width": 3, "line-dasharray": [2, 4] }} />
+                </>
+              )}
 
-              {/* BUFFERS DE RUAS */}
-              {layer.type === "STREETS" && <Layer source={sourceId} id={`street-fill-${layer.id}`} type="fill" paint={{ "fill-color": "#f1f5f9", "fill-opacity": 0.8 }} />}
-              {layer.type === "STREETS" && <Layer source={sourceId} id={`street-border-${layer.id}`} type="line" paint={{ "line-color": "#94a3b8", "line-width": 1.5 }} />}
+              {/* BUFFERS DE RUAS (Renderiza bordas independente se for Polygon, MultiPolygon ou LineString) */}
+              {layer.type === "STREETS" && (
+                <>
+                  {/* Tenta renderizar preenchimento caso seja Polígono */}
+                  <Layer id={`street-fill-${layer.id}`} type="fill" paint={{ "fill-color": "#f1f5f9", "fill-opacity": 0.8 }} />
+                  {/* Tenta renderizar linhas de contorno (aceita tanto polígonos quanto linhas perfeitamente) */}
+                  <Layer id={`street-border-${layer.id}`} type="line" paint={{ "line-color": "#94a3b8", "line-width": 1.5 }} />
+                </>
+              )}
 
-              {/* NOMES DAS RUAS (Usa a fonte padrão nativa da Mapbox para garantir a renderização) */}
+              {/* NOMES DAS RUAS (Procura por diversas colunas comuns: name, NAME, NOME, Rua) */}
               {layer.type === "STREET_NAMES" && (
                  <Layer 
-                   source={sourceId}
                    id={`street-name-${layer.id}`} 
                    type="symbol" 
                    layout={{ 
-                     "text-field": ["coalesce", ["get", "name"], ["get", "NAME"], ["get", "NOME"], ["get", "Rua"]], 
+                     "text-field": ["coalesce", ["get", "name"], ["get", "NAME"], ["get", "NOME"], ["get", "Rua"], ["get", "rua"]], 
                      "text-font": ["Open Sans Bold", "Arial Unicode MS Regular"],
                      "text-size": 13, 
                      "symbol-placement": "line", 
