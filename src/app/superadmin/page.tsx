@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { formatBRLCompact, formatNumber, formatPercent } from "@/lib/utils";
+import { formatBRLCompact, formatPercent } from "@/lib/utils";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -53,12 +53,16 @@ export default async function SuperAdminPage({
   const safeParams = searchParams || {};
   const q = typeof safeParams.q === "string" ? safeParams.q : "";
   const filterStatus = typeof safeParams.status === "string" ? safeParams.status : "";
+  
   const isModalOpen = safeParams.modal === "new";
   const isUploadModalOpen = safeParams.modal === "upload";
+  const isDeleteModalOpen = safeParams.modal === "delete"; // NOVO: Flag para o modal de exclusão
+  
   const targetTenantId = typeof safeParams.tenantId === "string" ? safeParams.tenantId : null;
+  const targetTenantName = typeof safeParams.tenantName === "string" ? safeParams.tenantName : "esta prefeitura";
 
   // ─────────────────────────────────────────────
-  // SERVER ACTION 1: Criar Prefeitura + Robô OSM + Gerar Equipe
+  // SERVER ACTION 1: Criar Prefeitura + Robô OSM
   // ─────────────────────────────────────────────
   async function createTenantAction(formData: FormData) {
     "use server";
@@ -76,7 +80,6 @@ export default async function SuperAdminPage({
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const cnpj = Math.floor(10000000000000 + Math.random() * 90000000000000).toString();
 
-    // 1. Cria a Prefeitura no Banco
     const tenant = await prisma.tenant.create({
       data: { 
         name, slug, cnpj, state, plan: plan as any, status: "TRIAL", mrr, 
@@ -84,7 +87,6 @@ export default async function SuperAdminPage({
       }
     });
 
-    // 2. Busca o Limite Municipal na API do OpenStreetMap (Nominatim)
     try {
       const osmUrl = `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(name)}&state=${encodeURIComponent(state)}&country=Brazil&polygon_geojson=1&format=json`;
       const osmRes = await fetch(osmUrl, { headers: { "User-Agent": "UrbanDesk-Enterprise-GIS/1.0" }});
@@ -100,10 +102,9 @@ export default async function SuperAdminPage({
         });
       }
     } catch (e) {
-      console.error("Erro ao puxar limite do OSM:", e); // Falha silenciosa
+      console.error("Erro ao puxar limite do OSM:", e);
     }
 
-    // 3. Cria os Usuários de Acesso (Senhas Criptografadas)
     const passwordHash = await bcrypt.hash(rawPassword, 10);
     const usersToCreate = [
       { name: "Engenharia", email: `engenheiro@${slug}`, role: "ENGENHEIRO", tenantId: tenant.id, passwordHash },
@@ -147,7 +148,24 @@ export default async function SuperAdminPage({
   }
 
   // ─────────────────────────────────────────────
-  // BLOCO TRY-CATCH DE RESILIÊNCIA E CONSULTA
+  // SERVER ACTION 3: Excluir Prefeitura
+  // ─────────────────────────────────────────────
+  async function deleteTenantAction(formData: FormData) {
+    "use server";
+    const tenantId = formData.get("tenantId") as string;
+    if (!tenantId) return;
+
+    // Graças ao onDelete: Cascade no schema.prisma, isso apaga TUDO (users, assets, etc)
+    await prisma.tenant.delete({
+      where: { id: tenantId }
+    });
+
+    revalidatePath("/superadmin");
+    redirect("/superadmin");
+  }
+
+  // ─────────────────────────────────────────────
+  // Consultas ao Banco
   // ─────────────────────────────────────────────
   let dbTenants: any[] = [];
   let allTenants: any[] = [];
@@ -170,7 +188,6 @@ export default async function SuperAdminPage({
       select: { mrr: true, status: true, plan: true } 
     });
   } catch (error: any) {
-    console.error("ERRO NO BANCO DE DADOS (SuperAdmin):", error);
     dbError = error.message;
   }
 
@@ -231,12 +248,11 @@ export default async function SuperAdminPage({
         </div>
       </div>
 
-      {/* ── KPIs ── */}
+      {/* ── KPIs e Gráficos ── */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {KPI_DATA.map((kpi) => <KpiCard key={kpi.label} {...kpi} />)}
       </div>
 
-      {/* ── Gráficos Recuperados ── */}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
           <h2 className="font-display text-base font-bold text-foreground mb-5">Distribuição de Receita</h2>
@@ -317,14 +333,14 @@ export default async function SuperAdminPage({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40">
-                {["Município", "Status", "MRR", "Usuários Logins", "Camadas Shapefile", "Ações Técnicas"].map((h) => (
+                {["Município", "Status", "Usuários Logins", "Camadas", "Ações Técnicas"].map((h) => (
                   <th key={h} className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {RECENT_TENANTS.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">Nenhuma prefeitura encontrada para este filtro.</td></tr>
+                <tr><td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">Nenhuma prefeitura encontrada para este filtro.</td></tr>
               ) : (
                 RECENT_TENANTS.map((tenant) => {
                   const s = STATUS_STYLES[tenant.status] || STATUS_STYLES.CANCELADO;
@@ -332,15 +348,24 @@ export default async function SuperAdminPage({
                     <tr key={tenant.id} className="transition-colors hover:bg-muted/30">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <p className="font-bold text-foreground">{tenant.name} - {tenant.state}</p>
-                        <p className="text-xs text-muted-foreground">Plano {tenant.plan} • {tenant.createdAt}</p>
+                        <p className="text-xs text-muted-foreground">Criado em {tenant.createdAt}</p>
                       </td>
                       <td className="px-6 py-4"><span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${s.className}`}>{s.label}</span></td>
-                      <td className="px-6 py-4 tabular-num font-medium text-foreground">{tenant.mrr === 0 ? "—" : formatBRLCompact(tenant.mrr)}</td>
                       <td className="px-6 py-4 text-xs font-mono text-muted-foreground">
                         engenheiro@{tenant.slug} <br/> secretario@{tenant.slug}
                       </td>
                       <td className="px-6 py-4 tabular-num font-bold text-brand-600">{tenant.layersCount} Camadas</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-xs font-bold flex justify-end gap-3 items-center h-[72px]">
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-xs font-bold flex justify-end gap-2 items-center h-[72px]">
+                        
+                        {/* NOVO: Botão de Excluir */}
+                        <Link 
+                          href={`?modal=delete&tenantId=${tenant.id}&tenantName=${encodeURIComponent(tenant.name)}`} 
+                          className="text-danger-600 hover:text-danger-700 bg-danger-50 hover:bg-danger-100 p-2 rounded-md transition-colors"
+                          title="Excluir Prefeitura"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </Link>
+
                         <Link href={`?modal=upload&tenantId=${tenant.id}`} className="text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-md flex items-center gap-1 transition-colors">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                           Subir Mapa
@@ -438,6 +463,37 @@ export default async function SuperAdminPage({
                 <Link href="/superadmin" className="flex-1 rounded-lg py-2.5 text-center text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">Cancelar</Link>
                 <button type="submit" className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-bold text-white hover:bg-brand-700 shadow-md transition-colors">
                   Processar Mapa
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 3: EXCLUIR PREFEITURA (LIXEIRA) ── */}
+      {isDeleteModalOpen && targetTenantId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0f1e]/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl border border-danger-500/30 bg-card p-6 shadow-2xl relative overflow-hidden">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-danger-100 text-danger-600 p-3 rounded-full">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              </div>
+              <h3 className="font-display text-xl font-bold text-foreground">Excluir Prefeitura</h3>
+            </div>
+            
+            <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+              Você está prestes a apagar <strong>{targetTenantName}</strong>. Esta ação excluirá automaticamente todos os usuários, senhas, shapefiles e mapas salvos associados a este município. <span className="text-danger-600 font-bold">Esta ação é irreversível.</span>
+            </p>
+            
+            <form action={deleteTenantAction}>
+              <input type="hidden" name="tenantId" value={targetTenantId} />
+              
+              <div className="flex gap-3 pt-4 border-t border-border">
+                <Link href="/superadmin" className="flex-1 rounded-lg py-2.5 text-center text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">
+                  Cancelar
+                </Link>
+                <button type="submit" className="flex-1 rounded-lg bg-danger-600 py-2.5 text-sm font-bold text-white hover:bg-danger-700 shadow-md transition-colors">
+                  Sim, excluir tudo
                 </button>
               </div>
             </form>
