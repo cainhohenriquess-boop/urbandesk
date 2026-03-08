@@ -7,14 +7,30 @@ import { useMapStore } from "@/store/useMapStore";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────
-// Configurações e Estilos Base
+// Estilos de Mapa Base
 // ─────────────────────────────────────────────
 const MAPBOX_TOKEN = "pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2x4emhvYXJvMDBmMDJqc2c2cjVqcGZxNiJ9.dummy";
 
-const OSM_STYLE = { version: 8, sources: { osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "© OpenStreetMap" } }, layers: [{ id: "osm-layer", type: "raster", source: "osm", minzoom: 0, maxzoom: 19 }] };
+// 🚀 NOVO: Fundo Cartográfico Limpo (Substitui o OSM Comercial)
+const BLANK_STYLE = {
+  version: 8,
+  name: "Base Cartográfica",
+  sources: {},
+  layers: [
+    {
+      id: "background",
+      type: "background",
+      paint: { "background-color": "#f8fafc" } // Fundo cinza ultraclaro profissional
+    }
+  ]
+};
+
 const SATELLITE_STYLE = { version: 8, sources: { satellite: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Tiles © Esri" } }, layers: [{ id: "satellite-layer", type: "raster", source: "satellite", minzoom: 0, maxzoom: 19 }] };
 const TOPO_STYLE = { version: 8, sources: { topo: { type: "raster", tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "© OpenTopoMap" } }, layers: [{ id: "topo-layer", type: "raster", source: "topo", minzoom: 0, maxzoom: 17 }] };
 
+// ─────────────────────────────────────────────
+// Estilos de Ativos Urbanos
+// ─────────────────────────────────────────────
 const ASSET_STYLES = {
   BOCA_LOBO:      { color: "bg-blue-500",    hex: "#3b82f6", ring: "ring-blue-500/50",    icon: "💧", label: "Boca de Lobo" },
   POCO_VISITA:    { color: "bg-slate-600",   hex: "#475569", ring: "ring-slate-600/50",   icon: "🕳️", label: "Poço de Visita" },
@@ -31,7 +47,7 @@ const ASSET_STYLES = {
 };
 
 // ─────────────────────────────────────────────
-// Painel de Engenharia (Formulário)
+// Painel de Engenharia (Staging)
 // ─────────────────────────────────────────────
 function EngineeringPanel() {
   const { pendingFeature, cancelPendingFeature, confirmPendingFeature } = useMapStore();
@@ -168,8 +184,8 @@ export function MapCanvas() {
   const syncedAssets = assetFeatures.filter(f => f.synced);
   const unsyncedAssets = assetFeatures.filter(f => !f.synced);
 
-  // Satélite como padrão para o Enterprise GIS
-  const activeMapStyle = mapStyle === "topography" ? TOPO_STYLE : mapStyle === "streets" ? OSM_STYLE : SATELLITE_STYLE;
+  // 🚀 Se "streets" for escolhido no painel, ele renderiza o BLANK_STYLE (Fundo Cartográfico Branco)
+  const activeMapStyle = mapStyle === "topography" ? TOPO_STYLE : mapStyle === "satellite" ? SATELLITE_STYLE : BLANK_STYLE;
 
   // 1. Obras (Linhas e Polígonos Salvos)
   const geometriesGeoJson = useMemo(() => {
@@ -177,9 +193,7 @@ export function MapCanvas() {
       type: "FeatureCollection",
       features: geometryFeatures.map(f => {
         const coords = f.coords.map(c => [c.lng, c.lat]);
-        if (f.type === "polygon" && coords.length > 2) {
-          coords.push([f.coords[0].lng, f.coords[0].lat]);
-        }
+        if (f.type === "polygon" && coords.length > 2) coords.push([f.coords[0].lng, f.coords[0].lat]);
         return {
           type: "Feature",
           geometry: {
@@ -192,10 +206,9 @@ export function MapCanvas() {
     };
   }, [geometryFeatures]);
 
-  // 2. Rascunho Atual (Feedback visual durante o desenho)
+  // 2. Rascunho Atual (Feedback visual)
   const draftGeoJson = useMemo(() => {
     if (draftPoints.length === 0 || (drawMode !== "line" && drawMode !== "polygon")) return null;
-    
     const coords = draftPoints.map(p => [p.lng, p.lat]);
     const feats: any[] = [];
 
@@ -208,7 +221,6 @@ export function MapCanvas() {
         feats.push({ type: "Feature", geometry: { type: "LineString", coordinates: coords } });
       }
     }
-
     return { type: "FeatureCollection", features: feats };
   }, [draftPoints, drawMode]);
 
@@ -220,30 +232,22 @@ export function MapCanvas() {
         const style = ASSET_STYLES[f.type as keyof typeof ASSET_STYLES];
         return {
           type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: [f.coords[0].lng, f.coords[0].lat]
-          },
-          properties: {
-            id: f.id,
-            type: f.type,
-            icon: style?.icon || "📍",
-            color: style?.hex || "#ffffff"
-          }
+          geometry: { type: "Point", coordinates: [f.coords[0].lng, f.coords[0].lat] },
+          properties: { id: f.id, type: f.type, icon: style?.icon || "📍", color: style?.hex || "#ffffff" }
         };
       })
     };
   }, [syncedAssets]);
 
   return (
-    <div className="h-full w-full relative bg-[#e5e7eb] overflow-hidden" onContextMenu={handleContextMenu}>
+    <div className="h-full w-full relative bg-[#f8fafc] overflow-hidden" onContextMenu={handleContextMenu}>
       
       <EngineeringPanel />
 
       {/* Botão de Tela Cheia */}
       <button 
         onClick={toggleFullscreen}
-        className="absolute top-4 right-14 z-40 bg-card/90 backdrop-blur-md text-foreground border border-border p-2 rounded-lg shadow-md hover:bg-muted transition-colors"
+        className="absolute top-4 right-14 z-40 bg-card text-foreground border border-border p-2 rounded-lg shadow-md hover:bg-muted transition-colors"
         title="Tela Cheia"
       >
         {isFullscreen ? (
@@ -263,31 +267,34 @@ export function MapCanvas() {
       >
         <NavigationControl position="bottom-right" />
 
-        {/* ── MÁGICA ENTERPRISE: Renderizando os Shapefiles do Servidor ── */}
+        {/* ── CAMADAS CARTOGRÁFICAS (SHAPEFILES) ── */}
         {layers.basegis && baseLayersData.map((layer) => (
           <Source key={`src-${layer.id}`} id={`source-${layer.id}`} type="geojson" data={layer.geoJsonData}>
             
-            {/* 1. LIMITE DO MUNICÍPIO: Fundo quase transparente e borda tracejada visível */}
+            {/* LIMITE DO MUNICÍPIO: Preenchimento translúcido com borda tracejada forte */}
             {layer.type === "BOUNDARY" && (
                <>
-                 <Layer id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#ffffff", "fill-opacity": 0.05 }} />
-                 <Layer id={`line-${layer.id}`} type="line" paint={{ "line-color": "#facc15", "line-width": 3, "line-dasharray": [2, 4] }} />
+                 <Layer id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#e2e8f0", "fill-opacity": 0.3 }} />
+                 <Layer id={`line-${layer.id}`} type="line" paint={{ "line-color": "#0ea5e9", "line-width": 3, "line-dasharray": [2, 4] }} />
                </>
             )}
 
-            {/* 2. RUAS/BUFFERS (Polígonos): Apenas o contorno exato da rua desenhado por cima da imagem real */}
+            {/* BUFFERS DE RUAS: Polígonos de ruas desenhados no solo */}
             {layer.type === "STREETS" && (
-               <Layer id={`street-buffer-${layer.id}`} type="line" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "line-color": "#0ea5e9", "line-width": 1.5, "line-opacity": 0.8 }} />
+               <>
+                 <Layer id={`street-fill-${layer.id}`} type="fill" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "fill-color": "#f1f5f9", "fill-opacity": 0.8 }} />
+                 <Layer id={`street-border-${layer.id}`} type="line" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "line-color": "#cbd5e1", "line-width": 1.5 }} />
+               </>
             )}
 
-            {/* 3. NOMES DAS RUAS (Linhas com atributo 'name') */}
+            {/* NOMES DAS RUAS */}
             {layer.type === "STREET_NAMES" && (
-               <Layer id={`street-name-${layer.id}`} type="symbol" filter={["==", ["geometry-type"], "LineString"]} layout={{ "text-field": ["get", "name"], "text-size": 13, "symbol-placement": "line", "text-letter-spacing": 0.1 }} paint={{ "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 2 }} />
+               <Layer id={`street-name-${layer.id}`} type="symbol" filter={["==", ["geometry-type"], "LineString"]} layout={{ "text-field": ["get", "name"], "text-size": 12, "symbol-placement": "line", "text-letter-spacing": 0.1 }} paint={{ "text-color": "#334155", "text-halo-color": "#ffffff", "text-halo-width": 2 }} />
             )}
           </Source>
         ))}
 
-        {/* ── RASCUNHO (Feedback Visual em Tempo Real) ── */}
+        {/* ── RASCUNHOS ── */}
         {draftGeoJson && (
           <Source id="draft-source" type="geojson" data={draftGeoJson as any}>
             <Layer id="draft-polygon-fill" type="fill" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "fill-color": "#10b981", "fill-opacity": 0.3 }} />
@@ -296,7 +303,7 @@ export function MapCanvas() {
           </Source>
         )}
 
-        {/* ── LINHAS E POLÍGONOS FINALIZADOS (OBRAS) ── */}
+        {/* ── OBRAS FINALIZADAS ── */}
         {layers.obras && (
           <Source id="geometries" type="geojson" data={geometriesGeoJson as any}>
             <Layer id="lines" type="line" filter={["==", ["geometry-type"], "LineString"]} paint={{ "line-color": ["get", "color"], "line-width": 4 }} />
@@ -305,7 +312,7 @@ export function MapCanvas() {
           </Source>
         )}
 
-        {/* ── ATIVOS SINCRONIZADOS (WebGL Massivo) ── */}
+        {/* ── ATIVOS WEBGL ── */}
         {layers.ativos && (
           <Source id="synced-assets" type="geojson" data={syncedAssetsGeoJson as any}>
             <Layer id="synced-assets-circle" type="circle" paint={{ "circle-color": ["get", "color"], "circle-radius": 14, "circle-stroke-width": 2, "circle-stroke-color": "#ffffff", "circle-pitch-alignment": "map" }} />
@@ -313,7 +320,7 @@ export function MapCanvas() {
           </Source>
         )}
 
-        {/* ── ATIVOS PENDENTES (Animação UI) ── */}
+        {/* ── ATIVOS PENDENTES (HTML) ── */}
         {layers.ativos && unsyncedAssets.map((feature) => {
           const style = ASSET_STYLES[feature.type as keyof typeof ASSET_STYLES];
           if (!style || !feature.coords[0]) return null;
@@ -338,7 +345,6 @@ export function MapCanvas() {
         })}
       </Map>
       
-      {/* ── Instruções Flutuantes ── */}
       {drawMode !== "SELECT" && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full border border-brand-400 bg-brand-600/90 backdrop-blur-md px-6 py-2.5 text-sm font-bold text-white shadow-2xl animate-bounce flex items-center gap-2 pointer-events-none z-40">
           {drawMode === "line" || drawMode === "polygon" ? (

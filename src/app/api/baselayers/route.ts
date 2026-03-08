@@ -14,10 +14,17 @@ export async function GET(req: NextRequest) {
     const user = session.user as any;
     const tenantId = user.tenantId;
 
-    if (!tenantId) return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
+    // Garante que o SuperAdmin possa ler os Shapefiles do Tenant que ele está inspecionando
+    const targetTenantId = user.role === "SUPERADMIN" 
+      ? (req.nextUrl.searchParams.get("tenantId") ?? tenantId) 
+      : tenantId;
+
+    if (!targetTenantId) {
+      return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
+    }
 
     const baseLayers = await prisma.baseLayer.findMany({
-      where: { tenantId },
+      where: { tenantId: targetTenantId },
       select: {
         id: true,
         name: true,
