@@ -15,7 +15,7 @@ datasource db {
 }
 
 // ─────────────────────────────────────────────
-// ENUMS
+// ENUMS (Adicione o InvoiceStatus aqui)
 // ─────────────────────────────────────────────
 
 enum TenantStatus {
@@ -47,9 +47,17 @@ enum ProjectStatus {
 }
 
 enum AssetType {
-  PONTO       // Ativo pontual (hidrante, bueiro, luminária)
-  TRECHO      // Ativo linear (trecho de via, rede)
-  AREA        // Ativo poligonal (lote, praça)
+  PONTO   
+  TRECHO      
+  AREA        
+}
+
+// NOVO: Garantia de integridade para faturas
+enum InvoiceStatus {
+  PENDENTE
+  PAGO
+  VENCIDO
+  CANCELADO
 }
 
 // ─────────────────────────────────────────────
@@ -132,34 +140,29 @@ model Project {
 }
 
 // ─────────────────────────────────────────────
-// ASSET (Ativo GIS — ponto, trecho ou área)
+// ASSET (Ativo GIS)
 // ─────────────────────────────────────────────
 model Asset {
   id           String    @id @default(cuid())
   name         String
   type         AssetType
   description  String?
-  photos       String[]  // URLs no storage
-  attributes   Json      @default("{}")  // Atributos customizados por tipo
+  photos       String[]  
+  attributes   Json      @default("{}")  
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  // Geometria PostGIS (armazenada como texto WKT/GeoJSON para o Prisma)
-  // Queries espaciais reais usam $queryRaw com ST_ functions
+  // Geometria PostGIS (Single Source of Truth)
   geomWkt      String?   // WKT: "POINT(-38.5434 -3.7172)"
-  lat          Float?
-  lng          Float?
   srid         Int       @default(4326) // WGS84
+  // NOTA DA REFATORAÇÃO: Campos 'lat' e 'lng' removidos para evitar anomalias de atualização.
 
   // Multi-tenancy
   tenantId     String
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  // Projeto associado (opcional)
   projectId    String?
   project      Project?  @relation(fields: [projectId], references: [id])
-
-  // Logs de campo
   logs         AssetLog[]
 
   @@index([tenantId])
@@ -190,18 +193,18 @@ model AssetLog {
 }
 
 // ─────────────────────────────────────────────
-// INVOICE (Financeiro SaaS — para SuperAdmin)
+// INVOICE (Financeiro SaaS)
 // ─────────────────────────────────────────────
 model Invoice {
-  id          String   @id @default(cuid())
-  amount      Decimal  @db.Decimal(12, 2)
-  status      String   @default("PENDENTE") // PENDENTE | PAGO | VENCIDO
+  id          String        @id @default(cuid())
+  amount      Decimal       @db.Decimal(12, 2)
+  status      InvoiceStatus @default(PENDENTE) // Substituição da String mágica
   dueDate     DateTime
   paidAt      DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime      @default(now())
 
   tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([status])
