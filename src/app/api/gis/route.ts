@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
 
 // ─────────────────────────────────────────────
-// GET /api/gis — Busca ativos GIS da nuvem
+// GET /api/gis — Busca ativos GIS da nuvem (Respeitando Modo Fantasma)
 // ─────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
@@ -14,12 +15,19 @@ export async function GET(req: NextRequest) {
     }
 
     const user = session.user as any;
-    const tenantId = user.tenantId;
+    let targetTenantId = user.tenantId;
 
-    const targetTenantId =
-      user.role === "SUPERADMIN"
-        ? (req.nextUrl.searchParams.get("tenantId") ?? tenantId)
-        : tenantId;
+    // 🚀 LÓGICA DO MODO FANTASMA: Se for SuperAdmin, verifica o Cookie
+    if (user.role === "SUPERADMIN") {
+      const impersonatedId = cookies().get("impersonate_tenant")?.value;
+      if (impersonatedId) {
+        targetTenantId = impersonatedId;
+      } else {
+        // Fallback para URL caso necessário
+        const paramId = req.nextUrl.searchParams.get("tenantId");
+        if (paramId) targetTenantId = paramId;
+      }
+    }
 
     if (!targetTenantId) {
       return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
@@ -27,7 +35,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = req.nextUrl;
     const type = searchParams.get("type");
-    const limit = Math.min(2000, Number(searchParams.get("limit") ?? 1000)); // Carga pesada para GIS
+    const limit = Math.min(2000, Number(searchParams.get("limit") ?? 1000)); // Limite de segurança
 
     const where: any = { tenantId: targetTenantId };
     if (type) where.type = type;
@@ -46,13 +54,13 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // Transformação para GeoJSON DTO
+    // Transformação para GeoJSON puro
     const geojson = {
       type: "FeatureCollection",
       features: assets.map((a) => {
         return {
           type: "Feature",
-          geometry: null, // A geometria será montada no front-end via WKT para suportar polígonos complexos
+          geometry: null, // A geometria será montada no front-end via WKT
           properties: {
             id: a.id,
             name: a.name,
@@ -73,7 +81,7 @@ export async function GET(req: NextRequest) {
 }
 
 // ─────────────────────────────────────────────
-// POST /api/gis — Salva novo ativo GIS
+// POST /api/gis — Salva novo ativo GIS (Respeitando Modo Fantasma)
 // ─────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
@@ -83,9 +91,15 @@ export async function POST(req: NextRequest) {
     }
 
     const user = session.user as any;
-    const tenantId = user.tenantId;
+    let targetTenantId = user.tenantId;
 
-    if (!tenantId && user.role !== "SUPERADMIN") {
+    // 🚀 LÓGICA DO MODO FANTASMA
+    if (user.role === "SUPERADMIN") {
+      const impersonatedId = cookies().get("impersonate_tenant")?.value;
+      if (impersonatedId) targetTenantId = impersonatedId;
+    }
+
+    if (!targetTenantId && user.role !== "SUPERADMIN") {
       return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
     }
 
@@ -102,7 +116,7 @@ export async function POST(req: NextRequest) {
         type, // PONTO, TRECHO ou AREA
         geomWkt: geomWkt ?? null,
         attributes: attributes ?? {},
-        tenantId: body.tenantId ?? tenantId,
+        tenantId: targetTenantId, // Salva na prefeitura correta
         projectId: projectId ?? null,
       },
     });
@@ -115,7 +129,7 @@ export async function POST(req: NextRequest) {
 }
 
 // ─────────────────────────────────────────────
-// DELETE /api/gis — Remove ativo GIS
+// DELETE /api/gis — Remove ativo GIS (Respeitando Modo Fantasma)
 // ─────────────────────────────────────────────
 export async function DELETE(req: NextRequest) {
   try {
@@ -125,7 +139,13 @@ export async function DELETE(req: NextRequest) {
     }
 
     const user = session.user as any;
-    const tenantId = user.tenantId;
+    let currentTenantId = user.tenantId;
+
+    // 🚀 LÓGICA DO MODO FANTASMA
+    if (user.role === "SUPERADMIN") {
+      const impersonatedId = cookies().get("impersonate_tenant")?.value;
+      if (impersonatedId) currentTenantId = impersonatedId;
+    }
 
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 });
@@ -133,8 +153,9 @@ export async function DELETE(req: NextRequest) {
     const asset = await prisma.asset.findUnique({ where: { id } });
     if (!asset) return NextResponse.json({ error: "Ativo não encontrado" }, { status: 404 });
     
-    if (user.role !== "SUPERADMIN" && asset.tenantId !== tenantId) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
+    // Validação de Segurança
+    if (user.role !== "SUPERADMIN" && asset.tenantId !== currentTenantId) {
+      return NextResponse.json({ error: "Não autorizado a remover ativos de outra prefeitura" }, { status: 403 });
     }
 
     await prisma.asset.delete({ where: { id } });

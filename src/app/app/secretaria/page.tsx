@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { formatBRLCompact, formatPercent, formatNumber, getStatusConfig } from "@/lib/utils";
 import { UrbanAreaChart, UrbanBarChart } from "@/components/dashboard/charts";
 
@@ -35,11 +36,34 @@ export default async function SecretariaPage({
   searchParams: { p?: string };
 }) {
   const session = await getServerSession(authOptions);
-  const tenantId = session?.user?.tenantId;
   const periodo = searchParams.p || "30d";
 
+  // 🚀 LÓGICA DO MODO FANTASMA (IMPERSONATION)
+  let tenantId = session?.user?.tenantId;
+  
+  if (session?.user?.role === "SUPERADMIN") {
+    const impersonatedId = cookies().get("impersonate_tenant")?.value;
+    if (impersonatedId) {
+      tenantId = impersonatedId; // O SuperAdmin assume a identidade da prefeitura!
+    }
+  }
+
+  // Se mesmo assim não houver ID (ex: o SuperAdmin acessou direto sem clicar na tabela)
   if (!tenantId) {
-    return <div className="p-6 text-center text-muted-foreground">Erro: Ambiente da prefeitura não encontrado.</div>;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center animate-fade-in">
+        <div className="bg-warning-50 text-warning-600 p-4 rounded-full mb-4 shadow-sm">
+          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        </div>
+        <h2 className="font-display text-xl font-bold text-foreground">Ambiente da Prefeitura não encontrado</h2>
+        <p className="text-sm text-muted-foreground mt-2 max-w-md">
+          Você está logado como SuperAdmin, mas não selecionou nenhuma prefeitura para inspecionar.
+        </p>
+        <Link href="/superadmin" className="mt-6 bg-brand-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-brand-700 shadow-md transition-colors">
+          Voltar ao Painel Executivo
+        </Link>
+      </div>
+    );
   }
 
   // 1. Buscas Reais no PostgreSQL via Prisma
@@ -110,7 +134,7 @@ export default async function SecretariaPage({
         </div>
         
         {/* Filtros com Server-Side Rendering via searchParams */}
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/40 p-1">
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/40 p-1 shadow-sm">
           {(["7d","30d","90d"] as const).map((p) => {
             const isActive = periodo === p;
             return (
@@ -118,7 +142,7 @@ export default async function SecretariaPage({
                 key={p}
                 href={`?p=${p}`}
                 className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                  isActive ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  isActive ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
                 {p === "7d" ? "7 dias" : p === "30d" ? "30 dias" : "90 dias"}

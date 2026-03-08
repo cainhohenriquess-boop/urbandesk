@@ -2,29 +2,32 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
 import { cn, formatDate } from "@/lib/utils";
 
 type Role = "SUPERADMIN" | "SECRETARIO" | "ENGENHEIRO" | "CAMPO";
 
 // ─────────────────────────────────────────────
 // Itens de navegação por Role
+// O SUPERADMIN tem acesso absoluto a todas as telas para poder inspecionar
 // ─────────────────────────────────────────────
 const NAV_BY_ROLE: Record<Role, { label: string; href: string; icon: string; description: string }[]> = {
   SUPERADMIN: [
-    { label: "Secretaria",  href: "/app/secretaria", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", description: "Dashboard executivo" },
-    { label: "Projetos GIS", href: "/app/projetos",  icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Workstation cartográfica" },
-    { label: "Campo",        href: "/app/campo",     icon: "M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z", description: "App PWA offline" },
+    { label: "Secretaria",   href: "/app/secretaria", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", description: "Dashboard executivo" },
+    { label: "Projetos GIS", href: "/app/projetos",   icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Workstation cartográfica" },
+    { label: "Campo",        href: "/app/campo",      icon: "M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z", description: "App PWA offline" },
   ],
   SECRETARIO: [
-    { label: "Secretaria",  href: "/app/secretaria", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", description: "Dashboard executivo" },
-    { label: "Projetos GIS", href: "/app/projetos",  icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Workstation cartográfica" },
+    { label: "Secretaria",   href: "/app/secretaria", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", description: "Dashboard executivo" },
+    { label: "Projetos GIS", href: "/app/projetos",   icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Workstation cartográfica" },
   ],
   ENGENHEIRO: [
-    { label: "Projetos GIS", href: "/app/projetos",  icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Workstation cartográfica" },
-    { label: "Campo",        href: "/app/campo",     icon: "M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z", description: "App PWA offline" },
+    { label: "Projetos GIS", href: "/app/projetos",   icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Workstation cartográfica" },
+    { label: "Campo",        href: "/app/campo",      icon: "M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z", description: "App PWA offline" },
   ],
   CAMPO: [
-    { label: "Campo",        href: "/app/campo",     icon: "M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z", description: "App PWA offline" },
+    { label: "Campo",        href: "/app/campo",      icon: "M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z", description: "App PWA offline" },
   ],
 };
 
@@ -49,14 +52,40 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const user         = session.user as any;
-  const role         = (user?.role ?? "CAMPO") as Role;
-  const tenantName   = user?.tenantName ?? "Prefeitura";
-  const trialEndsAt  = user?.trialEndsAt ? new Date(user.trialEndsAt) : null;
+  const user = session.user as any;
+  const role = (user?.role ?? "CAMPO") as Role;
+  
+  // Variáveis padrão que podem ser sobrescritas pelo Modo Fantasma
+  let tenantName   = user?.tenantName ?? "Prefeitura";
+  let trialEndsAt  = user?.trialEndsAt ? new Date(user.trialEndsAt) : null;
+  let isImpersonating = false;
+
+  // 🚀 LÓGICA DO MODO FANTASMA (IMPERSONATION)
+  if (role === "SUPERADMIN") {
+    const impersonatedId = cookies().get("impersonate_tenant")?.value;
+    if (impersonatedId) {
+      isImpersonating = true;
+      // Busca o nome real da prefeitura para a Sidebar ficar perfeita
+      try {
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: impersonatedId },
+          select: { name: true, trialEndsAt: true }
+        });
+        if (tenant) {
+          tenantName = tenant.name;
+          trialEndsAt = tenant.trialEndsAt ? new Date(tenant.trialEndsAt) : null;
+        }
+      } catch (e) {
+        console.error("Erro ao buscar dados do tenant no modo fantasma", e);
+      }
+    }
+  }
+
   const isTrial      = !!trialEndsAt;
   const trialExpired = trialEndsAt ? trialEndsAt < new Date() : false;
 
-  if (trialExpired) {
+  // Se o trial expirou e NÃO for o SuperAdmin inspecionando, bloqueia.
+  if (trialExpired && !isImpersonating) {
     redirect("/login?error=trial_expired");
   }
 
@@ -81,7 +110,7 @@ export default async function AppLayout({
             </svg>
           </div>
           <div className="min-w-0">
-            <p className="truncate font-display text-sm font-700 text-sidebar-foreground tracking-tight">
+            <p className="truncate font-display text-sm font-700 text-sidebar-foreground tracking-tight" title={tenantName}>
               {tenantName}
             </p>
             <p className="text-[10px] text-sidebar-foreground/40 truncate">UrbanDesk</p>
@@ -136,7 +165,7 @@ export default async function AppLayout({
         {/* Footer sidebar — Usuário */}
         <div className="shrink-0 border-t border-sidebar-border p-3">
           <div className="flex items-center gap-3 rounded-lg px-2 py-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-700 text-xs font-700 text-white font-display">
+            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-700 text-white font-display ${isImpersonating ? "bg-danger-600 animate-pulse" : "bg-brand-700"}`}>
               {user?.name
                 ? user.name.split(" ").slice(0, 2).map((n: string) => n[0]).join("")
                 : "?"}
@@ -145,20 +174,22 @@ export default async function AppLayout({
               <p className="truncate text-xs font-medium text-sidebar-foreground">
                 {user?.name ?? "Usuário"}
               </p>
-              <p className="truncate text-[10px] text-sidebar-foreground/40">
-                {ROLE_LABELS[role]}
+              <p className={`truncate text-[10px] font-bold ${isImpersonating ? "text-danger-400" : "text-sidebar-foreground/40"}`}>
+                {isImpersonating ? "MODO FANTASMA" : ROLE_LABELS[role]}
               </p>
             </div>
-            {/* Logout link */}
-            <Link
-              href="/api/auth/signout"
-              className="shrink-0 rounded-md p-1.5 text-sidebar-foreground/40 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
-              title="Sair"
-            >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </Link>
+            {/* Logout normal do sistema */}
+            {!isImpersonating && (
+              <Link
+                href="/api/auth/signout"
+                className="shrink-0 rounded-md p-1.5 text-sidebar-foreground/40 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+                title="Sair"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </Link>
+            )}
           </div>
         </div>
       </aside>
@@ -167,12 +198,25 @@ export default async function AppLayout({
       <div className="app-content">
 
         {/* Topbar */}
-        <header className="flex h-topbar-h shrink-0 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-sm">
+        <header className="flex h-topbar-h shrink-0 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-sm z-20">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">{tenantName}</span>
           </div>
 
           <div className="flex items-center gap-4">
+            
+            {/* 🚀 BOTÃO DE FUGA DO MODO FANTASMA */}
+            {isImpersonating && (
+              <Link 
+                href="/api/auth/impersonate" 
+                className="flex items-center gap-2 bg-danger-600 hover:bg-danger-700 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg shadow-danger-500/20 transition-all animate-pulse"
+                title="Voltar ao Painel SuperAdmin"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                Sair do Modo Fantasma
+              </Link>
+            )}
+
             {/* Status ao vivo */}
             <div className="flex items-center gap-1.5 text-xs text-accent-600">
               <span className="h-1.5 w-1.5 rounded-full bg-accent-500 animate-pulse-dot" />
@@ -191,7 +235,7 @@ export default async function AppLayout({
         </header>
 
         {/* Conteúdo da página */}
-        <main className="app-main animate-fade-in">
+        <main className="app-main animate-fade-in relative z-10">
           {children}
         </main>
       </div>
