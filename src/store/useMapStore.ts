@@ -108,7 +108,7 @@ export const useMapStore = create<MapStore>()(
         const feature: DrawnFeature = {
           ...data,
           synced: false,
-          id: `feat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: `feat-${crypto.randomUUID()}`, // Refatorado: Uso de UUID v4 nativo para prevenir colisões de estado
           createdAt: Date.now(),
         };
         set((s) => ({ features: [...s.features, feature], unsavedCount: s.unsavedCount + 1 }));

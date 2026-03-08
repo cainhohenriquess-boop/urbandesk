@@ -68,11 +68,12 @@ export default withAuth(
     }
 
     // 3. Verifica expiração do Trial (somente para rotas /app/*)
-    if (pathname.startsWith("/app") && token.trialEndsAt) {
+    // Refatorado: Redireciona para /app/billing em vez de /login, evitando loop infinito de UX.
+    if (pathname.startsWith("/app") && !pathname.startsWith("/app/billing") && token.trialEndsAt) {
       const trialEnd = new Date(token.trialEndsAt);
       if (trialEnd < new Date()) {
-        // Trial expirado: redireciona para página de upgrade
-        return NextResponse.redirect(new URL("/login?error=trial_expired", req.url));
+        // Trial expirado: redireciona para página de pagamento/aviso
+        return NextResponse.redirect(new URL("/app/billing?reason=trial_expired", req.url));
       }
     }
 
