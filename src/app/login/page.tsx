@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -57,7 +57,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 // ─────────────────────────────────────────────
 // Página de Login
 // ─────────────────────────────────────────────
-export default function LoginPage() {
+function LoginContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
 
@@ -329,5 +329,17 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-[#0d1529]">
+        <span className="text-white text-sm">Carregando...</span>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }
