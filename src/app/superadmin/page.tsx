@@ -48,298 +48,316 @@ function KpiCard({ label, value, change, up, icon, color, bg }: any) {
 }
 
 // ─────────────────────────────────────────────
-// Page (Server Component — Banco de Dados Real)
+// Page (Server Component — Versão Blindada)
 // ─────────────────────────────────────────────
-export default async function SuperAdminPage({
-  searchParams,
-}: {
-  searchParams: { q?: string };
+export default async function SuperAdminPage(props: {
+  searchParams?: Promise<{ q?: string }> | { q?: string };
 }) {
-  const query = searchParams.q || "";
+  try {
+    // 1. Compatibilidade com Next.js 14 e 15 (Impede o erro de Server Component)
+    const resolvedParams = await props.searchParams;
+    const query = resolvedParams?.q || "";
 
-  // 1. Busca de Tenants reais no PostgreSQL via Prisma
-  const tenants = await prisma.tenant.findMany({
-    where: {
-      name: { contains: query, mode: "insensitive" },
-    },
-    include: {
-      _count: { select: { users: true, assets: true } }
-    },
-    orderBy: { createdAt: "desc" }
-  });
+    // 2. Busca Segura no PostgreSQL
+    const tenants = await prisma.tenant.findMany({
+      where: {
+        name: { contains: query, mode: "insensitive" },
+      },
+      include: {
+        _count: { select: { users: true, assets: true } }
+      },
+      orderBy: { createdAt: "desc" }
+    });
 
-  // 2. Cálculos de KPIs em Tempo Real
-  const mrrTotal = tenants.reduce((acc, t) => acc + Number(t.mrr), 0);
-  const ativasCount = tenants.filter(t => t.status === "ATIVO").length;
-  const trialCount = tenants.filter(t => t.status === "TRIAL").length;
-  const inadimplentesCount = tenants.filter(t => t.status === "INADIMPLENTE").length;
+    // 3. Cálculos de KPIs Seguros (Prevenindo NaN e Undefined)
+    const mrrTotal = tenants.reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
+    const ativasCount = tenants.filter(t => t.status === "ATIVO").length;
+    const trialCount = tenants.filter(t => t.status === "TRIAL").length;
+    const inadimplentesCount = tenants.filter(t => t.status === "INADIMPLENTE").length;
 
-  // 3. Cálculos da Distribuição de Receita
-  const mrrEnterprise = tenants.filter(t => t.plan === "ENTERPRISE").reduce((acc, t) => acc + Number(t.mrr), 0);
-  const mrrPro        = tenants.filter(t => t.plan === "PRO").reduce((acc, t) => acc + Number(t.mrr), 0);
-  const mrrStarter    = tenants.filter(t => t.plan === "STARTER").reduce((acc, t) => acc + Number(t.mrr), 0);
-  
-  const divisor = mrrTotal > 0 ? mrrTotal : 1; // Evitar divisão por zero
+    // 4. Cálculos da Distribuição de Receita
+    const mrrEnterprise = tenants.filter(t => t.plan === "ENTERPRISE").reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
+    const mrrPro        = tenants.filter(t => t.plan === "PRO").reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
+    const mrrStarter    = tenants.filter(t => t.plan === "STARTER").reduce((acc, t) => acc + (Number(t.mrr) || 0), 0);
+    
+    const divisor = mrrTotal > 0 ? mrrTotal : 1;
 
-  const KPI_DATA = [
-    {
-      label:  "MRR Total",
-      value:  formatBRLCompact(mrrTotal),
-      change: "Calculado ao vivo do banco",
-      up:     true,
-      icon:   "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-      color:  "text-emerald-600",
-      bg:     "bg-emerald-50",
-    },
-    {
-      label:  "Prefeituras Ativas",
-      value:  ativasCount.toString(),
-      change: `${tenants.length} cadastradas no total`,
-      up:     true,
-      icon:   "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
-      color:  "text-brand-600",
-      bg:     "bg-brand-50",
-    },
-    {
-      label:  "Inadimplentes",
-      value:  inadimplentesCount.toString(),
-      change: "Requer atenção imediata",
-      up:     false,
-      icon:   "M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414",
-      color:  "text-danger-600",
-      bg:     "bg-danger-50",
-    },
-    {
-      label:  "Em Trial",
-      value:  trialCount.toString(),
-      change: "Potenciais conversões",
-      up:     true,
-      icon:   "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
-      color:  "text-warning-600",
-      bg:     "bg-warning-50",
-    },
-  ];
+    const KPI_DATA = [
+      {
+        label:  "MRR Total",
+        value:  formatBRLCompact(mrrTotal),
+        change: "Calculado ao vivo do banco",
+        up:     true,
+        icon:   "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+        color:  "text-emerald-600",
+        bg:     "bg-emerald-50",
+      },
+      {
+        label:  "Prefeituras Ativas",
+        value:  ativasCount.toString(),
+        change: `${tenants.length} cadastradas no total`,
+        up:     true,
+        icon:   "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
+        color:  "text-brand-600",
+        bg:     "bg-brand-50",
+      },
+      {
+        label:  "Inadimplentes",
+        value:  inadimplentesCount.toString(),
+        change: "Requer atenção imediata",
+        up:     false,
+        icon:   "M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414",
+        color:  "text-danger-600",
+        bg:     "bg-danger-50",
+      },
+      {
+        label:  "Em Trial",
+        value:  trialCount.toString(),
+        change: "Potenciais conversões",
+        up:     true,
+        icon:   "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+        color:  "text-warning-600",
+        bg:     "bg-warning-50",
+      },
+    ];
 
-  return (
-    <div className="space-y-8 p-6 lg:p-8 max-w-[1600px] mx-auto">
+    return (
+      <div className="space-y-8 p-6 lg:p-8 max-w-[1600px] mx-auto">
 
-      {/* Header com Ações Rápidas */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-foreground">
-            Dashboard Executivo
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Visão geral financeira, infraestrutura e gestão de clientes UrbanDesk.
-          </p>
+        {/* Header com Ações Rápidas */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="font-display text-2xl font-bold text-foreground">
+              Dashboard Executivo
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Visão geral financeira, infraestrutura e gestão de clientes UrbanDesk.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors">
+              <svg className="h-4 w-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+              Suporte (12)
+            </button>
+            <button className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors shadow-sm">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+              Nova Prefeitura
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors">
-            <svg className="h-4 w-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-            Suporte (12)
-          </button>
-          <button className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors shadow-sm">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-            Nova Prefeitura
-          </button>
+
+        {/* KPIs Dinâmicos */}
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {KPI_DATA.map((kpi) => (
+            <KpiCard key={kpi.label} {...kpi} />
+          ))}
         </div>
-      </div>
 
-      {/* KPIs Dinâmicos */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {KPI_DATA.map((kpi) => (
-          <KpiCard key={kpi.label} {...kpi} />
-        ))}
-      </div>
+        {/* Divisão: Receita, Infraestrutura e Alertas */}
+        <div className="grid gap-6 lg:grid-cols-3">
 
-      {/* Divisão: Receita, Infraestrutura e Alertas (RESTAURADOS) */}
-      <div className="grid gap-6 lg:grid-cols-3">
+          {/* Receita por plano (Dinâmico) */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+            <h2 className="font-display text-base font-bold text-foreground mb-5">
+              Distribuição de Receita
+            </h2>
+            <div className="space-y-4">
+              {[
+                { plan: "Enterprise", mrr: mrrEnterprise, pct: mrrEnterprise / divisor, color: "bg-brand-600" },
+                { plan: "Pro",        mrr: mrrPro,        pct: mrrPro / divisor,        color: "bg-brand-400" },
+                { plan: "Starter",    mrr: mrrStarter,    pct: mrrStarter / divisor,    color: "bg-brand-200" },
+              ].map((row) => (
+                <div key={row.plan} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-foreground">{row.plan}</span>
+                    <span className="tabular-num text-muted-foreground font-medium">
+                      {formatBRLCompact(row.mrr)} <span className="text-xs text-muted-foreground/60">({formatPercent(row.pct, 1)})</span>
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className={`h-full rounded-full ${row.color} transition-all duration-500`}
+                      style={{ width: `${row.pct * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
-        {/* Receita por plano (Dinâmico) */}
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="font-display text-base font-bold text-foreground mb-5">
-            Distribuição de Receita
-          </h2>
-          <div className="space-y-4">
-            {[
-              { plan: "Enterprise", mrr: mrrEnterprise, pct: mrrEnterprise / divisor, color: "bg-brand-600" },
-              { plan: "Pro",        mrr: mrrPro,        pct: mrrPro / divisor,        color: "bg-brand-400" },
-              { plan: "Starter",    mrr: mrrStarter,    pct: mrrStarter / divisor,    color: "bg-brand-200" },
-            ].map((row) => (
-              <div key={row.plan} className="space-y-2">
+          {/* Saúde da Infraestrutura */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+            <h2 className="font-display text-base font-bold text-foreground mb-5">
+              Saúde da Infraestrutura
+            </h2>
+            <div className="space-y-5">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-foreground">{row.plan}</span>
-                  <span className="tabular-num text-muted-foreground font-medium">
-                    {formatBRLCompact(row.mrr)} <span className="text-xs text-muted-foreground/60">({formatPercent(row.pct, 1)})</span>
+                  <span className="font-medium flex items-center gap-2">
+                    <svg className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" /></svg>
+                    Banco de Dados (Supabase)
                   </span>
+                  <span className="tabular-num text-foreground font-bold">12%</span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className={`h-full rounded-full ${row.color} transition-all duration-500`}
-                    style={{ width: `${row.pct * 100}%` }}
-                  />
+                  <div className="h-full rounded-full bg-blue-500 w-[12%]" />
                 </div>
+                <p className="text-xs text-muted-foreground text-right">602 MB de 5 GB</p>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Saúde da Infraestrutura (SaaS) */}
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="font-display text-base font-bold text-foreground mb-5">
-            Saúde da Infraestrutura
-          </h2>
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium flex items-center gap-2">
-                  <svg className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" /></svg>
-                  Banco de Dados (Supabase)
-                </span>
-                <span className="tabular-num text-foreground font-bold">12%</span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium flex items-center gap-2">
+                    <svg className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                    Storage de Fotos (R2)
+                  </span>
+                  <span className="tabular-num text-amber-600 font-bold">84%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                  <div className="h-full rounded-full bg-amber-500 w-[84%]" />
+                </div>
+                <p className="text-xs text-muted-foreground text-right">8.4 TB de 10 TB</p>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                <div className="h-full rounded-full bg-blue-500 w-[12%]" />
-              </div>
-              <p className="text-xs text-muted-foreground text-right">602 MB de 5 GB</p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium flex items-center gap-2">
-                  <svg className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-                  Storage de Fotos (R2)
-                </span>
-                <span className="tabular-num text-amber-600 font-bold">84%</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                <div className="h-full rounded-full bg-amber-500 w-[84%]" />
-              </div>
-              <p className="text-xs text-muted-foreground text-right">8.4 TB de 10 TB</p>
             </div>
           </div>
-        </div>
 
-        {/* Alertas Operacionais */}
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="font-display text-base font-bold text-foreground mb-4">
-            Alertas Operacionais
-          </h2>
-          <div className="space-y-3">
-            {[
-              { type: "danger",  message: "Prefeitura de Cuiabá com fatura atrasada", action: "Cobrar" },
-              { type: "warning", message: "Maringá atinge limite do plano Trial amanhã", action: "Fazer Upgrade" },
-              { type: "info",    message: "Pico de uso de API detectado em Campinas", action: "Ver Logs" },
-            ].map((alert, i) => {
-              const styles = {
-                warning: "border-warning-200 bg-warning-50 text-warning-800",
-                danger:  "border-danger-200 bg-danger-50 text-danger-800",
-                info:    "border-brand-200 bg-brand-50 text-brand-800",
-              }[alert.type];
-              return (
-                <div key={i} className={`flex items-center justify-between gap-3 rounded-lg border p-3.5 ${styles}`}>
-                  <p className="text-xs font-medium leading-relaxed">{alert.message}</p>
-                  <button className="shrink-0 text-xs font-bold underline-offset-2 hover:underline bg-white/50 px-2 py-1 rounded">
-                    {alert.action}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Tabela de Gestão de Clientes */}
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-border bg-muted/10">
-          <div>
-            <h2 className="font-display text-base font-bold text-foreground">
-              Gestão de Prefeituras (Tenants)
+          {/* Alertas Operacionais */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+            <h2 className="font-display text-base font-bold text-foreground mb-4">
+              Alertas Operacionais
             </h2>
-            <p className="text-xs text-muted-foreground mt-1">Lendo dados reais do PostgreSQL.</p>
-          </div>
-          
-          {/* Formulário de Busca Server-Side */}
-          <form className="flex items-center gap-2">
-            <div className="relative">
-              <svg className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              <input 
-                type="text" 
-                name="q"
-                defaultValue={query}
-                placeholder="Buscar prefeitura..." 
-                className="pl-9 pr-3 py-1.5 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-              />
+            <div className="space-y-3">
+              {[
+                { type: "danger",  message: "Prefeitura de Cuiabá com fatura atrasada", action: "Cobrar" },
+                { type: "warning", message: "Maringá atinge limite do plano Trial amanhã", action: "Fazer Upgrade" },
+                { type: "info",    message: "Pico de uso de API detectado em Campinas", action: "Ver Logs" },
+              ].map((alert, i) => {
+                const styles = {
+                  warning: "border-warning-200 bg-warning-50 text-warning-800",
+                  danger:  "border-danger-200 bg-danger-50 text-danger-800",
+                  info:    "border-brand-200 bg-brand-50 text-brand-800",
+                }[alert.type];
+                return (
+                  <div key={i} className={`flex items-center justify-between gap-3 rounded-lg border p-3.5 ${styles}`}>
+                    <p className="text-xs font-medium leading-relaxed">{alert.message}</p>
+                    <button className="shrink-0 text-xs font-bold underline-offset-2 hover:underline bg-white/50 px-2 py-1 rounded">
+                      {alert.action}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-            <button type="submit" className="text-sm font-medium text-brand-600 hover:text-brand-500 px-3 py-1.5 border border-transparent hover:bg-brand-50 rounded-md transition-colors">
-              Buscar
-            </button>
-          </form>
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                {["Município", "Plano", "Status", "MRR", "Usuários", "Ativos GIS", "Ações Técnicas"].map((h) => (
-                  <th key={h} className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {tenants.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
-                    Nenhuma prefeitura encontrada com esse nome.
-                  </td>
+        {/* Tabela de Gestão de Clientes */}
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-border bg-muted/10">
+            <div>
+              <h2 className="font-display text-base font-bold text-foreground">
+                Gestão de Prefeituras (Tenants)
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1">Lendo dados reais do PostgreSQL.</p>
+            </div>
+            
+            {/* Formulário de Busca Compatível com HTML Nativo */}
+            <form action="/superadmin" method="GET" className="flex items-center gap-2">
+              <div className="relative">
+                <svg className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input 
+                  type="text" 
+                  name="q"
+                  defaultValue={query}
+                  placeholder="Buscar prefeitura..." 
+                  className="pl-9 pr-3 py-1.5 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+              <button type="submit" className="text-sm font-medium text-brand-600 hover:text-brand-500 px-3 py-1.5 border border-transparent hover:bg-brand-50 rounded-md transition-colors">
+                Buscar
+              </button>
+            </form>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/40">
+                  {["Município", "Plano", "Status", "MRR", "Usuários", "Ativos GIS", "Ações Técnicas"].map((h) => (
+                    <th key={h} className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ) : (
-                tenants.map((tenant) => {
-                  const s = STATUS_STYLES[tenant.status] || STATUS_STYLES.CANCELADO;
-                  return (
-                    <tr key={tenant.id} className="transition-colors hover:bg-muted/30">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <p className="font-bold text-foreground">{tenant.name}</p>
-                        <p className="text-xs text-muted-foreground">{tenant.state} • Cadastrado {formatRelativeTime(tenant.createdAt.toISOString())}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground">
-                          {tenant.plan}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${s.className}`}>
-                          {s.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 tabular-num font-medium text-foreground">
-                        {Number(tenant.mrr) === 0 ? "—" : formatBRLCompact(Number(tenant.mrr))}
-                      </td>
-                      <td className="px-6 py-4 tabular-num text-muted-foreground">
-                        {formatNumber(tenant._count.users)}
-                      </td>
-                      <td className="px-6 py-4 tabular-num text-muted-foreground">
-                        {formatNumber(tenant._count.assets)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-xs font-bold">
-                        <Link href={`#edit-${tenant.id}`} className="text-brand-600 hover:text-brand-800 mr-4 transition-colors">
-                          Editar Tenant
-                        </Link>
-                        <Link href={`/api/auth/impersonate?tenantId=${tenant.id}`} className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors">
-                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
-                          Acessar como...
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {tenants.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
+                      Nenhuma prefeitura encontrada com esse nome.
+                    </td>
+                  </tr>
+                ) : (
+                  tenants.map((tenant) => {
+                    const s = STATUS_STYLES[tenant.status] || STATUS_STYLES.CANCELADO;
+                    // Tratamento seguro de datas para evitar erro de hidratação
+                    const safeDateString = new Date(tenant.createdAt).toISOString();
+                    const safeMrr = Number(tenant.mrr) || 0;
+
+                    return (
+                      <tr key={tenant.id} className="transition-colors hover:bg-muted/30">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <p className="font-bold text-foreground">{tenant.name}</p>
+                          <p className="text-xs text-muted-foreground">{tenant.state} • Cadastrado {formatRelativeTime(safeDateString)}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground">
+                            {tenant.plan}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${s.className}`}>
+                            {s.label}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 tabular-num font-medium text-foreground">
+                          {safeMrr === 0 ? "—" : formatBRLCompact(safeMrr)}
+                        </td>
+                        <td className="px-6 py-4 tabular-num text-muted-foreground">
+                          {formatNumber(tenant._count.users)}
+                        </td>
+                        <td className="px-6 py-4 tabular-num text-muted-foreground">
+                          {formatNumber(tenant._count.assets)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-xs font-bold">
+                          <Link href={`#edit-${tenant.id}`} className="text-brand-600 hover:text-brand-800 mr-4 transition-colors">
+                            Editar Tenant
+                          </Link>
+                          <Link href={`/api/auth/impersonate?tenantId=${tenant.id}`} className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors">
+                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                            Acessar como...
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  } catch (error) {
+    console.error("Erro no SuperAdmin:", error);
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center space-y-4">
+        <div className="rounded-full bg-danger-100 p-4">
+          <svg className="h-8 w-8 text-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+        </div>
+        <h2 className="text-xl font-bold text-foreground">Erro de conexão com a base de dados</h2>
+        <p className="text-sm text-muted-foreground max-w-md">Ocorreu um erro ao carregar os dados das prefeituras. Por favor, tente recarregar a página.</p>
+        <p className="text-xs text-danger-500 bg-danger-50 p-3 rounded-lg border border-danger-200 mt-4 break-all max-w-xl">{String(error)}</p>
+      </div>
+    );
+  }
 }
