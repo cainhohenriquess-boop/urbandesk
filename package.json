@@ -14,56 +14,44 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next":                       "14.2.29",
-    "react":                      "^18.3.1",
-    "react-dom":                  "^18.3.1",
-
-    "next-auth":                  "^4.24.10",
-    "bcryptjs":                   "^2.4.3",
-
-    "@prisma/client":             "^5.22.0",
-
-    "react-map-gl":               "^7.1.8",
-    "mapbox-gl":                  "^3.6.0",
-    "@turf/turf":                 "^7.1.0",
-
-    "zustand":                    "^5.0.2",
-
-    "recharts":                   "^2.13.3",
-
-    "@radix-ui/react-dialog":     "^1.1.2",
-    "@radix-ui/react-select":     "^2.1.2",
-    "@radix-ui/react-tooltip":    "^1.1.4",
-    "@radix-ui/react-slot":       "^1.1.0",
-    "@radix-ui/react-accordion":  "^1.2.1",
-
-    "class-variance-authority":   "^0.7.1",
-    "clsx":                       "^2.1.1",
-    "tailwind-merge":             "^2.5.5",
-    "tailwindcss-animate":        "^1.0.7",
-
-    "@ducanh2912/next-pwa":       "^10.2.9",
-
-    "lucide-react":               "^0.460.0"
+    "@ducanh2912/next-pwa": "^10.2.9",
+    "@prisma/client": "^5.22.0",
+    "@radix-ui/react-accordion": "^1.2.1",
+    "@radix-ui/react-dialog": "^1.1.2",
+    "@radix-ui/react-select": "^2.1.2",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-tooltip": "^1.1.4",
+    "@turf/turf": "^7.1.0",
+    "bcryptjs": "^2.4.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.460.0",
+    "mapbox-gl": "^3.6.0",
+    "next": "14.2.29",
+    "next-auth": "^4.24.10",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-map-gl": "^7.1.8",
+    "recharts": "^2.13.3",
+    "tailwind-merge": "^2.5.5",
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
-    "typescript":                 "^5.6.3",
-    "@types/node":                "^22.7.8",
-    "@types/react":               "^18.3.12",
-    "@types/react-dom":           "^18.3.1",
-    "@types/bcryptjs":            "^2.4.6",
-
-    "prisma":                     "^5.22.0",
-    "tsx":                        "^4.19.2",
-
-    "tailwindcss":                "^3.4.14",
-    "autoprefixer":               "^10.4.20",
-    "postcss":                    "^8.4.47",
-
-    "@tailwindcss/typography":    "^0.5.15",
     "@tailwindcss/container-queries": "^0.1.1",
-
-    "eslint":                     "^8.57.1",
-    "eslint-config-next":         "14.2.29"
+    "@tailwindcss/typography": "^0.5.15",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.7.8",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "14.2.29",
+    "postcss": "^8.4.47",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^3.4.14",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
   }
 }
