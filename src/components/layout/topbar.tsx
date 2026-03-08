@@ -7,9 +7,9 @@ import Link from "next/link";
 import { cn, getInitials, formatRelativeTime } from "@/lib/utils";
 
 // ─────────────────────────────────────────────
-// Notificações mock (substituir por real-time)
+// Notificações Iniciais (Mock)
 // ─────────────────────────────────────────────
-const MOCK_NOTIFICATIONS = [
+const INITIAL_NOTIFICATIONS = [
   { id:"1", title:"Novo ativo cadastrado",       body:"Equipe registrou Bueiro #A14 — Aldeota",     time: new Date(Date.now() - 1000 * 60 * 5).toISOString(),  read:false },
   { id:"2", title:"Obra paralisada — Atenção",   body:"Drenagem Montese aguarda liberação de área", time: new Date(Date.now() - 1000 * 60 * 32).toISOString(), read:false },
   { id:"3", title:"Relatório gerado",            body:"PDF do mês de Junho disponível para download",time: new Date(Date.now() - 1000 * 60 * 90).toISOString(), read:true  },
@@ -44,11 +44,18 @@ function useBreadcrumbs() {
 // ─────────────────────────────────────────────
 // Dropdown de notificações
 // ─────────────────────────────────────────────
-function NotificationDropdown({ onClose }: { onClose: () => void }) {
-  const [notes, setNotes] = useState(MOCK_NOTIFICATIONS);
-  const unread = notes.filter((n) => !n.read).length;
-
-  const markAll = () => setNotes((prev) => prev.map((n) => ({ ...n, read: true })));
+function NotificationDropdown({ 
+  notifications, 
+  onClose, 
+  onMarkAll, 
+  onMarkOne 
+}: { 
+  notifications: typeof INITIAL_NOTIFICATIONS;
+  onClose: () => void;
+  onMarkAll: () => void;
+  onMarkOne: (id: string) => void;
+}) {
+  const unread = notifications.filter((n) => !n.read).length;
 
   return (
     <div className="absolute right-0 top-full mt-2 w-80 overflow-hidden rounded-xl border border-border bg-card shadow-map z-modal animate-fade-in">
@@ -62,24 +69,24 @@ function NotificationDropdown({ onClose }: { onClose: () => void }) {
           )}
         </div>
         {unread > 0 && (
-          <button onClick={markAll} className="text-xs text-brand-600 hover:text-brand-500 transition-colors">
+          <button onClick={onMarkAll} className="text-xs text-brand-600 hover:text-brand-500 transition-colors">
             Marcar todas como lidas
           </button>
         )}
       </div>
 
       <div className="max-h-80 overflow-y-auto divide-y divide-border">
-        {notes.length === 0 ? (
+        {notifications.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-muted-foreground">Nenhuma notificação</p>
         ) : (
-          notes.map((note) => (
+          notifications.map((note) => (
             <div
               key={note.id}
               className={cn(
                 "flex gap-3 px-4 py-3 transition-colors hover:bg-muted/30 cursor-pointer",
-                !note.read && "bg-brand-50/50"
+                !note.read && "bg-brand-50/50 dark:bg-brand-950/20"
               )}
-              onClick={() => setNotes((prev) => prev.map((n) => n.id === note.id ? { ...n, read: true } : n))}
+              onClick={() => onMarkOne(note.id)}
             >
               <div className={cn("mt-1 h-2 w-2 shrink-0 rounded-full", !note.read ? "bg-brand-500" : "bg-transparent")} />
               <div className="min-w-0 flex-1">
@@ -94,7 +101,7 @@ function NotificationDropdown({ onClose }: { onClose: () => void }) {
 
       <div className="border-t border-border px-4 py-2.5">
         <button onClick={onClose} className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors">
-          Ver todas as notificações
+          Fechar painel
         </button>
       </div>
     </div>
@@ -105,31 +112,46 @@ function NotificationDropdown({ onClose }: { onClose: () => void }) {
 // Dropdown de usuário
 // ─────────────────────────────────────────────
 function UserDropdown({ user, onClose }: { user: any; onClose: () => void }) {
+  
+  // Função para evitar erro 404 em rotas não criadas
+  const handleFeatureNotReady = (e: React.MouseEvent, feature: string) => {
+    e.preventDefault();
+    alert(`O módulo de ${feature} estará disponível na próxima atualização!`);
+    onClose();
+  };
+
   return (
     <div className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-xl border border-border bg-card shadow-map z-modal animate-fade-in">
       <div className="border-b border-border px-4 py-3">
-        <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
-        <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+        <p className="text-sm font-medium text-foreground truncate">{user?.name || "Usuário"}</p>
+        <p className="text-xs text-muted-foreground truncate">{user?.email || "email@urbandesk.com.br"}</p>
         <span className="mt-1.5 inline-block rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-medium text-brand-700">
-          {user?.role}
+          {user?.role || "MEMBRO"}
         </span>
       </div>
 
-      <div className="p-1.5">
-        {[
-          { label:"Meu Perfil",         href:"/app/perfil"    },
-          { label:"Preferências",       href:"/app/config"    },
-          { label:"Suporte",            href:"mailto:suporte@urbandesk.com.br" },
-        ].map((item) => (
-          <Link
-            key={item.label}
-            href={item.href}
-            onClick={onClose}
-            className="flex items-center rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-          >
-            {item.label}
-          </Link>
-        ))}
+      <div className="p-1.5 space-y-0.5">
+        <a 
+          href="#"
+          onClick={(e) => handleFeatureNotReady(e, "Meu Perfil")}
+          className="flex items-center rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+        >
+          Meu Perfil
+        </a>
+        <a 
+          href="#"
+          onClick={(e) => handleFeatureNotReady(e, "Preferências de Sistema")}
+          className="flex items-center rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+        >
+          Preferências
+        </a>
+        <a 
+          href="mailto:suporte@urbandesk.com.br"
+          onClick={onClose}
+          className="flex items-center rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+        >
+          Ajuda & Suporte
+        </a>
       </div>
 
       <div className="border-t border-border p-1.5">
@@ -157,11 +179,22 @@ export function Topbar() {
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUser,          setShowUser]          = useState(false);
+  
+  // ✅ Estado das Notificações Elevado (Não apaga a memória ao fechar a janela)
+  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
 
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef  = useRef<HTMLDivElement>(null);
 
-  const unreadCount = MOCK_NOTIFICATIONS.filter((n) => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const handleMarkAllRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  const handleMarkOneRead = (id: string) => {
+    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+  };
 
   // Fecha dropdowns ao clicar fora
   useEffect(() => {
@@ -202,7 +235,7 @@ export function Topbar() {
         </div>
 
         {/* Notificações */}
-        <div ref={notifRef} className="relative">
+        <div ref={notifRef} className="relative z-50">
           <button
             onClick={() => { setShowNotifications((v) => !v); setShowUser(false); }}
             className={cn(
@@ -220,7 +253,12 @@ export function Topbar() {
             )}
           </button>
           {showNotifications && (
-            <NotificationDropdown onClose={() => setShowNotifications(false)} />
+            <NotificationDropdown 
+              notifications={notifications}
+              onClose={() => setShowNotifications(false)} 
+              onMarkAll={handleMarkAllRead}
+              onMarkOne={handleMarkOneRead}
+            />
           )}
         </div>
 
@@ -228,17 +266,17 @@ export function Topbar() {
         <div className="h-5 w-px bg-border" />
 
         {/* Avatar + dropdown usuário */}
-        <div ref={userRef} className="relative">
+        <div ref={userRef} className="relative z-50">
           <button
             onClick={() => { setShowUser((v) => !v); setShowNotifications(false); }}
             className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted"
           >
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-700 font-display text-xs font-700 text-white">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-700 font-display text-xs font-700 text-white uppercase">
               {user?.name ? getInitials(user.name) : "?"}
             </div>
             <div className="hidden md:block text-left">
-              <p className="text-xs font-medium text-foreground leading-none">{user?.name?.split(" ")[0]}</p>
-              <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{user?.tenantName ?? user?.role}</p>
+              <p className="text-xs font-medium text-foreground leading-none">{user?.name?.split(" ")[0] || "Usuário"}</p>
+              <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{user?.tenantName ?? (user?.role || "MEMBRO")}</p>
             </div>
             <svg className="hidden md:block h-3 w-3 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />

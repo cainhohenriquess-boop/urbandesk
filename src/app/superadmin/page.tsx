@@ -1,114 +1,13 @@
+import { prisma } from "@/lib/prisma";
 import { formatBRLCompact, formatNumber, formatPercent, formatRelativeTime } from "@/lib/utils";
+import Link from "next/link";
 
 // ─────────────────────────────────────────────
-// Tipos
+// Tipos e Estilos
 // ─────────────────────────────────────────────
 type TenantStatus = "ATIVO" | "TRIAL" | "INADIMPLENTE" | "CANCELADO";
 
-interface Tenant {
-  id: string;
-  name: string;
-  state: string;
-  plan: string;
-  status: TenantStatus;
-  mrr: number;
-  users: number;
-  assetsCount: number;
-  trialEndsAt?: string;
-  createdAt: string;
-}
-
-// ─────────────────────────────────────────────
-// Mock data (substituir por prisma queries)
-// ─────────────────────────────────────────────
-const KPI_DATA = [
-  {
-    label:  "MRR Total",
-    value:  formatBRLCompact(284_000),
-    change: "+12,4% vs mês ant.",
-    up:     true,
-    icon:   "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-    color:  "text-emerald-600",
-    bg:     "bg-emerald-50",
-  },
-  {
-    label:  "Prefeituras Ativas",
-    value:  "143",
-    change: "+8 novos contratos",
-    up:     true,
-    icon:   "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
-    color:  "text-brand-600",
-    bg:     "bg-brand-50",
-  },
-  {
-    label:  "Chamados Abertos",
-    value:  "12",
-    change: "3 urgentes",
-    up:     false,
-    icon:   "M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414",
-    color:  "text-danger-600",
-    bg:     "bg-danger-50",
-  },
-  {
-    label:  "Em Trial",
-    value:  "22",
-    change: "7 vencem hoje",
-    up:     false,
-    icon:   "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
-    color:  "text-warning-600",
-    bg:     "bg-warning-50",
-  },
-];
-
-const RECENT_TENANTS: Tenant[] = [
-  {
-    id: "1",
-    name: "Prefeitura de Campinas",
-    state: "SP",
-    plan: "Enterprise",
-    status: "ATIVO",
-    mrr: 4_800,
-    users: 34,
-    assetsCount: 2_412,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-  },
-  {
-    id: "2",
-    name: "Prefeitura de Maringá",
-    state: "PR",
-    plan: "Pro",
-    status: "TRIAL",
-    mrr: 0,
-    users: 5,
-    assetsCount: 87,
-    trialEndsAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(),
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-  },
-  {
-    id: "3",
-    name: "Prefeitura de Fortaleza",
-    state: "CE",
-    plan: "Enterprise",
-    status: "ATIVO",
-    mrr: 9_600,
-    users: 78,
-    assetsCount: 8_901,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(),
-  },
-  {
-    id: "4",
-    name: "Prefeitura de Cuiabá",
-    state: "MT",
-    plan: "Pro",
-    status: "INADIMPLENTE",
-    mrr: 2_400,
-    users: 12,
-    assetsCount: 654,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 96).toISOString(),
-  },
-];
-
-const STATUS_STYLES: Record<TenantStatus, { label: string; className: string }> = {
+const STATUS_STYLES: Record<string, { label: string; className: string }> = {
   ATIVO:        { label: "Ativo",        className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
   TRIAL:        { label: "Trial",        className: "bg-brand-100 text-brand-800 border-brand-200" },
   INADIMPLENTE: { label: "Inadimplente", className: "bg-danger-100 text-danger-800 border-danger-200" },
@@ -116,9 +15,9 @@ const STATUS_STYLES: Record<TenantStatus, { label: string; className: string }> 
 };
 
 // ─────────────────────────────────────────────
-// Componentes
+// Componente de Card
 // ─────────────────────────────────────────────
-function KpiCard({ label, value, change, up, icon, color, bg }: typeof KPI_DATA[0]) {
+function KpiCard({ label, value, change, up, icon, color, bg }: any) {
   return (
     <div className="rounded-xl border border-border bg-card p-5 shadow-sm transition-all hover:shadow-md">
       <div className="flex items-start justify-between gap-4">
@@ -149,9 +48,78 @@ function KpiCard({ label, value, change, up, icon, color, bg }: typeof KPI_DATA[
 }
 
 // ─────────────────────────────────────────────
-// Page (Server Component)
+// Page (Server Component — Banco de Dados Real)
 // ─────────────────────────────────────────────
-export default function SuperAdminPage() {
+export default async function SuperAdminPage({
+  searchParams,
+}: {
+  searchParams: { q?: string };
+}) {
+  const query = searchParams.q || "";
+
+  // 1. Busca de Tenants reais no PostgreSQL via Prisma
+  const tenants = await prisma.tenant.findMany({
+    where: {
+      name: { contains: query, mode: "insensitive" },
+    },
+    include: {
+      _count: { select: { users: true, assets: true } }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
+  // 2. Cálculos de KPIs em Tempo Real
+  const mrrTotal = tenants.reduce((acc, t) => acc + Number(t.mrr), 0);
+  const ativasCount = tenants.filter(t => t.status === "ATIVO").length;
+  const trialCount = tenants.filter(t => t.status === "TRIAL").length;
+  const inadimplentesCount = tenants.filter(t => t.status === "INADIMPLENTE").length;
+
+  // 3. Cálculos da Distribuição de Receita
+  const mrrEnterprise = tenants.filter(t => t.plan === "ENTERPRISE").reduce((acc, t) => acc + Number(t.mrr), 0);
+  const mrrPro        = tenants.filter(t => t.plan === "PRO").reduce((acc, t) => acc + Number(t.mrr), 0);
+  const mrrStarter    = tenants.filter(t => t.plan === "STARTER").reduce((acc, t) => acc + Number(t.mrr), 0);
+  
+  const divisor = mrrTotal > 0 ? mrrTotal : 1; // Evitar divisão por zero
+
+  const KPI_DATA = [
+    {
+      label:  "MRR Total",
+      value:  formatBRLCompact(mrrTotal),
+      change: "Calculado ao vivo do banco",
+      up:     true,
+      icon:   "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+      color:  "text-emerald-600",
+      bg:     "bg-emerald-50",
+    },
+    {
+      label:  "Prefeituras Ativas",
+      value:  ativasCount.toString(),
+      change: `${tenants.length} cadastradas no total`,
+      up:     true,
+      icon:   "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
+      color:  "text-brand-600",
+      bg:     "bg-brand-50",
+    },
+    {
+      label:  "Inadimplentes",
+      value:  inadimplentesCount.toString(),
+      change: "Requer atenção imediata",
+      up:     false,
+      icon:   "M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414",
+      color:  "text-danger-600",
+      bg:     "bg-danger-50",
+    },
+    {
+      label:  "Em Trial",
+      value:  trialCount.toString(),
+      change: "Potenciais conversões",
+      up:     true,
+      icon:   "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+      color:  "text-warning-600",
+      bg:     "bg-warning-50",
+    },
+  ];
+
   return (
     <div className="space-y-8 p-6 lg:p-8 max-w-[1600px] mx-auto">
 
@@ -177,26 +145,26 @@ export default function SuperAdminPage() {
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs Dinâmicos */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {KPI_DATA.map((kpi) => (
           <KpiCard key={kpi.label} {...kpi} />
         ))}
       </div>
 
-      {/* Divisão: Receita, Infraestrutura e Alertas */}
+      {/* Divisão: Receita, Infraestrutura e Alertas (RESTAURADOS) */}
       <div className="grid gap-6 lg:grid-cols-3">
 
-        {/* Receita por plano */}
+        {/* Receita por plano (Dinâmico) */}
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
           <h2 className="font-display text-base font-bold text-foreground mb-5">
             Distribuição de Receita
           </h2>
           <div className="space-y-4">
             {[
-              { plan: "Enterprise", mrr: 189_600, pct: 0.668, color: "bg-brand-600" },
-              { plan: "Pro",        mrr:  72_400, pct: 0.255, color: "bg-brand-400" },
-              { plan: "Starter",    mrr:  22_000, pct: 0.077, color: "bg-brand-200" },
+              { plan: "Enterprise", mrr: mrrEnterprise, pct: mrrEnterprise / divisor, color: "bg-brand-600" },
+              { plan: "Pro",        mrr: mrrPro,        pct: mrrPro / divisor,        color: "bg-brand-400" },
+              { plan: "Starter",    mrr: mrrStarter,    pct: mrrStarter / divisor,    color: "bg-brand-200" },
             ].map((row) => (
               <div key={row.plan} className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
@@ -252,28 +220,16 @@ export default function SuperAdminPage() {
           </div>
         </div>
 
-        {/* Alertas */}
+        {/* Alertas Operacionais */}
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
           <h2 className="font-display text-base font-bold text-foreground mb-4">
             Alertas Operacionais
           </h2>
           <div className="space-y-3">
             {[
-              {
-                type:    "danger",
-                message: "Prefeitura de Cuiabá com fatura atrasada há 5 dias",
-                action:  "Cobrar",
-              },
-              {
-                type:    "warning",
-                message: "Maringá atinge limite do plano Trial amanhã",
-                action:  "Fazer Upgrade",
-              },
-              {
-                type:    "info",
-                message: "Pico de uso de API detectado em Campinas",
-                action:  "Ver Logs",
-              },
+              { type: "danger",  message: "Prefeitura de Cuiabá com fatura atrasada", action: "Cobrar" },
+              { type: "warning", message: "Maringá atinge limite do plano Trial amanhã", action: "Fazer Upgrade" },
+              { type: "info",    message: "Pico de uso de API detectado em Campinas", action: "Ver Logs" },
             ].map((alert, i) => {
               const styles = {
                 warning: "border-warning-200 bg-warning-50 text-warning-800",
@@ -295,23 +251,30 @@ export default function SuperAdminPage() {
 
       {/* Tabela de Gestão de Clientes */}
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-border">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-border bg-muted/10">
           <div>
             <h2 className="font-display text-base font-bold text-foreground">
               Gestão de Prefeituras (Tenants)
             </h2>
-            <p className="text-xs text-muted-foreground mt-1">Gerencie acessos, planos e suporte técnico.</p>
+            <p className="text-xs text-muted-foreground mt-1">Lendo dados reais do PostgreSQL.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <input 
-              type="text" 
-              placeholder="Buscar cidade..." 
-              className="px-3 py-1.5 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-            />
-            <button className="text-sm font-medium text-brand-600 hover:text-brand-500 px-3 py-1.5 border border-transparent hover:bg-brand-50 rounded-md transition-colors">
-              Filtros
+          
+          {/* Formulário de Busca Server-Side */}
+          <form className="flex items-center gap-2">
+            <div className="relative">
+              <svg className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input 
+                type="text" 
+                name="q"
+                defaultValue={query}
+                placeholder="Buscar prefeitura..." 
+                className="pl-9 pr-3 py-1.5 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+            <button type="submit" className="text-sm font-medium text-brand-600 hover:text-brand-500 px-3 py-1.5 border border-transparent hover:bg-brand-50 rounded-md transition-colors">
+              Buscar
             </button>
-          </div>
+          </form>
         </div>
 
         <div className="overflow-x-auto">
@@ -326,50 +289,57 @@ export default function SuperAdminPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {RECENT_TENANTS.map((tenant) => {
-                const s = STATUS_STYLES[tenant.status];
-                return (
-                  <tr key={tenant.id} className="transition-colors hover:bg-muted/30">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <p className="font-bold text-foreground">{tenant.name}</p>
-                      <p className="text-xs text-muted-foreground">{tenant.state} • Cadastrado {formatRelativeTime(tenant.createdAt)}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground">
-                        {tenant.plan}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${s.className}`}>
-                        {s.label}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 tabular-num font-medium text-foreground">
-                      {tenant.mrr === 0 ? "—" : formatBRLCompact(tenant.mrr)}
-                    </td>
-                    <td className="px-6 py-4 tabular-num text-muted-foreground">
-                      {formatNumber(tenant.users)}
-                    </td>
-                    <td className="px-6 py-4 tabular-num text-muted-foreground">
-                      {formatNumber(tenant.assetsCount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-xs font-bold">
-                      <button className="text-brand-600 hover:text-brand-800 mr-4 transition-colors">
-                        Editar Tenant
-                      </button>
-                      <button className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors">
-                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
-                        Acessar como...
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {tenants.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
+                    Nenhuma prefeitura encontrada com esse nome.
+                  </td>
+                </tr>
+              ) : (
+                tenants.map((tenant) => {
+                  const s = STATUS_STYLES[tenant.status] || STATUS_STYLES.CANCELADO;
+                  return (
+                    <tr key={tenant.id} className="transition-colors hover:bg-muted/30">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <p className="font-bold text-foreground">{tenant.name}</p>
+                        <p className="text-xs text-muted-foreground">{tenant.state} • Cadastrado {formatRelativeTime(tenant.createdAt.toISOString())}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground">
+                          {tenant.plan}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${s.className}`}>
+                          {s.label}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 tabular-num font-medium text-foreground">
+                        {Number(tenant.mrr) === 0 ? "—" : formatBRLCompact(Number(tenant.mrr))}
+                      </td>
+                      <td className="px-6 py-4 tabular-num text-muted-foreground">
+                        {formatNumber(tenant._count.users)}
+                      </td>
+                      <td className="px-6 py-4 tabular-num text-muted-foreground">
+                        {formatNumber(tenant._count.assets)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-xs font-bold">
+                        <Link href={`#edit-${tenant.id}`} className="text-brand-600 hover:text-brand-800 mr-4 transition-colors">
+                          Editar Tenant
+                        </Link>
+                        <Link href={`/api/auth/impersonate?tenantId=${tenant.id}`} className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors">
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                          Acessar como...
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
-
     </div>
   );
 }

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 
 // ─────────────────────────────────────────────
@@ -77,11 +79,18 @@ const STATS = [
 // Layout público
 // ─────────────────────────────────────────────
 export default function LandingPage() {
+  
+  // Trata cliques em links não finalizados do rodapé
+  const handleLegalClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    alert("Páginas legais (Termos, Privacidade, LGPD) serão disponibilizadas na publicação oficial.");
+  };
+
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-white overflow-x-hidden">
+    <div className="min-h-screen bg-[#0a0f1e] text-white overflow-x-hidden scroll-smooth">
 
       {/* ══ NAVBAR ══ */}
-      <nav className="sticky top-0 z-topbar border-b border-white/[0.06] bg-[#0a0f1e]/80 backdrop-blur-xl">
+      <nav className="sticky top-0 z-topbar border-b border-white/[0.06] bg-[#0a0f1e]/80 backdrop-blur-xl transition-all">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           {/* Logo */}
           <div className="flex items-center gap-2.5">
@@ -98,7 +107,7 @@ export default function LandingPage() {
 
           {/* Links */}
           <div className="hidden md:flex items-center gap-6 text-sm text-slate-400">
-            {["Funcionalidades", "Planos", "Sobre"].map((l) => (
+            {["Funcionalidades", "Sobre", "Planos"].map((l) => (
               <a key={l} href={`#${l.toLowerCase()}`} className="hover:text-white transition-colors">{l}</a>
             ))}
           </div>
@@ -106,7 +115,7 @@ export default function LandingPage() {
           {/* CTA */}
           <Link
             href="/login"
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500 transition-colors"
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500 transition-colors shadow-sm"
           >
             Acessar plataforma →
           </Link>
@@ -133,7 +142,7 @@ export default function LandingPage() {
         </div>
 
         <div className="relative space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-brand-800/60 bg-brand-950/60 px-4 py-1.5 text-xs font-medium text-brand-400">
+          <div className="inline-flex items-center gap-2 rounded-full border border-brand-800/60 bg-brand-950/60 px-4 py-1.5 text-xs font-medium text-brand-400 shadow-sm">
             <span className="h-1.5 w-1.5 rounded-full bg-brand-500 animate-pulse-dot" />
             Plataforma B2G — Gestão Municipal
           </div>
@@ -171,7 +180,6 @@ export default function LandingPage() {
         {/* Preview do mapa */}
         <div className="relative mt-16 mx-auto max-w-4xl">
           <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.4)] backdrop-blur-sm">
-            {/* Barra fake de browser */}
             <div className="flex items-center gap-2 border-b border-white/[0.06] bg-white/[0.02] px-4 py-3">
               <div className="flex gap-1.5">
                 {["#ef4444","#f59e0b","#10b981"].map((c) => (
@@ -183,23 +191,19 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Mapa simulado */}
             <div className="relative h-64 md:h-96 bg-[#1a2035] overflow-hidden">
               <svg width="100%" height="100%" viewBox="0 0 800 400" className="opacity-30">
-                {/* Grid de ruas simuladas */}
                 {[50,100,150,200,250,300,350].map((y) => (
                   <line key={y} x1="0" y1={y} x2="800" y2={y} stroke="#3468f6" strokeWidth="0.5" />
                 ))}
                 {[80,160,240,320,400,480,560,640,720].map((x) => (
                   <line key={x} x1={x} y1="0" x2={x} y2="400" stroke="#3468f6" strokeWidth="0.5" />
                 ))}
-                {/* Blocos urbanos */}
                 {[[90,60,60,70],[170,60,60,70],[250,60,60,70],[90,140,140,70],[250,140,60,70],[170,220,140,70],[90,300,60,70],[170,300,60,70],[250,300,60,70]].map(([x,y,w,h], i) => (
                   <rect key={i} x={x} y={y} width={w} height={h} fill="#3468f6" opacity="0.15" rx="2" />
                 ))}
               </svg>
 
-              {/* Marcadores GIS */}
               {[
                 { x:"35%", y:"40%", label:"Obra Ativa",    color:"#f59e0b" },
                 { x:"55%", y:"30%", label:"Ativo #A14",    color:"#3468f6" },
@@ -216,16 +220,14 @@ export default function LandingPage() {
                 </div>
               ))}
 
-              {/* Toolbar de desenho */}
               <div className="absolute left-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 rounded-xl border border-white/10 bg-black/40 p-1.5 backdrop-blur-sm">
                 {["🖱","📍","➖","⬡"].map((icon) => (
-                  <div key={icon} className="flex h-7 w-7 items-center justify-center rounded-lg text-sm hover:bg-white/10">
+                  <div key={icon} className="flex h-7 w-7 items-center justify-center rounded-lg text-sm hover:bg-white/10 cursor-pointer">
                     {icon}
                   </div>
                 ))}
               </div>
 
-              {/* Painel de camadas */}
               <div className="absolute right-3 top-3 rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-sm text-xs text-white/70 min-w-[120px]">
                 <p className="font-medium text-white mb-2 text-[10px] uppercase tracking-wider">Camadas</p>
                 {[
@@ -242,7 +244,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Gradiente de fade */}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#0a0f1e] to-transparent" />
         </div>
       </section>
@@ -277,7 +278,7 @@ export default function LandingPage() {
           {FEATURES.map((f) => (
             <div
               key={f.title}
-              className="group rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6 transition-all hover:border-brand-700/50 hover:bg-brand-950/30"
+              className="group rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6 transition-all hover:border-brand-700/50 hover:bg-brand-950/30 shadow-sm"
             >
               <span className="text-3xl mb-4 block">{f.icon}</span>
               <h3 className="font-display text-base font-700 text-white mb-2">{f.title}</h3>
@@ -287,8 +288,58 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ══ SOBRE (NOVA SEÇÃO) ══ */}
+      <section id="sobre" className="border-y border-white/[0.05] bg-[#0d1529] py-24 relative overflow-hidden">
+        {/* Elemento de background */}
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-brand-600/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+        
+        <div className="mx-auto max-w-6xl px-6 relative z-10">
+          <div className="grid gap-16 md:grid-cols-2 items-center">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-widest text-brand-400 mb-3">Nossa Missão</p>
+              <h2 className="font-display text-3xl font-800 text-white md:text-4xl mb-6">
+                Transformar a gestão pública através de dados
+              </h2>
+              <p className="text-slate-400 leading-relaxed mb-6">
+                A UrbanDesk nasceu da necessidade de modernizar as prefeituras brasileiras. Sabemos que a gestão de infraestrutura muitas vezes depende de papel, planilhas desatualizadas e comunicação fragmentada.
+              </p>
+              <p className="text-slate-400 leading-relaxed mb-8">
+                Nossa plataforma centraliza tudo em um mapa inteligente. Conectamos o engenheiro, o secretário e o operário com tecnologia robusta, garantindo transparência, economia de recursos e cidades preparadas para o futuro.
+              </p>
+              
+              <div className="flex items-center gap-8">
+                <div className="flex flex-col">
+                  <span className="font-display text-2xl font-bold text-white">100%</span>
+                  <span className="text-xs text-slate-500 uppercase tracking-wide">Nacional</span>
+                </div>
+                <div className="h-8 w-px bg-white/10" />
+                <div className="flex flex-col">
+                  <span className="font-display text-2xl font-bold text-white">ISO 27001</span>
+                  <span className="text-xs text-slate-500 uppercase tracking-wide">Segurança LGPD</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="relative">
+              <div className="absolute -inset-4 rounded-2xl bg-brand-600/20 blur-2xl" />
+              <div className="relative rounded-2xl border border-white/10 bg-[#0a0f1e] p-8 shadow-2xl">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 mb-6">
+                  <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-3">Construído para o Brasil</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Entendemos os desafios da conectividade e da administração pública. Nosso app funciona offline para equipes em áreas remotas e nossa infraestrutura garante que os dados da sua cidade nunca saiam do país.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ══ PLANOS ══ */}
-      <section id="planos" className="mx-auto max-w-6xl px-6 pb-24">
+      <section id="planos" className="mx-auto max-w-6xl px-6 py-24">
         <div className="mb-14 text-center">
           <p className="text-xs font-medium uppercase tracking-widest text-brand-400 mb-3">Preços transparentes</p>
           <h2 className="font-display text-3xl font-800 text-white md:text-4xl">
@@ -309,7 +360,7 @@ export default function LandingPage() {
             >
               {plan.featured && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <span className="rounded-full bg-brand-600 px-3 py-1 text-xs font-medium text-white">
+                  <span className="rounded-full bg-brand-600 px-3 py-1 text-xs font-medium text-white shadow-sm">
                     Mais popular
                   </span>
                 </div>
@@ -324,10 +375,10 @@ export default function LandingPage() {
                 <p className="mt-2 text-xs text-slate-500">{plan.desc}</p>
               </div>
 
-              <ul className="flex-1 space-y-2">
+              <ul className="flex-1 space-y-3 mt-2">
                 {plan.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-sm text-slate-300">
-                    <span className="text-accent-500 text-xs">✓</span>
+                  <li key={f} className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-brand-400 text-sm mt-0.5">✓</span>
                     {f}
                   </li>
                 ))}
@@ -335,7 +386,7 @@ export default function LandingPage() {
 
               <Link
                 href="/login"
-                className={`block rounded-xl py-2.5 text-center text-sm font-medium transition-colors ${
+                className={`block rounded-xl py-2.5 text-center text-sm font-medium transition-colors mt-4 ${
                   plan.featured
                     ? "bg-brand-600 text-white hover:bg-brand-500"
                     : "border border-white/10 text-slate-300 hover:border-white/20 hover:text-white"
@@ -371,8 +422,8 @@ export default function LandingPage() {
       </section>
 
       {/* ══ FOOTER ══ */}
-      <footer className="border-t border-white/[0.04] py-8">
-        <div className="mx-auto max-w-6xl px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-600">
+      <footer className="border-t border-white/[0.04] py-8 bg-[#070b14]">
+        <div className="mx-auto max-w-6xl px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-2">
             <div className="flex h-5 w-5 items-center justify-center rounded bg-brand-800">
               <svg className="h-3 w-3 text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -382,11 +433,20 @@ export default function LandingPage() {
             </div>
             <span>UrbanDesk © {new Date().getFullYear()}</span>
           </div>
+          
           <div className="flex gap-5">
             {["Privacidade","Termos","LGPD","Segurança"].map((l) => (
-              <a key={l} href="#" className="hover:text-slate-400 transition-colors">{l}</a>
+              <a 
+                key={l} 
+                href="#" 
+                onClick={handleLegalClick}
+                className="hover:text-slate-300 transition-colors"
+              >
+                {l}
+              </a>
             ))}
           </div>
+          
           <p>Hospedagem 100% no Brasil · ISO 27001</p>
         </div>
       </footer>

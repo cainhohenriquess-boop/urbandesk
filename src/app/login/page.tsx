@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { signIn, getSession } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
+import { signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────
-// Ícones inline (sem dependência extra)
+// Ícones inline
 // ─────────────────────────────────────────────
 function IconMail({ className }: { className?: string }) {
   return (
@@ -45,7 +44,7 @@ function IconMapPin({ className }: { className?: string }) {
 }
 
 // ─────────────────────────────────────────────
-// Erros traduzidos do NextAuth
+// Erros do NextAuth
 // ─────────────────────────────────────────────
 const ERROR_MESSAGES: Record<string, string> = {
   CredentialsSignin: "E-mail ou senha inválidos.",
@@ -55,21 +54,25 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 // ─────────────────────────────────────────────
-// Página de Login
+// Conteúdo Principal
 // ─────────────────────────────────────────────
 function LoginContent() {
-  const router       = useRouter();
   const searchParams = useSearchParams();
+  const callbackUrl  = searchParams.get("callbackUrl") ?? "/app/secretaria";
+  const errorParam   = searchParams.get("error");
 
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/app/secretaria";
-  const errorParam  = searchParams.get("error");
-
+  // Estados de Login
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState<string | null>(
     errorParam ? (ERROR_MESSAGES[errorParam] ?? ERROR_MESSAGES.default) : null
   );
+
+  // Estados de "Esqueci a Senha"
+  const [isForgotOpen, setIsForgotOpen] = useState(false);
+  const [forgotEmail,  setForgotEmail]  = useState("");
+  const [forgotStatus, setForgotStatus] = useState<"idle" | "loading" | "success">("idle");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -82,29 +85,27 @@ function LoginContent() {
       redirect: false,
     });
 
-    setLoading(false);
-
     if (result?.error) {
+      setLoading(false);
       setError(ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.default);
       return;
     }
 
-    // ✅ BUSCA A SESSÃO PARA DESCOBRIR O CARGO (ROLE)
-    const session = await getSession();
-    const role = session?.user?.role;
+    // Traffic Controller: delega o roteamento para o servidor (/app)
+    const destination = callbackUrl === "/app/secretaria" ? "/app" : callbackUrl;
+    window.location.assign(destination);
+  }
 
-    // ✅ REDIRECIONAMENTO INTELIGENTE BASEADO NO CARGO
-    if (role === "SUPERADMIN" || email === "admin@urbandesk.com.br") {
-      router.push("/superadmin");
-    } else if (role === "ENGENHEIRO") {
-      router.push("/app/projetos"); // Manda o engenheiro para o mapa
-    } else if (role === "CAMPO") {
-      router.push("/app/campo"); // Manda o funcionário de campo para a câmera/GPS
-    } else {
-      router.push("/app/secretaria"); // Manda o secretário para o dashboard da prefeitura
-    }
-
-    router.refresh();
+  function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!forgotEmail) return;
+    
+    setForgotStatus("loading");
+    
+    // Simula chamada à API de recuperação
+    setTimeout(() => {
+      setForgotStatus("success");
+    }, 1500);
   }
 
   return (
@@ -112,8 +113,7 @@ function LoginContent() {
 
       {/* ── Painel esquerdo — Identidade Visual ── */}
       <div className="hidden lg:flex lg:w-[52%] flex-col justify-between p-12 relative overflow-hidden">
-
-        {/* Mapa vetorial decorativo (SVG estilizado) */}
+        {/* SVG Background Map */}
         <div className="absolute inset-0 opacity-10">
           <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -130,17 +130,13 @@ function LoginContent() {
           </svg>
         </div>
 
-        {/* Círculos de dados animados */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2">
           {[280, 220, 160, 100].map((size, i) => (
             <div
               key={size}
               className="absolute rounded-full border border-brand-700/30"
               style={{
-                width: size,
-                height: size,
-                top:  -size / 2,
-                left: -size / 2,
+                width: size, height: size, top: -size / 2, left: -size / 2,
                 animation: `map-ping ${3 + i * 0.8}s ease-out infinite`,
                 animationDelay: `${i * 0.6}s`,
               }}
@@ -151,124 +147,66 @@ function LoginContent() {
           </div>
         </div>
 
-        {/* Logo */}
         <div className="relative z-10">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600">
               <IconMapPin className="h-5 w-5 text-white" />
             </div>
-            <span className="font-display text-xl font-700 text-white tracking-tight">
+            <span className="font-display text-xl font-bold text-white tracking-tight">
               Urban<span className="text-brand-400">Desk</span>
             </span>
           </div>
         </div>
 
-        {/* Headline */}
         <div className="relative z-10 space-y-6">
           <div className="space-y-3">
-            <p className="text-sm font-medium uppercase tracking-widest text-brand-400">
-              Plataforma B2G
-            </p>
-            <h1 className="font-display text-4xl font-800 leading-tight text-white">
+            <p className="text-sm font-medium uppercase tracking-widest text-brand-400">Plataforma B2G</p>
+            <h1 className="font-display text-4xl font-bold leading-tight text-white">
               Gestão de infraestrutura urbana com inteligência geoespacial
             </h1>
             <p className="text-base text-slate-400 leading-relaxed max-w-md">
-              Do projeto ao campo. Engenheiros, secretários e equipes de campo
-              conectados em tempo real, com dados GIS precisos e auditáveis.
+              Do projeto ao campo. Engenheiros, secretários e equipes de campo conectados em tempo real, com dados GIS precisos e auditáveis.
             </p>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-4 pt-2">
-            {[
-              { value: "140+", label: "Municípios" },
-              { value: "98%",  label: "Uptime SLA" },
-              { value: "12k+", label: "Ativos mapeados" },
-            ].map((stat) => (
-              <div key={stat.label} className="rounded-lg border border-brand-800/60 bg-brand-950/40 p-3 backdrop-blur-sm">
-                <p className="font-display text-2xl font-700 text-white">{stat.value}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{stat.label}</p>
-              </div>
-            ))}
           </div>
         </div>
       </div>
 
       {/* ── Painel direito — Formulário ── */}
-      <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 lg:px-16">
-
-        {/* Logo mobile */}
-        <div className="mb-8 flex items-center gap-3 lg:hidden">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600">
-            <IconMapPin className="h-4 w-4 text-white" />
-          </div>
-          <span className="font-display text-lg font-700 text-white tracking-tight">
-            Urban<span className="text-brand-400">Desk</span>
-          </span>
-        </div>
-
-        {/* Card de login */}
+      <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 lg:px-16 relative">
         <div className="w-full max-w-md">
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.04] p-8 shadow-2xl backdrop-blur-xl">
-
             <div className="mb-8">
-              <h2 className="font-display text-2xl font-700 text-white">
-                Acessar plataforma
-              </h2>
-              <p className="mt-1.5 text-sm text-slate-400">
-                Entre com suas credenciais institucionais
-              </p>
+              <h2 className="font-display text-2xl font-bold text-white">Acessar plataforma</h2>
+              <p className="mt-1.5 text-sm text-slate-400">Entre com suas credenciais institucionais</p>
             </div>
 
-            {/* Mensagem de erro */}
             {error && (
               <div className="mb-6 flex items-start gap-3 rounded-lg border border-danger-800/50 bg-danger-900/30 p-3.5 text-sm text-danger-300 animate-fade-in">
-                <svg className="h-4 w-4 mt-0.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="m15 9-6 6M9 9l6 6" />
-                </svg>
+                <svg className="h-4 w-4 mt-0.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6M9 9l6 6" /></svg>
                 {error}
               </div>
             )}
 
-            {/* Formulário */}
             <form onSubmit={handleSubmit} className="space-y-5">
-
-              {/* E-mail */}
               <div className="space-y-1.5">
-                <label htmlFor="email" className="block text-xs font-medium uppercase tracking-wider text-slate-400">
-                  E-mail institucional
-                </label>
+                <label className="block text-xs font-medium uppercase tracking-wider text-slate-400">E-mail institucional</label>
                 <div className="relative">
                   <IconMail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
                     placeholder="voce@prefeitura.gov.br"
-                    className={cn(
-                      "w-full rounded-lg border bg-white/[0.05] py-2.5 pl-10 pr-4",
-                      "text-sm text-white placeholder:text-slate-600",
-                      "border-white/[0.08] outline-none transition-all duration-150",
-                      "focus:border-brand-500/60 focus:bg-white/[0.07] focus:ring-1 focus:ring-brand-500/40",
-                    )}
+                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.05] py-2.5 pl-10 pr-4 text-sm text-white outline-none focus:border-brand-500/60 focus:bg-white/[0.07] focus:ring-1 transition-all"
                   />
                 </div>
               </div>
 
-              {/* Senha */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label htmlFor="password" className="block text-xs font-medium uppercase tracking-wider text-slate-400">
-                    Senha
-                  </label>
+                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-400">Senha</label>
                   <button
                     type="button"
+                    onClick={() => setIsForgotOpen(true)}
                     className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
-                    onClick={() => alert("Contate o administrador do sistema.")}
                   >
                     Esqueci a senha
                   </button>
@@ -276,72 +214,91 @@ function LoginContent() {
                 <div className="relative">
                   <IconLock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <input
-                    id="password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className={cn(
-                      "w-full rounded-lg border bg-white/[0.05] py-2.5 pl-10 pr-4",
-                      "text-sm text-white placeholder:text-slate-600",
-                      "border-white/[0.08] outline-none transition-all duration-150",
-                      "focus:border-brand-500/60 focus:bg-white/[0.07] focus:ring-1 focus:ring-brand-500/40",
-                    )}
+                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.05] py-2.5 pl-10 pr-4 text-sm text-white outline-none focus:border-brand-500/60 focus:bg-white/[0.07] focus:ring-1 transition-all"
                   />
                 </div>
               </div>
 
-              {/* Botão */}
               <button
-                type="submit"
-                disabled={loading}
-                className={cn(
-                  "relative w-full overflow-hidden rounded-lg py-2.5 px-4",
-                  "bg-brand-600 font-medium text-white text-sm",
-                  "transition-all duration-200",
-                  "hover:bg-brand-500 active:scale-[0.98]",
-                  "disabled:opacity-60 disabled:cursor-not-allowed",
-                  "shadow-[0_2px_12px_rgba(52,104,246,0.4)]",
-                )}
+                type="submit" disabled={loading}
+                className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-medium text-white hover:bg-brand-500 transition-all active:scale-[0.98] disabled:opacity-60 flex justify-center items-center shadow-[0_2px_12px_rgba(52,104,246,0.4)]"
               >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <IconLoader className="h-4 w-4" />
-                    Entrando…
-                  </span>
-                ) : (
-                  "Entrar na plataforma"
-                )}
+                {loading ? <span className="flex items-center gap-2"><IconLoader className="h-4 w-4" /> Entrando…</span> : "Entrar na plataforma"}
               </button>
             </form>
 
-            {/* Divider */}
             <div className="my-6 flex items-center gap-3">
               <div className="h-px flex-1 bg-white/[0.06]" />
               <span className="text-xs text-slate-600">Acesso restrito</span>
               <div className="h-px flex-1 bg-white/[0.06]" />
             </div>
 
-            {/* Rodapé card */}
             <p className="text-center text-xs text-slate-600 leading-relaxed">
-              Plataforma de uso exclusivo para gestores e colaboradores municipais.
-              <br />
-              Acesso não autorizado é monitorado e sujeito às sanções da{" "}
-              <span className="text-slate-500">Lei nº 12.737/2012</span>.
+              Plataforma de uso exclusivo para gestores e colaboradores municipais.<br />
+              Acesso monitorado e sujeito às sanções da Lei nº 12.737/2012.
             </p>
           </div>
-
-          {/* Link suporte */}
-          <p className="mt-6 text-center text-xs text-slate-600">
-            Problemas para acessar?{" "}
-            <a href="mailto:suporte@urbandesk.com.br" className="text-brand-400 hover:text-brand-300 transition-colors">
-              suporte@urbandesk.com.br
-            </a>
-          </p>
         </div>
       </div>
+
+      {/* ── MODAL: ESQUECI A SENHA ── */}
+      {isForgotOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0f1e]/80 p-4 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d1529] p-6 shadow-2xl relative overflow-hidden">
+            
+            {/* Linha decorativa no topo */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-600 to-brand-400" />
+
+            <h3 className="font-display text-xl font-bold text-white mb-2 mt-2">Recuperar acesso</h3>
+            
+            {forgotStatus === "success" ? (
+              <div className="space-y-5 animate-fade-in">
+                <div className="rounded-xl border border-accent-500/20 bg-accent-500/10 p-4 text-sm text-accent-100 leading-relaxed">
+                  Se o e-mail <strong>{forgotEmail}</strong> estiver registado, receberá um link seguro para redefinir a sua senha em instantes.
+                </div>
+                <button 
+                  onClick={() => { setIsForgotOpen(false); setForgotStatus("idle"); setForgotEmail(""); }}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 text-sm font-medium text-white hover:bg-white/10 transition-colors"
+                >
+                  Voltar ao login
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-5 animate-fade-in">
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Insira o seu e-mail institucional. Enviaremos as instruções para a recuperação da sua conta.
+                </p>
+                
+                <div className="relative">
+                  <IconMail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="email" required value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="voce@prefeitura.gov.br"
+                    className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/50 transition-all"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    type="button" onClick={() => setIsForgotOpen(false)} 
+                    className="flex-1 rounded-lg py-2.5 text-sm font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit" disabled={!forgotEmail || forgotStatus === "loading"} 
+                    className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-medium text-white hover:bg-brand-500 transition-colors disabled:opacity-50 flex justify-center items-center shadow-md"
+                  >
+                    {forgotStatus === "loading" ? <IconLoader className="h-4 w-4" /> : "Enviar link"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
