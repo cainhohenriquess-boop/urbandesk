@@ -25,29 +25,29 @@ const KPI_DATA = [
   {
     label:  "MRR Total",
     value:  formatBRLCompact(284_000),
-    change: "+12,4%",
+    change: "+12,4% vs mês ant.",
     up:     true,
     icon:   "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-    color:  "text-accent-600",
-    bg:     "bg-accent-50",
+    color:  "text-emerald-600",
+    bg:     "bg-emerald-50",
   },
   {
     label:  "Prefeituras Ativas",
     value:  "143",
-    change: "+8 este mês",
+    change: "+8 novos contratos",
     up:     true,
     icon:   "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
     color:  "text-brand-600",
     bg:     "bg-brand-50",
   },
   {
-    label:  "Churn Rate",
-    value:  "1,8%",
-    change: "-0,3 p.p.",
-    up:     true,
-    icon:   "M13 17h8m0 0V9m0 8l-8-8-4 4-6-6",
-    color:  "text-accent-600",
-    bg:     "bg-accent-50",
+    label:  "Chamados Abertos",
+    value:  "12",
+    change: "3 urgentes",
+    up:     false,
+    icon:   "M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414",
+    color:  "text-danger-600",
+    bg:     "bg-danger-50",
   },
   {
     label:  "Em Trial",
@@ -106,50 +106,42 @@ const RECENT_TENANTS: Tenant[] = [
     assetsCount: 654,
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 96).toISOString(),
   },
-  {
-    id: "5",
-    name: "Prefeitura de Joinville",
-    state: "SC",
-    plan: "Starter",
-    status: "ATIVO",
-    mrr: 890,
-    users: 6,
-    assetsCount: 211,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 120).toISOString(),
-  },
 ];
 
 const STATUS_STYLES: Record<TenantStatus, { label: string; className: string }> = {
-  ATIVO:        { label: "Ativo",        className: "bg-accent-100 text-accent-700" },
-  TRIAL:        { label: "Trial",        className: "bg-brand-100 text-brand-700" },
-  INADIMPLENTE: { label: "Inadimplente", className: "bg-danger-100 text-danger-700" },
-  CANCELADO:    { label: "Cancelado",    className: "bg-slate-100 text-slate-500" },
+  ATIVO:        { label: "Ativo",        className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  TRIAL:        { label: "Trial",        className: "bg-brand-100 text-brand-800 border-brand-200" },
+  INADIMPLENTE: { label: "Inadimplente", className: "bg-danger-100 text-danger-800 border-danger-200" },
+  CANCELADO:    { label: "Cancelado",    className: "bg-slate-100 text-slate-600 border-slate-200" },
 };
 
 // ─────────────────────────────────────────────
 // Componentes
 // ─────────────────────────────────────────────
-function KpiCard({
-  label, value, change, up, icon, color, bg,
-}: typeof KPI_DATA[0]) {
+function KpiCard({ label, value, change, up, icon, color, bg }: typeof KPI_DATA[0]) {
   return (
-    <div className="kpi-card">
+    <div className="rounded-xl border border-border bg-card p-5 shadow-sm transition-all hover:shadow-md">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {label}
           </p>
-          <p className="font-display text-2xl font-700 text-foreground tabular-num">
+          <p className="font-display text-2xl font-bold text-foreground tabular-num">
             {value}
           </p>
         </div>
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${bg}`}>
-          <svg className={`h-5 w-5 ${color}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ${bg}`}>
+          <svg className={`h-6 w-6 ${color}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d={icon} strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
       </div>
-      <p className={`mt-3 text-xs font-medium ${up ? "text-accent-600" : "text-warning-600"}`}>
+      <p className={`mt-4 text-xs font-medium flex items-center gap-1 ${up ? "text-emerald-600" : "text-warning-600"}`}>
+        {up ? (
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+        ) : (
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" /></svg>
+        )}
         {change}
       </p>
     </div>
@@ -161,47 +153,59 @@ function KpiCard({
 // ─────────────────────────────────────────────
 export default function SuperAdminPage() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 p-6 lg:p-8 max-w-[1600px] mx-auto">
 
-      {/* Header */}
-      <div>
-        <h1 className="font-display text-2xl font-700 text-foreground">
-          Painel do Proprietário
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Visão geral financeira e gestão de municípios da plataforma UrbanDesk.
-        </p>
+      {/* Header com Ações Rápidas */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-foreground">
+            Dashboard Executivo
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Visão geral financeira, infraestrutura e gestão de clientes UrbanDesk.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors">
+            <svg className="h-4 w-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+            Suporte (12)
+          </button>
+          <button className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors shadow-sm">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+            Nova Prefeitura
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
-      <div className="dashboard-grid">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {KPI_DATA.map((kpi) => (
           <KpiCard key={kpi.label} {...kpi} />
         ))}
       </div>
 
-      {/* Divisão: Receita por plano + Atividade recente */}
+      {/* Divisão: Receita, Infraestrutura e Alertas */}
       <div className="grid gap-6 lg:grid-cols-3">
 
         {/* Receita por plano */}
-        <div className="rounded-xl border bg-card p-5 shadow-card">
-          <h2 className="font-display text-sm font-700 text-foreground mb-4">
-            Receita por Plano
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="font-display text-base font-bold text-foreground mb-5">
+            Distribuição de Receita
           </h2>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {[
               { plan: "Enterprise", mrr: 189_600, pct: 0.668, color: "bg-brand-600" },
               { plan: "Pro",        mrr:  72_400, pct: 0.255, color: "bg-brand-400" },
               { plan: "Starter",    mrr:  22_000, pct: 0.077, color: "bg-brand-200" },
             ].map((row) => (
-              <div key={row.plan} className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
+              <div key={row.plan} className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
                   <span className="font-medium text-foreground">{row.plan}</span>
-                  <span className="tabular-num text-muted-foreground">
-                    {formatBRLCompact(row.mrr)} · {formatPercent(row.pct, 1)}
+                  <span className="tabular-num text-muted-foreground font-medium">
+                    {formatBRLCompact(row.mrr)} <span className="text-xs text-muted-foreground/60">({formatPercent(row.pct, 1)})</span>
                   </span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                   <div
                     className={`h-full rounded-full ${row.color} transition-all duration-500`}
                     style={{ width: `${row.pct * 100}%` }}
@@ -210,116 +214,112 @@ export default function SuperAdminPage() {
               </div>
             ))}
           </div>
+        </div>
 
-          <div className="mt-5 border-t border-border pt-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">ARR Projetado</span>
-              <span className="font-display text-sm font-700 text-foreground tabular-num">
-                {formatBRLCompact(284_000 * 12)}
-              </span>
+        {/* Saúde da Infraestrutura (SaaS) */}
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="font-display text-base font-bold text-foreground mb-5">
+            Saúde da Infraestrutura
+          </h2>
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium flex items-center gap-2">
+                  <svg className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" /></svg>
+                  Banco de Dados (Supabase)
+                </span>
+                <span className="tabular-num text-foreground font-bold">12%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                <div className="h-full rounded-full bg-blue-500 w-[12%]" />
+              </div>
+              <p className="text-xs text-muted-foreground text-right">602 MB de 5 GB</p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium flex items-center gap-2">
+                  <svg className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                  Storage de Fotos (R2)
+                </span>
+                <span className="tabular-num text-amber-600 font-bold">84%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                <div className="h-full rounded-full bg-amber-500 w-[84%]" />
+              </div>
+              <p className="text-xs text-muted-foreground text-right">8.4 TB de 10 TB</p>
             </div>
           </div>
         </div>
 
         {/* Alertas */}
-        <div className="rounded-xl border bg-card p-5 shadow-card">
-          <h2 className="font-display text-sm font-700 text-foreground mb-4">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="font-display text-base font-bold text-foreground mb-4">
             Alertas Operacionais
           </h2>
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {[
               {
-                type:    "warning",
-                message: "7 trials vencem nos próximos 3 dias",
-                action:  "Ver trials",
-                href:    "/superadmin/tenants?filter=trial",
+                type:    "danger",
+                message: "Prefeitura de Cuiabá com fatura atrasada há 5 dias",
+                action:  "Cobrar",
               },
               {
-                type:    "danger",
-                message: "4 prefeituras com pagamento em atraso",
-                action:  "Ver inadimplentes",
-                href:    "/superadmin/financeiro?filter=inadimplente",
+                type:    "warning",
+                message: "Maringá atinge limite do plano Trial amanhã",
+                action:  "Fazer Upgrade",
               },
               {
                 type:    "info",
-                message: "Novo município aguarda aprovação",
-                action:  "Revisar",
-                href:    "/superadmin/tenants?filter=pending",
+                message: "Pico de uso de API detectado em Campinas",
+                action:  "Ver Logs",
               },
             ].map((alert, i) => {
               const styles = {
-                warning: "border-warning-200 bg-warning-50 text-warning-700",
-                danger:  "border-danger-200 bg-danger-50 text-danger-700",
-                info:    "border-brand-200 bg-brand-50 text-brand-700",
+                warning: "border-warning-200 bg-warning-50 text-warning-800",
+                danger:  "border-danger-200 bg-danger-50 text-danger-800",
+                info:    "border-brand-200 bg-brand-50 text-brand-800",
               }[alert.type];
               return (
-                <div
-                  key={i}
-                  className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${styles}`}
-                >
-                  <p className="text-xs leading-relaxed">{alert.message}</p>
-                  <a
-                    href={alert.href}
-                    className="shrink-0 text-xs font-medium underline underline-offset-2 hover:no-underline"
-                  >
+                <div key={i} className={`flex items-center justify-between gap-3 rounded-lg border p-3.5 ${styles}`}>
+                  <p className="text-xs font-medium leading-relaxed">{alert.message}</p>
+                  <button className="shrink-0 text-xs font-bold underline-offset-2 hover:underline bg-white/50 px-2 py-1 rounded">
                     {alert.action}
-                  </a>
+                  </button>
                 </div>
               );
             })}
           </div>
         </div>
-
-        {/* Top municípios por receita */}
-        <div className="rounded-xl border bg-card p-5 shadow-card">
-          <h2 className="font-display text-sm font-700 text-foreground mb-4">
-            Top Municípios · MRR
-          </h2>
-          <div className="space-y-2.5">
-            {[
-              { name: "Fortaleza, CE",  mrr: 9_600,  rank: 1 },
-              { name: "Campinas, SP",   mrr: 4_800,  rank: 2 },
-              { name: "Manaus, AM",     mrr: 4_200,  rank: 3 },
-              { name: "Goiânia, GO",    mrr: 3_600,  rank: 4 },
-              { name: "São Luís, MA",   mrr: 2_800,  rank: 5 },
-            ].map((city) => (
-              <div key={city.name} className="flex items-center gap-3">
-                <span className="font-display text-xs font-700 tabular-num text-muted-foreground w-4 text-right">
-                  {city.rank}
-                </span>
-                <span className="flex-1 text-xs text-foreground truncate">{city.name}</span>
-                <span className="font-display text-xs font-700 tabular-num text-foreground">
-                  {formatBRLCompact(city.mrr)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
-      {/* Tabela de prefeituras recentes */}
-      <div className="rounded-xl border bg-card shadow-card overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="font-display text-sm font-700 text-foreground">
-            Prefeituras — Atividade Recente
-          </h2>
-          <a
-            href="/superadmin/tenants"
-            className="text-xs font-medium text-brand-600 hover:text-brand-500 transition-colors"
-          >
-            Ver todas →
-          </a>
+      {/* Tabela de Gestão de Clientes */}
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-border">
+          <div>
+            <h2 className="font-display text-base font-bold text-foreground">
+              Gestão de Prefeituras (Tenants)
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">Gerencie acessos, planos e suporte técnico.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input 
+              type="text" 
+              placeholder="Buscar cidade..." 
+              className="px-3 py-1.5 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+            />
+            <button className="text-sm font-medium text-brand-600 hover:text-brand-500 px-3 py-1.5 border border-transparent hover:bg-brand-50 rounded-md transition-colors">
+              Filtros
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-muted/30">
-                {["Município", "Estado", "Plano", "Status", "MRR", "Usuários", "Ativos GIS", "Cadastro"].map((h) => (
-                  <th
-                    key={h}
-                    className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground"
-                  >
+              <tr className="border-b border-border bg-muted/40">
+                {["Município", "Plano", "Status", "MRR", "Usuários", "Ativos GIS", "Ações Técnicas"].map((h) => (
+                  <th key={h} className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     {h}
                   </th>
                 ))}
@@ -329,37 +329,38 @@ export default function SuperAdminPage() {
               {RECENT_TENANTS.map((tenant) => {
                 const s = STATUS_STYLES[tenant.status];
                 return (
-                  <tr
-                    key={tenant.id}
-                    className="transition-colors hover:bg-muted/20"
-                  >
-                    <td className="px-5 py-3.5 font-medium text-foreground whitespace-nowrap">
-                      {tenant.name}
+                  <tr key={tenant.id} className="transition-colors hover:bg-muted/30">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <p className="font-bold text-foreground">{tenant.name}</p>
+                      <p className="text-xs text-muted-foreground">{tenant.state} • Cadastrado {formatRelativeTime(tenant.createdAt)}</p>
                     </td>
-                    <td className="px-5 py-3.5 text-muted-foreground">
-                      {tenant.state}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+                    <td className="px-6 py-4">
+                      <span className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground">
                         {tenant.plan}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5">
-                      <span className={`status-badge ${s.className}`}>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${s.className}`}>
                         {s.label}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 tabular-num text-foreground">
+                    <td className="px-6 py-4 tabular-num font-medium text-foreground">
                       {tenant.mrr === 0 ? "—" : formatBRLCompact(tenant.mrr)}
                     </td>
-                    <td className="px-5 py-3.5 tabular-num text-muted-foreground">
+                    <td className="px-6 py-4 tabular-num text-muted-foreground">
                       {formatNumber(tenant.users)}
                     </td>
-                    <td className="px-5 py-3.5 tabular-num text-muted-foreground">
+                    <td className="px-6 py-4 tabular-num text-muted-foreground">
                       {formatNumber(tenant.assetsCount)}
                     </td>
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
-                      {formatRelativeTime(tenant.createdAt)}
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-xs font-bold">
+                      <button className="text-brand-600 hover:text-brand-800 mr-4 transition-colors">
+                        Editar Tenant
+                      </button>
+                      <button className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors">
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                        Acessar como...
+                      </button>
                     </td>
                   </tr>
                 );
