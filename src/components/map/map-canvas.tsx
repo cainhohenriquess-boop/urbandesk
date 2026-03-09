@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useEffect } from "react";
-// 🚀 MapLibre Oficial: Zero Mapbox, Zero Tokens, Zero CORS!
+// 🚀 Usando o MapLibre (Motor open-source gratuito, livre de CORS e Tokens)
 import Map, { Marker, Source, Layer, NavigationControl, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useMapStore } from "@/store/useMapStore";
@@ -21,7 +21,7 @@ const BLANK_STYLE = {
     {
       id: "background",
       type: "background",
-      paint: { "background-color": "#ffffff" } // Fundo Branco Perfeito
+      paint: { "background-color": "#ffffff" } // Fundo Branco Cartográfico
     }
   ]
 };
@@ -82,7 +82,8 @@ function EngineeringPanel() {
         <div><label className="text-xs font-semibold text-muted-foreground uppercase">Nome</label><input type="text" required value={formData.nome} onChange={e => setFormData(s => ({...s, nome: e.target.value}))} className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500" /></div>
         <div><label className="text-xs font-semibold text-muted-foreground uppercase">Status</label><select value={formData.status} onChange={e => setFormData(s => ({...s, status: e.target.value}))} className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500"><option value="PROJETADO">Projetado</option><option value="EM_EXECUCAO">Em Execução</option><option value="CONCLUIDO">Concluído</option></select></div>
         <div><label className="text-xs font-semibold text-muted-foreground uppercase">Custo (R$)</label><input type="number" step="0.01" value={formData.custoEstimado} onChange={e => setFormData(s => ({...s, custoEstimado: e.target.value}))} className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500" /></div>
-        <div className="pt-4 flex gap-2"><button type="button" onClick={cancelPendingFeature} className="flex-1 py-2 rounded-md bg-muted font-medium">Cancelar</button><button type="submit" className="flex-1 py-2 rounded-md bg-brand-600 text-white font-bold">Salvar</button></div>
+        <div><label className="text-xs font-semibold text-muted-foreground uppercase">Material</label><select value={formData.material} onChange={e => setFormData(s => ({...s, material: e.target.value}))} className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500"><option value="CONCRETO">Concreto</option><option value="PVC">PVC / Plástico</option><option value="ASFALTO">Asfalto</option><option value="OUTRO">Outro</option></select></div>
+        <div className="pt-4 flex gap-2"><button type="button" onClick={cancelPendingFeature} className="flex-1 py-2 rounded-md bg-muted font-medium">Cancelar</button><button type="submit" className="flex-1 py-2 rounded-md bg-brand-600 text-white font-bold">Salvar Projeto</button></div>
       </form>
     </div>
   );
@@ -109,7 +110,7 @@ export function MapCanvas() {
 
   const activeMapStyle = mapStyle === "topography" ? TOPO_STYLE : mapStyle === "satellite" ? SATELLITE_STYLE : BLANK_STYLE;
 
-  // 🚀 RADAR UTM: Lê as coordenadas do Shapefile. Se for maior que 180 graus, é porque está em Metros (UTM/SIRGAS)
+  // 🚀 RADAR UTM: Deteta se os Shapefiles estão em Metros em vez de Graus (WGS84)
   useEffect(() => {
     let isUtm = false;
     if (baseLayersData && baseLayersData.length > 0) {
@@ -172,7 +173,7 @@ export function MapCanvas() {
     <div className="h-full w-full relative bg-[#ffffff] overflow-hidden" onContextMenu={handleContextMenu}>
       <EngineeringPanel />
 
-      {/* AVISO DE DATUM ERRADO (UTM/SIRGAS 2000) */}
+      {/* ALERTA DE DATUM (Se o shapefile estiver em SIRGAS 2000 UTM) */}
       {utmWarning && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-danger-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-bounce">
           <svg className="w-6 h-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -196,7 +197,7 @@ export function MapCanvas() {
       >
         <NavigationControl position="bottom-right" />
 
-        {/* ── CAMADAS CARTOGRÁFICAS ── */}
+        {/* ── CAMADAS CARTOGRÁFICAS (TOLERÂNCIA MÁXIMA A GEOMETRIAS) ── */}
         {layers.basegis && baseLayersData.map((layer) => {
           const sourceId = `source-${layer.id}`;
           
@@ -205,22 +206,36 @@ export function MapCanvas() {
           const safeData = parsedData?.type === "FeatureCollection" ? parsedData : { type: "FeatureCollection", features: [] };
 
           return (
-            <Source key={`src-${layer.id}`} id={sourceId} type="geojson" data={safeData}>
-              {/* O MapLibre ignora automaticamente o que não é compátivel. Removemos o filtro restrito que quebrava o mapa! */}
-              {layer.type === "BOUNDARY" && <Layer id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#0ea5e9", "fill-opacity": 0.05 }} />}
-              {layer.type === "BOUNDARY" && <Layer id={`line-${layer.id}`} type="line" paint={{ "line-color": "#0ea5e9", "line-width": 3, "line-dasharray": [2, 4] }} />}
+            <React.Fragment key={`frag-${layer.id}`}>
+              <Source id={sourceId} type="geojson" data={safeData} />
+              
+              {/* LIMITE DO MUNICÍPIO: O "filter" permite Polígonos e MultiPolígonos passarem sem quebrar */}
+              {layer.type === "BOUNDARY" && (
+                <>
+                  <Layer source={sourceId} id={`fill-${layer.id}`} type="fill" paint={{ "fill-color": "#0ea5e9", "fill-opacity": 0.05 }} filter={["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]]} />
+                  <Layer source={sourceId} id={`line-${layer.id}`} type="line" paint={{ "line-color": "#0ea5e9", "line-width": 3, "line-dasharray": [2, 4] }} filter={["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon", "LineString", "MultiLineString"]]]} />
+                </>
+              )}
 
-              {layer.type === "STREETS" && <Layer id={`street-fill-${layer.id}`} type="fill" paint={{ "fill-color": "#f1f5f9", "fill-opacity": 0.8 }} />}
-              {layer.type === "STREETS" && <Layer id={`street-border-${layer.id}`} type="line" paint={{ "line-color": "#94a3b8", "line-width": 1.5 }} />}
+              {/* BUFFERS E RUAS EM POLÍGONO OU LINHAS */}
+              {layer.type === "STREETS" && (
+                <>
+                  <Layer source={sourceId} id={`street-fill-${layer.id}`} type="fill" paint={{ "fill-color": "#e2e8f0", "fill-opacity": 0.6 }} filter={["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]]} />
+                  <Layer source={sourceId} id={`street-border-${layer.id}`} type="line" paint={{ "line-color": "#64748b", "line-width": 1.5 }} filter={["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon", "LineString", "MultiLineString"]]]} />
+                </>
+              )}
 
+              {/* NOMES DAS RUAS: Busca pelas principais colunas usadas nos Shapefiles Nacionais */}
               {layer.type === "STREET_NAMES" && (
                  <Layer 
+                   source={sourceId}
                    id={`street-name-${layer.id}`} 
                    type="symbol" 
+                   filter={["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString", "Polygon", "MultiPolygon"]]]}
                    layout={{ 
-                     "text-field": ["coalesce", ["get", "name"], ["get", "NAME"], ["get", "NOME"], ["get", "Rua"], ["get", "rua"]], 
+                     "text-field": ["coalesce", ["get", "name"], ["get", "NAME"], ["get", "NOME"], ["get", "Rua"], ["get", "rua"], ["get", "VIA"], ["get", "LOGRADOURO"]], 
                      "text-size": 13, 
-                     "symbol-placement": "line", 
+                     "symbol-placement": "line-center", 
                      "text-max-angle": 38
                    }} 
                    paint={{ 
@@ -230,19 +245,20 @@ export function MapCanvas() {
                    }} 
                  />
               )}
-            </Source>
+            </React.Fragment>
           );
         })}
 
-        {/* ── RASCUNHOS E OBRAS ── */}
+        {/* ── RASCUNHOS DE PROJETOS ── */}
         {draftGeoJson && (
           <Source id="draft-source" type="geojson" data={draftGeoJson as any}>
-            <Layer id="draft-polygon-fill" type="fill" paint={{ "fill-color": "#10b981", "fill-opacity": 0.3 }} />
-            <Layer id="draft-line" type="line" paint={{ "line-color": "#10b981", "line-width": 3, "line-dasharray": [2, 2] }} />
-            <Layer id="draft-points" type="circle" paint={{ "circle-color": "#ffffff", "circle-radius": 5, "circle-stroke-width": 2, "circle-stroke-color": "#10b981" }} />
+            <Layer id="draft-polygon-fill" type="fill" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "fill-color": "#10b981", "fill-opacity": 0.3 }} />
+            <Layer id="draft-line" type="line" filter={["in", ["geometry-type"], ["literal", ["LineString", "Polygon"]]]} paint={{ "line-color": "#10b981", "line-width": 3, "line-dasharray": [2, 2] }} />
+            <Layer id="draft-points" type="circle" filter={["==", ["geometry-type"], "Point"]} paint={{ "circle-color": "#ffffff", "circle-radius": 5, "circle-stroke-width": 2, "circle-stroke-color": "#10b981" }} />
           </Source>
         )}
 
+        {/* ── OBRAS FINALIZADAS (DO BANCO) ── */}
         {layers.obras && (
           <Source id="geometries" type="geojson" data={geometriesGeoJson as any}>
             <Layer id="lines" type="line" filter={["==", ["geometry-type"], "LineString"]} paint={{ "line-color": ["get", "color"], "line-width": 4 }} />
@@ -251,13 +267,40 @@ export function MapCanvas() {
           </Source>
         )}
 
+        {/* ── ATIVOS E PONTOS DE CADASTRO ── */}
         {layers.ativos && (
           <Source id="synced-assets" type="geojson" data={syncedAssetsGeoJson as any}>
-            <Layer id="synced-assets-circle" type="circle" paint={{ "circle-color": ["get", "color"], "circle-radius": 14, "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" }} />
-            <Layer id="synced-assets-symbol" type="symbol" layout={{ "text-field": ["get", "icon"], "text-size": 14 }} />
+            <Layer id="synced-assets-circle" type="circle" paint={{ "circle-color": ["get", "color"], "circle-radius": 14, "circle-stroke-width": 2, "circle-stroke-color": "#ffffff", "circle-pitch-alignment": "map" }} />
+            <Layer id="synced-assets-symbol" type="symbol" layout={{ "text-field": ["get", "icon"], "text-size": 14, "text-allow-overlap": true, "text-pitch-alignment": "map" }} />
           </Source>
         )}
+
+        {layers.ativos && unsyncedAssets.map((feature) => {
+          const style = ASSET_STYLES[feature.type as keyof typeof ASSET_STYLES];
+          if (!style || !feature.coords[0]) return null;
+          return (
+            <Marker key={feature.id} longitude={feature.coords[0].lng} latitude={feature.coords[0].lat} anchor="bottom">
+              <div className="relative group flex flex-col items-center cursor-pointer">
+                <div className="absolute -top-12 hidden group-hover:flex items-center whitespace-nowrap rounded-lg bg-card px-2.5 py-1.5 text-[11px] font-bold text-foreground shadow-xl border border-border flex-col z-50">
+                  <span>{feature.label || style.label}</span>
+                  <span className="text-warning-500 text-[9px] flex items-center gap-1 mt-0.5"><span className="h-1 w-1 bg-warning-500 rounded-full animate-ping"/>Pendente no BD</span>
+                </div>
+                <div className="relative flex h-8 w-8 items-center justify-center">
+                  <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", style.color)} />
+                  <div className={cn("relative z-10 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[13px] shadow-[0_4px_12px_rgba(0,0,0,0.5)] transition-transform group-hover:scale-125 ring-4", style.color, style.ring)}>{style.icon}</div>
+                </div>
+                <div className="h-3 w-[2px] bg-white/90 shadow-sm rounded-b-full" />
+              </div>
+            </Marker>
+          );
+        })}
       </Map>
+      
+      {drawMode !== "SELECT" && (
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full border border-brand-400 bg-brand-600/90 backdrop-blur-md px-6 py-2.5 text-sm font-bold text-white shadow-2xl animate-bounce flex items-center gap-2 pointer-events-none z-40">
+          {drawMode === "line" || drawMode === "polygon" ? <>Clique para adicionar vértices. <kbd className="bg-white/20 px-1 text-black font-mono font-bold rounded">Botão Direito</kbd> finaliza.</> : <>Clique no mapa para projetar: {ASSET_STYLES[drawMode as keyof typeof ASSET_STYLES]?.label}</>}
+        </div>
+      )}
     </div>
   );
 }
