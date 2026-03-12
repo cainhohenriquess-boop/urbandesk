@@ -156,11 +156,20 @@ export default withAuth(
 
     // 4. Verifica permissão de Role
     const requiredRoles = getRequiredRoles(pathname);
-    if (requiredRoles && token.role && !requiredRoles.includes(token.role as Role)) {
-      if (isApiRoute(pathname)) {
-        return jsonUnauthorized("Sem permissão para este recurso.", 403);
+    if (requiredRoles) {
+      if (!token.role) {
+        if (isApiRoute(pathname)) {
+          return jsonUnauthorized("Sem permissão para este recurso.", 403);
+        }
+        return redirectToBlockedLogin(req, "unauthorized");
       }
-      return redirectToRoleHome(req, token.role);
+
+      if (!requiredRoles.includes(token.role as Role)) {
+        if (isApiRoute(pathname)) {
+          return jsonUnauthorized("Sem permissão para este recurso.", 403);
+        }
+        return redirectToRoleHome(req, token.role);
+      }
     }
 
     // 5. Injeta headers de tenant para uso nos Server Components

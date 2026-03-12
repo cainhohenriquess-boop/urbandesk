@@ -93,6 +93,12 @@ export function MapCanvas() {
   const { features, drawMode, viewState, setViewState, addDraftPoint, draftPoints, finishDraft, layers, mapStyle, isFullscreen, toggleFullscreen, baseLayersData } = useMapStore();
   const [utmWarning, setUtmWarning] = useState(false);
 
+  const hasValidPoint = (coords: { lng: number; lat: number }[] | undefined) => {
+    if (!coords || coords.length === 0) return false;
+    const pt = coords[0];
+    return Number.isFinite(pt?.lng) && Number.isFinite(pt?.lat);
+  };
+
   const handleMapClick = (e: MapLayerMouseEvent) => {
     if (drawMode === "SELECT") return;
     addDraftPoint({ lng: e.lngLat.lng, lat: e.lngLat.lat });
@@ -103,7 +109,11 @@ export function MapCanvas() {
     if (drawMode === "line" || drawMode === "polygon") finishDraft();
   };
 
-  const geometryFeatures = features.filter(f => f.type === "line" || f.type === "polygon");
+  const geometryFeatures = features.filter((f) => {
+    if (f.type !== "line" && f.type !== "polygon") return false;
+    if (!f.coords || f.coords.length < 2) return false;
+    return f.coords.every((p) => Number.isFinite(p.lng) && Number.isFinite(p.lat));
+  });
   const assetFeatures = features.filter(f => f.type !== "line" && f.type !== "polygon");
   const syncedAssets = assetFeatures.filter(f => f.synced);
   const unsyncedAssets = assetFeatures.filter(f => !f.synced);
@@ -162,10 +172,16 @@ export function MapCanvas() {
   const syncedAssetsGeoJson = useMemo(() => {
     return {
       type: "FeatureCollection",
-      features: syncedAssets.map(f => {
-        const style = ASSET_STYLES[f.type as keyof typeof ASSET_STYLES];
-        return { type: "Feature", geometry: { type: "Point", coordinates: [f.coords[0].lng, f.coords[0].lat] }, properties: { id: f.id, type: f.type, icon: style?.icon || "📍", color: style?.hex || "#ffffff" } };
-      })
+      features: syncedAssets
+        .filter((f) => hasValidPoint(f.coords))
+        .map((f) => {
+          const style = ASSET_STYLES[f.type as keyof typeof ASSET_STYLES];
+          return {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [f.coords[0].lng, f.coords[0].lat] },
+            properties: { id: f.id, type: f.type, icon: style?.icon || "📍", color: style?.hex || "#ffffff" }
+          };
+        })
     };
   }, [syncedAssets]);
 
@@ -200,8 +216,16 @@ export function MapCanvas() {
         {/* ── CAMADAS CARTOGRÁFICAS (TOLERÂNCIA MÁXIMA A GEOMETRIAS) ── */}
         {layers.basegis && baseLayersData.map((layer) => {
           const sourceId = `source-${layer.id}`;
-          
-          let parsedData = typeof layer.geoJsonData === 'string' ? JSON.parse(layer.geoJsonData) : layer.geoJsonData;
+
+          let parsedData: any = null;
+          try {
+            parsedData = typeof layer.geoJsonData === "string"
+              ? JSON.parse(layer.geoJsonData)
+              : layer.geoJsonData;
+          } catch (error) {
+            console.error("Base layer com GeoJSON inválido:", layer.id, error);
+          }
+
           if (Array.isArray(parsedData)) parsedData = parsedData[0];
           const safeData = parsedData?.type === "FeatureCollection" ? parsedData : { type: "FeatureCollection", features: [] };
 
@@ -277,7 +301,7 @@ export function MapCanvas() {
 
         {layers.ativos && unsyncedAssets.map((feature) => {
           const style = ASSET_STYLES[feature.type as keyof typeof ASSET_STYLES];
-          if (!style || !feature.coords[0]) return null;
+          if (!style || !hasValidPoint(feature.coords)) return null;
           return (
             <Marker key={feature.id} longitude={feature.coords[0].lng} latitude={feature.coords[0].lat} anchor="bottom">
               <div className="relative group flex flex-col items-center cursor-pointer">
