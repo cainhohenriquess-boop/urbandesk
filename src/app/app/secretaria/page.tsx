@@ -33,16 +33,18 @@ function ProgressBar({ pct, status }: { pct: number; status: string }) {
 export default async function SecretariaPage({
   searchParams,
 }: {
-  searchParams: { p?: string };
+  searchParams: Promise<{ p?: string }>;
 }) {
   const session = await getServerSession(authOptions);
-  const periodo = searchParams.p || "30d";
+  const cookieStore = await cookies();
+  const resolvedSearchParams = await searchParams;
+  const periodo = resolvedSearchParams.p || "30d";
 
   // 🚀 LÓGICA DO MODO FANTASMA (IMPERSONATION)
   let tenantId = session?.user?.tenantId;
   
   if (session?.user?.role === "SUPERADMIN") {
-    const impersonatedId = cookies().get("impersonate_tenant")?.value;
+    const impersonatedId = cookieStore.get("impersonate_tenant")?.value;
     if (impersonatedId) {
       tenantId = impersonatedId; // O SuperAdmin assume a identidade da prefeitura!
     }

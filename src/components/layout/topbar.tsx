@@ -6,15 +6,16 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn, getInitials, formatRelativeTime } from "@/lib/utils";
 
-// ─────────────────────────────────────────────
-// Notificações Iniciais (Mock)
-// ─────────────────────────────────────────────
-const INITIAL_NOTIFICATIONS = [
-  { id:"1", title:"Novo ativo cadastrado",       body:"Equipe registrou Bueiro #A14 — Aldeota",     time: new Date(Date.now() - 1000 * 60 * 5).toISOString(),  read:false },
-  { id:"2", title:"Obra paralisada — Atenção",   body:"Drenagem Montese aguarda liberação de área", time: new Date(Date.now() - 1000 * 60 * 32).toISOString(), read:false },
-  { id:"3", title:"Relatório gerado",            body:"PDF do mês de Junho disponível para download",time: new Date(Date.now() - 1000 * 60 * 90).toISOString(), read:true  },
-  { id:"4", title:"Sincronização concluída",     body:"12 registros offline sincronizados com sucesso",time:new Date(Date.now() - 1000 * 60 * 180).toISOString(),read:true },
-];
+type NotificationItem = {
+  id: string;
+  title: string;
+  body: string;
+  time: string;
+  read: boolean;
+};
+
+// Estado inicial sem dados artificiais
+const INITIAL_NOTIFICATIONS: NotificationItem[] = [];
 
 // ─────────────────────────────────────────────
 // Breadcrumb automático baseado no pathname
@@ -50,7 +51,7 @@ function NotificationDropdown({
   onMarkAll, 
   onMarkOne 
 }: { 
-  notifications: typeof INITIAL_NOTIFICATIONS;
+  notifications: NotificationItem[];
   onClose: () => void;
   onMarkAll: () => void;
   onMarkOne: (id: string) => void;
@@ -112,13 +113,7 @@ function NotificationDropdown({
 // Dropdown de usuário
 // ─────────────────────────────────────────────
 function UserDropdown({ user, onClose }: { user: any; onClose: () => void }) {
-  
-  // Função para evitar erro 404 em rotas não criadas
-  const handleFeatureNotReady = (e: React.MouseEvent, feature: string) => {
-    e.preventDefault();
-    alert(`O módulo de ${feature} estará disponível na próxima atualização!`);
-    onClose();
-  };
+  const homeHref = user?.role === "SUPERADMIN" ? "/superadmin" : "/app";
 
   return (
     <div className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-xl border border-border bg-card shadow-map z-modal animate-fade-in">
@@ -131,20 +126,13 @@ function UserDropdown({ user, onClose }: { user: any; onClose: () => void }) {
       </div>
 
       <div className="p-1.5 space-y-0.5">
-        <a 
-          href="#"
-          onClick={(e) => handleFeatureNotReady(e, "Meu Perfil")}
+        <Link 
+          href={homeHref}
+          onClick={onClose}
           className="flex items-center rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
         >
-          Meu Perfil
-        </a>
-        <a 
-          href="#"
-          onClick={(e) => handleFeatureNotReady(e, "Preferências de Sistema")}
-          className="flex items-center rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-        >
-          Preferências
-        </a>
+          Início
+        </Link>
         <a 
           href="mailto:suporte@urbandesk.com.br"
           onClick={onClose}
@@ -180,8 +168,7 @@ export function Topbar() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUser,          setShowUser]          = useState(false);
   
-  // ✅ Estado das Notificações Elevado (Não apaga a memória ao fechar a janela)
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
 
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef  = useRef<HTMLDivElement>(null);

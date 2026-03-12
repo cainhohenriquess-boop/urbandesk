@@ -10,6 +10,7 @@ import { cookies } from "next/headers";
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    const cookieStore = await cookies();
     if (!session) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     // 🚀 LÓGICA DO MODO FANTASMA: Se for SuperAdmin, verifica o Cookie
     if (user.role === "SUPERADMIN") {
-      const impersonatedId = cookies().get("impersonate_tenant")?.value;
+      const impersonatedId = cookieStore.get("impersonate_tenant")?.value;
       if (impersonatedId) {
         targetTenantId = impersonatedId;
       } else {
@@ -86,6 +87,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    const cookieStore = await cookies();
     if (!session) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
@@ -95,7 +97,7 @@ export async function POST(req: NextRequest) {
 
     // 🚀 LÓGICA DO MODO FANTASMA
     if (user.role === "SUPERADMIN") {
-      const impersonatedId = cookies().get("impersonate_tenant")?.value;
+      const impersonatedId = cookieStore.get("impersonate_tenant")?.value;
       if (impersonatedId) targetTenantId = impersonatedId;
     }
 
@@ -134,6 +136,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    const cookieStore = await cookies();
     if (!session) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
@@ -143,7 +146,7 @@ export async function DELETE(req: NextRequest) {
 
     // 🚀 LÓGICA DO MODO FANTASMA
     if (user.role === "SUPERADMIN") {
-      const impersonatedId = cookies().get("impersonate_tenant")?.value;
+      const impersonatedId = cookieStore.get("impersonate_tenant")?.value;
       if (impersonatedId) currentTenantId = impersonatedId;
     }
 

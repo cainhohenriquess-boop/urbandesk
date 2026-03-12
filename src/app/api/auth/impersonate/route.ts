@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
+  const cookieStore = await cookies();
   const url = new URL(request.url);
   const tenantId = url.searchParams.get("tenantId");
 
@@ -15,12 +16,12 @@ export async function GET(request: Request) {
 
   // Se não passar ID da prefeitura, assumimos que o SuperAdmin quer SAIR do modo fantasma
   if (!tenantId) {
-    cookies().delete("impersonate_tenant");
+    cookieStore.delete("impersonate_tenant");
     return NextResponse.redirect(new URL("/superadmin", request.url));
   }
 
   // MÁGICA: Injeta o "impersonation_token" num cookie HTTP Only super seguro
-  cookies().set("impersonate_tenant", tenantId, { 
+  cookieStore.set("impersonate_tenant", tenantId, {
     path: "/", 
     httpOnly: true,
     sameSite: "lax"

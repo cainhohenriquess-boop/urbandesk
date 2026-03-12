@@ -47,6 +47,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const session = await getServerSession(authOptions);
+  const cookieStore = await cookies();
 
   if (!session) {
     redirect("/login");
@@ -62,7 +63,7 @@ export default async function AppLayout({
 
   // 🚀 LÓGICA DO MODO FANTASMA (IMPERSONATION)
   if (role === "SUPERADMIN") {
-    const impersonatedId = cookies().get("impersonate_tenant")?.value;
+    const impersonatedId = cookieStore.get("impersonate_tenant")?.value;
     if (impersonatedId) {
       isImpersonating = true;
       // Busca o nome real da prefeitura para a Sidebar ficar perfeita

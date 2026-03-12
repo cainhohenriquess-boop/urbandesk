@@ -48,9 +48,9 @@ function KpiCard({ label, value, change, up, icon, color, bg }: any) {
 export default async function SuperAdminPage({
   searchParams,
 }: {
-  searchParams?: { [key: string]: string | string[] | undefined };
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const safeParams = searchParams || {};
+  const safeParams = (await searchParams) || {};
   const q = typeof safeParams.q === "string" ? safeParams.q : "";
   const filterStatus = typeof safeParams.status === "string" ? safeParams.status : "";
   
