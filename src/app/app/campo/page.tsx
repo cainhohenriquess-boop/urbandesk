@@ -25,6 +25,23 @@ const ASSET_TYPES: { value: AssetType; label: string; desc: string }[] = [
   { value: "AREA",   label: "Área",   desc: "Lote, praça…" },
 ];
 
+function generateClientId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  return `asset-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
 export default function CampoPage() {
   const [tab, setTab]             = useState<"capturar" | "fila">("capturar");
   const [assetType, setAssetType] = useState<AssetType>("PONTO");
@@ -40,6 +57,7 @@ export default function CampoPage() {
   const [gpsError, setGpsError]   = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [queue, setQueue]         = useState<CapturedAsset[]>([]);
   const [isOnline, setIsOnline]   = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,7 +97,8 @@ export default function CampoPage() {
 
   // ✅ LIMPA A MEMÓRIA AO REMOVER FOTO
   const removePhoto = (index: number) => {
-    URL.revokeObjectURL(previews[index]); 
+    const preview = previews[index];
+    if (preview) URL.revokeObjectURL(preview);
     setPhotos((p) => p.filter((_, i) => i !== index));
     setPreviews((p) => p.filter((_, i) => i !== index));
   };
@@ -87,57 +106,67 @@ export default function CampoPage() {
   async function handleSubmit() {
     if (!name.trim()) return;
     setSubmitting(true);
+    setSubmitError(null);
 
-    let finalPhotoUrls: string[] = [];
+    try {
+      let finalPhotoUrls: string[] = [];
 
-    // ✅ PASSO 1: UPLOAD PARA O STORAGE VIA FORMDATA
-    if (isOnline && photos.length > 0) {
-      const formData = new FormData();
-      formData.append("module", "campo");
-      photos.forEach((file) => formData.append("files", file));
+      // ✅ PASSO 1: UPLOAD PARA O STORAGE VIA FORMDATA
+      if (isOnline && photos.length > 0) {
+        const formData = new FormData();
+        formData.append("module", "campo");
+        photos.forEach((file) => formData.append("files", file));
 
-      try {
-        const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
-        const uploadData = await uploadRes.json();
-        if (uploadData.success) {
-          finalPhotoUrls = uploadData.urls;
+        try {
+          const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+          const uploadData = await uploadRes.json().catch(() => null);
+          if (uploadRes.ok && uploadData?.success && Array.isArray(uploadData.urls)) {
+            finalPhotoUrls = uploadData.urls.filter((url: unknown): url is string => typeof url === "string");
+          } else {
+            console.error("Falha no upload:", uploadData);
+          }
+        } catch (err) {
+          console.error("Erro ao subir fotos:", err);
         }
-      } catch (err) {
-        console.error("Erro ao subir fotos:", err);
       }
-    }
 
-    // Se estiver offline ou falhar, salva uma string temporária
-    if (finalPhotoUrls.length === 0 && photos.length > 0) {
-      finalPhotoUrls = previews; 
-    }
-
-    // ✅ PASSO 2: SALVA NO POSTGRESQL APENAS AS URLs LEVES
-    const asset: CapturedAsset = {
-      id: crypto.randomUUID(), type: assetType, name: name.trim(),
-      note: note.trim(), lat: coords?.lat ?? null, lng: coords?.lng ?? null,
-      photos: finalPhotoUrls,
-      createdAt: new Date().toISOString(), sync: isOnline ? "syncing" : "pending",
-    };
-    
-    setQueue((prev) => [asset, ...prev]);
-
-    if (isOnline) {
-      try {
-        await fetch("/api/gis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(asset) });
-        setQueue((prev) => prev.map((a) => a.id === asset.id ? { ...a, sync: "synced" } : a));
-      } catch {
-        setQueue((prev) => prev.map((a) => a.id === asset.id ? { ...a, sync: "error" } : a));
+      // Se estiver offline ou falhar, salva uma string temporária
+      if (finalPhotoUrls.length === 0 && photos.length > 0) {
+        finalPhotoUrls = previews;
       }
-    }
 
-    // Reset Form
-    setName(""); setNote(""); 
-    previews.forEach(url => URL.revokeObjectURL(url)); // Limpa memória
-    setPhotos([]); setPreviews([]); 
-    setCoords(null);
-    setSubmitting(false); setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 3000);
+      // ✅ PASSO 2: SALVA NO POSTGRESQL APENAS AS URLs LEVES
+      const asset: CapturedAsset = {
+        id: generateClientId(), type: assetType, name: name.trim(),
+        note: note.trim(), lat: coords?.lat ?? null, lng: coords?.lng ?? null,
+        photos: finalPhotoUrls,
+        createdAt: new Date().toISOString(), sync: isOnline ? "syncing" : "pending",
+      };
+      
+      setQueue((prev) => [asset, ...prev]);
+
+      if (isOnline) {
+        try {
+          await fetch("/api/gis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(asset) });
+          setQueue((prev) => prev.map((a) => a.id === asset.id ? { ...a, sync: "synced" } : a));
+        } catch {
+          setQueue((prev) => prev.map((a) => a.id === asset.id ? { ...a, sync: "error" } : a));
+        }
+      }
+
+      // Reset Form
+      setName(""); setNote("");
+      previews.forEach((url) => URL.revokeObjectURL(url)); // Limpa memória
+      setPhotos([]); setPreviews([]);
+      setCoords(null);
+      setSubmitted(true);
+      setTimeout(() => setSubmitted(false), 3000);
+    } catch (error) {
+      console.error("Erro inesperado ao salvar ativo:", error);
+      setSubmitError("Falha ao processar envio. Tente novamente.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const pendingCount = queue.filter((a) => a.sync === "pending" || a.sync === "error").length;
@@ -182,6 +211,15 @@ export default function CampoPage() {
               <p className="text-sm text-accent-700 font-medium">
                 Ativo salvo! {isOnline ? "Enviado ao servidor com sucesso." : "Será sincronizado quando houver conexão."}
               </p>
+            </div>
+          )}
+
+          {submitError && (
+            <div className="flex items-center gap-3 rounded-xl border border-danger-200 bg-danger-50 p-4 animate-fade-in">
+              <svg className="h-5 w-5 text-danger-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M12 8v4m0 4h.01M22 12a10 10 0 11-20 0 10 10 0 0120 0z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <p className="text-sm text-danger-700 font-medium">{submitError}</p>
             </div>
           )}
 
