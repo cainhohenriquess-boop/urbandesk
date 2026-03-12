@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { getAccessBlockReason } from "@/lib/auth-shared";
 
 // ─────────────────────────────────────────────
 // Ícones
@@ -64,6 +65,10 @@ export default async function SuperAdminLayout({
   }
 
   const user = session.user as any;
+  const accessReason = getAccessBlockReason(user);
+  if (accessReason) {
+    redirect(`/login?error=${accessReason}`);
+  }
 
   return (
     <div className="app-shell">

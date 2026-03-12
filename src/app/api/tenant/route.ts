@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 
 // ─────────────────────────────────────────────
 // Schemas de Validação (Zod)
@@ -30,7 +31,14 @@ const updateTenantSchema = z.object({
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user?.role !== "SUPERADMIN") {
+    if (!session) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+    const reason = getAccessBlockReason(session.user);
+    if (reason) {
+      return NextResponse.json({ error: getAccessBlockMessage(reason), code: reason }, { status: 403 });
+    }
+    if (session.user?.role !== "SUPERADMIN") {
       return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
     }
 
@@ -71,7 +79,14 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user?.role !== "SUPERADMIN") {
+    if (!session) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+    const reason = getAccessBlockReason(session.user);
+    if (reason) {
+      return NextResponse.json({ error: getAccessBlockMessage(reason), code: reason }, { status: 403 });
+    }
+    if (session.user?.role !== "SUPERADMIN") {
       return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
     }
 
@@ -109,7 +124,14 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user?.role !== "SUPERADMIN") {
+    if (!session) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+    const reason = getAccessBlockReason(session.user);
+    if (reason) {
+      return NextResponse.json({ error: getAccessBlockMessage(reason), code: reason }, { status: 403 });
+    }
+    if (session.user?.role !== "SUPERADMIN") {
       return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
     }
 

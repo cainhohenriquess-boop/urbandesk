@@ -5,8 +5,9 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { cn, formatDate } from "@/lib/utils";
+import { getAccessBlockReason, type AppRole } from "@/lib/auth-shared";
 
-type Role = "SUPERADMIN" | "SECRETARIO" | "ENGENHEIRO" | "CAMPO";
+type Role = AppRole;
 
 // ─────────────────────────────────────────────
 // Itens de navegação por Role
@@ -82,13 +83,11 @@ export default async function AppLayout({
     }
   }
 
-  const isTrial      = !!trialEndsAt;
-  const trialExpired = trialEndsAt ? trialEndsAt < new Date() : false;
-
-  // Se o trial expirou e NÃO for o SuperAdmin inspecionando, bloqueia.
-  if (trialExpired && !isImpersonating) {
-    redirect("/login?error=trial_expired");
+  const accessReason = getAccessBlockReason(user);
+  if (accessReason) {
+    redirect(`/login?error=${accessReason}`);
   }
+  const isTrial = !!trialEndsAt;
 
   const daysLeft = trialEndsAt
     ? Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))

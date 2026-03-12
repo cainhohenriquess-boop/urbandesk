@@ -48,9 +48,12 @@ function IconMapPin({ className }: { className?: string }) {
 // ─────────────────────────────────────────────
 const ERROR_MESSAGES: Record<string, string> = {
   CredentialsSignin: "Usuário ou senha inválidos.",
-  unauthorized:      "Você não tem permissão para acessar esta área.",
-  trial_expired:     "O período de acesso da sua prefeitura expirou. Contate o suporte.",
-  default:           "Ocorreu um erro ao entrar. Tente novamente.",
+  unauthorized: "Você não tem permissão para acessar esta área.",
+  user_inactive: "Seu usuário está inativo. Contate o administrador.",
+  tenant_missing: "Seu usuário não está vinculado a uma prefeitura.",
+  tenant_inactive: "Sua prefeitura está inativa. Contate o suporte comercial.",
+  trial_expired: "O período de acesso da sua prefeitura expirou. Contate o suporte.",
+  default: "Ocorreu um erro ao entrar. Tente novamente.",
 };
 
 // ─────────────────────────────────────────────

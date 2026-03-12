@@ -3,6 +3,7 @@ import type { JWT } from "next-auth/jwt";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import type { AppRole, TenantLifecycleStatus } from "@/lib/auth-shared";
 
 // ─────────────────────────────────────────────
 // Tipos estendidos
@@ -10,29 +11,35 @@ import bcrypt from "bcryptjs";
 declare module "next-auth" {
   interface Session {
     user: {
-      id:          string;
-      name?:       string | null;
-      email?:      string | null;
-      image?:      string | null;
-      role:        string;
-      tenantId?:   string;
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+      role: AppRole;
+      isActive: boolean;
+      tenantId?: string;
       tenantName?: string;
+      tenantStatus?: TenantLifecycleStatus;
       trialEndsAt?: string;
     };
   }
   interface User {
-    role:        string;
-    tenantId?:   string;
+    role: AppRole;
+    isActive: boolean;
+    tenantId?: string;
     tenantName?: string;
+    tenantStatus?: TenantLifecycleStatus;
     trialEndsAt?: string;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
-    role?:        string;
-    tenantId?:    string;
-    tenantName?:  string;
+    role?: AppRole;
+    isActive?: boolean;
+    tenantId?: string;
+    tenantName?: string;
+    tenantStatus?: TenantLifecycleStatus;
     trialEndsAt?: string;
   }
 }
@@ -55,23 +62,24 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "Credenciais Institucionais",
       credentials: {
-        email:    { label: "E-mail", type: "email" },
-        password: { label: "Senha",  type: "password" },
+        email: { label: "E-mail", type: "email" },
+        password: { label: "Senha", type: "password" },
       },
 
       async authorize(credentials): Promise<User | null> {
         if (!credentials?.email || !credentials.password) return null;
+        const normalizedEmail = credentials.email.trim().toLowerCase();
 
         // Busca usuário com tenant
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email: normalizedEmail },
           include: {
             tenant: {
               select: {
-                id:          true,
-                name:        true,
+                id: true,
+                name: true,
+                status: true,
                 trialEndsAt: true,
-                status:      true,
               },
             },
           },
@@ -79,20 +87,19 @@ export const authOptions: NextAuthOptions = {
 
         if (!user || !user.passwordHash) return null;
 
-        // Tenant desativado
-        if (user.tenant && user.tenant.status === "CANCELADO") return null;
-
         // Valida senha
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
         if (!valid) return null;
 
         return {
-          id:          user.id,
-          name:        user.name,
-          email:       user.email,
-          role:        user.role,
-          tenantId:    user.tenantId ?? undefined,
-          tenantName:  user.tenant?.name ?? undefined,
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role as AppRole,
+          isActive: user.isActive,
+          tenantId: user.tenantId ?? undefined,
+          tenantName: user.tenant?.name ?? undefined,
+          tenantStatus: (user.tenant?.status as TenantLifecycleStatus | undefined) ?? undefined,
           trialEndsAt: user.tenant?.trialEndsAt?.toISOString() ?? undefined,
         };
       },
@@ -103,9 +110,11 @@ export const authOptions: NextAuthOptions = {
     // Persiste campos customizados no JWT
     async jwt({ token, user }): Promise<JWT> {
       if (user) {
-        token.role        = user.role;
-        token.tenantId    = user.tenantId;
-        token.tenantName  = user.tenantName;
+        token.role = user.role;
+        token.isActive = user.isActive;
+        token.tenantId = user.tenantId;
+        token.tenantName = user.tenantName;
+        token.tenantStatus = user.tenantStatus;
         token.trialEndsAt = user.trialEndsAt;
       }
       return token;
@@ -113,11 +122,26 @@ export const authOptions: NextAuthOptions = {
 
     // Expõe campos customizados na Session
     async session({ session, token }): Promise<Session> {
-      session.user.role        = token.role        ?? "CAMPO";
-      session.user.tenantId    = token.tenantId;
-      session.user.tenantName  = token.tenantName;
+      session.user.id = token.sub ?? "";
+      session.user.role = token.role ?? "CAMPO";
+      session.user.isActive = token.isActive ?? true;
+      session.user.tenantId = token.tenantId;
+      session.user.tenantName = token.tenantName;
+      session.user.tenantStatus = token.tenantStatus;
       session.user.trialEndsAt = token.trialEndsAt;
       return session;
+    },
+
+    // Evita open redirect fora do domínio da aplicação
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      try {
+        const target = new URL(url);
+        if (target.origin === baseUrl) return url;
+      } catch {
+        // URL inválida: segue para fallback seguro
+      }
+      return `${baseUrl}/app`;
     },
   },
 

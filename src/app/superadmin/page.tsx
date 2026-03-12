@@ -4,6 +4,9 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { getAccessBlockReason } from "@/lib/auth-shared";
 
 // ─────────────────────────────────────────────
 // Força a página a ser dinâmica (evita cache da Vercel)
@@ -66,6 +69,11 @@ export default async function SuperAdminPage({
   // ─────────────────────────────────────────────
   async function createTenantAction(formData: FormData) {
     "use server";
+    const session = await getServerSession(authOptions);
+    if (!session || session.user.role !== "SUPERADMIN") redirect("/login?error=unauthorized");
+    const reason = getAccessBlockReason(session.user);
+    if (reason) redirect(`/login?error=${reason}`);
+
     const name = formData.get("name") as string;
     const state = formData.get("state") as string;
     const plan = formData.get("plan") as string;
@@ -123,6 +131,11 @@ export default async function SuperAdminPage({
   // ─────────────────────────────────────────────
   async function uploadShapefileAction(formData: FormData) {
     "use server";
+    const session = await getServerSession(authOptions);
+    if (!session || session.user.role !== "SUPERADMIN") redirect("/login?error=unauthorized");
+    const reason = getAccessBlockReason(session.user);
+    if (reason) redirect(`/login?error=${reason}`);
+
     try {
       const shp = (await import("shpjs")).default;
       const file = formData.get("file") as File;
@@ -152,6 +165,11 @@ export default async function SuperAdminPage({
   // ─────────────────────────────────────────────
   async function deleteTenantAction(formData: FormData) {
     "use server";
+    const session = await getServerSession(authOptions);
+    if (!session || session.user.role !== "SUPERADMIN") redirect("/login?error=unauthorized");
+    const reason = getAccessBlockReason(session.user);
+    if (reason) redirect(`/login?error=${reason}`);
+
     const tenantId = formData.get("tenantId") as string;
     if (!tenantId) return;
 

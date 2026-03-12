@@ -1,19 +1,17 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
+import { getAccessBlockReason, getRoleHome } from "@/lib/auth-shared";
 
 export default async function AppTrafficController() {
   const session = await getServerSession(authOptions);
 
   if (!session) redirect("/login");
 
-  const role = session.user?.role;
+  const reason = getAccessBlockReason(session.user);
+  if (reason) {
+    redirect(`/login?error=${reason}`);
+  }
 
-  // O "Guarda de Trânsito" que manda cada um para sua casa
-  if (role === "SUPERADMIN") redirect("/superadmin");
-  if (role === "ENGENHEIRO") redirect("/app/projetos");
-  if (role === "CAMPO")      redirect("/app/campo");
-
-  // Padrão para Secretaria
-  redirect("/app/secretaria");
+  redirect(getRoleHome(session.user?.role));
 }

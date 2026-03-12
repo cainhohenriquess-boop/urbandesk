@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
+import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -10,15 +12,21 @@ export const dynamic = "force-dynamic";
 // ─────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
+    const cookieStore = await cookies();
     const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    if (!session) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
 
-    const user = session.user as any;
+    const reason = getAccessBlockReason(session.user);
+    if (reason) {
+      return NextResponse.json({ error: getAccessBlockMessage(reason), code: reason }, { status: 403 });
+    }
+
+    const user = session.user;
     const tenantId = user.tenantId;
 
     // Garante que o SuperAdmin possa ler os Shapefiles do Tenant que ele está inspecionando
-    const targetTenantId = user.role === "SUPERADMIN" 
-      ? (req.nextUrl.searchParams.get("tenantId") ?? tenantId) 
+    const targetTenantId = user.role === "SUPERADMIN"
+      ? (cookieStore.get("impersonate_tenant")?.value ?? req.nextUrl.searchParams.get("tenantId") ?? tenantId)
       : tenantId;
 
     if (!targetTenantId) {

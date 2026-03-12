@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
+import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 
 // ─────────────────────────────────────────────
 // GET /api/gis — Busca ativos GIS da nuvem (Respeitando Modo Fantasma)
@@ -12,10 +13,15 @@ export async function GET(req: NextRequest) {
     const session = await getServerSession(authOptions);
     const cookieStore = await cookies();
     if (!session) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const user = session.user as any;
+    const reason = getAccessBlockReason(session.user);
+    if (reason) {
+      return NextResponse.json({ error: getAccessBlockMessage(reason), code: reason }, { status: 403 });
+    }
+
+    const user = session.user;
     let targetTenantId = user.tenantId;
 
     // 🚀 LÓGICA DO MODO FANTASMA: Se for SuperAdmin, verifica o Cookie
@@ -89,10 +95,15 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
     const cookieStore = await cookies();
     if (!session) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const user = session.user as any;
+    const reason = getAccessBlockReason(session.user);
+    if (reason) {
+      return NextResponse.json({ error: getAccessBlockMessage(reason), code: reason }, { status: 403 });
+    }
+
+    const user = session.user;
     let targetTenantId = user.tenantId;
 
     // 🚀 LÓGICA DO MODO FANTASMA
@@ -101,7 +112,7 @@ export async function POST(req: NextRequest) {
       if (impersonatedId) targetTenantId = impersonatedId;
     }
 
-    if (!targetTenantId && user.role !== "SUPERADMIN") {
+    if (!targetTenantId) {
       return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
     }
 
@@ -138,10 +149,15 @@ export async function DELETE(req: NextRequest) {
     const session = await getServerSession(authOptions);
     const cookieStore = await cookies();
     if (!session) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const user = session.user as any;
+    const reason = getAccessBlockReason(session.user);
+    if (reason) {
+      return NextResponse.json({ error: getAccessBlockMessage(reason), code: reason }, { status: 403 });
+    }
+
+    const user = session.user;
     let currentTenantId = user.tenantId;
 
     // 🚀 LÓGICA DO MODO FANTASMA
@@ -157,7 +173,7 @@ export async function DELETE(req: NextRequest) {
     if (!asset) return NextResponse.json({ error: "Ativo não encontrado" }, { status: 404 });
     
     // Validação de Segurança
-    if (user.role !== "SUPERADMIN" && asset.tenantId !== currentTenantId) {
+    if (user.role !== "SUPERADMIN" && (!currentTenantId || asset.tenantId !== currentTenantId)) {
       return NextResponse.json({ error: "Não autorizado a remover ativos de outra prefeitura" }, { status: 403 });
     }
 

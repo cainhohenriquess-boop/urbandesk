@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { cookies } from "next/headers";
+import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 
 const MAX_FILES = 5;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -31,6 +35,24 @@ function inferExtension(file: File): string {
 
 export async function POST(request: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    const cookieStore = await cookies();
+    if (!session) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+    const reason = getAccessBlockReason(session.user);
+    if (reason) {
+      return NextResponse.json({ error: getAccessBlockMessage(reason), code: reason }, { status: 403 });
+    }
+
+    const tenantId = session.user.role === "SUPERADMIN"
+      ? (cookieStore.get("impersonate_tenant")?.value ?? session.user.tenantId)
+      : session.user.tenantId;
+
+    if (!tenantId) {
+      return NextResponse.json({ error: "Tenant não identificado para upload." }, { status: 400 });
+    }
+
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
 
@@ -46,7 +68,7 @@ export async function POST(request: Request) {
     const year = String(now.getUTCFullYear());
     const month = String(now.getUTCMonth() + 1).padStart(2, "0");
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads", year, month);
+    const uploadDir = path.join(process.cwd(), "public", "uploads", tenantId, year, month);
     await fs.mkdir(uploadDir, { recursive: true });
 
     const urls: string[] = [];
@@ -66,7 +88,7 @@ export async function POST(request: Request) {
       const fileBuffer = Buffer.from(await file.arrayBuffer());
 
       await fs.writeFile(absolutePath, fileBuffer);
-      urls.push(`/uploads/${year}/${month}/${fileName}`);
+      urls.push(`/uploads/${tenantId}/${year}/${month}/${fileName}`);
     }
 
     return NextResponse.json({ success: true, urls });
