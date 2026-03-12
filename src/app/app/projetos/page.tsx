@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DrawingToolbar } from "@/components/map/drawing-toolbar";
 import { LayerPanel } from "@/components/map/layer-panel";
@@ -16,6 +18,11 @@ type AssetTypeFilter = "ALL" | "PONTO" | "TRECHO" | "AREA";
 interface ProjectOption {
   id: string;
   label: string;
+}
+
+interface ProjectApiItem {
+  id: string;
+  name: string;
 }
 
 const ASSET_CATEGORIES: AssetCategory[] = [
@@ -229,7 +236,7 @@ function coordsToWkt(feature: DrawnFeature): string | null {
   return `POINT(${point.lng} ${point.lat})`;
 }
 
-function normalizeProjectOptions(rawFeatures: any[]): ProjectOption[] {
+function normalizeProjectOptionsFromFeatures(rawFeatures: any[]): ProjectOption[] {
   const byId = new Map<string, ProjectOption>();
 
   rawFeatures.forEach((feature) => {
@@ -245,6 +252,34 @@ function normalizeProjectOptions(rawFeatures: any[]): ProjectOption[] {
   });
 
   return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function normalizeProjectOptionsFromApi(rawProjects: unknown): ProjectOption[] {
+  if (!Array.isArray(rawProjects)) return [];
+
+  return rawProjects
+    .map((project) => {
+      const item = project as Partial<ProjectApiItem>;
+      const id = typeof item.id === "string" ? item.id : null;
+      const name = typeof item.name === "string" ? item.name.trim() : "";
+      if (!id || !name) return null;
+      return { id, label: name };
+    })
+    .filter((option): option is ProjectOption => option !== null)
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function mergeProjectOptions(primary: ProjectOption[], fallback: ProjectOption[]): ProjectOption[] {
+  const merged = new Map<string, ProjectOption>();
+
+  primary.forEach((project) => merged.set(project.id, project));
+  fallback.forEach((project) => {
+    if (!merged.has(project.id)) {
+      merged.set(project.id, project);
+    }
+  });
+
+  return Array.from(merged.values()).sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function toDrawnFeature(rawFeature: any): DrawnFeature | null {
@@ -273,6 +308,14 @@ function toDrawnFeature(rawFeature: any): DrawnFeature | null {
 }
 
 export default function ProjetosPage() {
+  const searchParams = useSearchParams();
+  const queryProjectId = useMemo(() => {
+    const raw = searchParams.get("projectId");
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }, [searchParams]);
+
   const {
     features,
     unsavedCount,
@@ -288,10 +331,16 @@ export default function ProjetosPage() {
   const [refreshTick, setRefreshTick] = useState(0);
 
   const [assetTypeFilter, setAssetTypeFilter] = useState<AssetTypeFilter>("ALL");
-  const [projectFilter, setProjectFilter] = useState<string>("ALL");
+  const [projectFilter, setProjectFilter] = useState<string>(queryProjectId ?? "ALL");
   const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
 
   const syncDisabled = unsavedCount === 0 || isSyncing;
+
+  useEffect(() => {
+    if (queryProjectId) {
+      setProjectFilter(queryProjectId);
+    }
+  }, [queryProjectId]);
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -302,9 +351,10 @@ export default function ProjetosPage() {
       if (assetTypeFilter !== "ALL") params.set("type", assetTypeFilter);
       if (projectFilter !== "ALL") params.set("projectId", projectFilter);
 
-      const [gisRes, baseRes] = await Promise.all([
+      const [gisRes, baseRes, projectsRes] = await Promise.all([
         fetch(`/api/gis?${params.toString()}`, { signal }),
         fetch("/api/baselayers", { signal }),
+        fetch("/api/projects?limit=500&includeCancelled=false", { signal }),
       ]);
 
       if (!gisRes.ok) {
@@ -315,7 +365,11 @@ export default function ProjetosPage() {
         throw new Error(`Falha ao carregar baselayers (${baseRes.status})`);
       }
 
-      const [gisJson, baseJson] = await Promise.all([gisRes.json(), baseRes.json()]);
+      const [gisJson, baseJson, projectsJson] = await Promise.all([
+        gisRes.json(),
+        baseRes.json(),
+        projectsRes.ok ? projectsRes.json().catch(() => null) : Promise.resolve(null),
+      ]);
 
       const rawFeatures = Array.isArray(gisJson?.data?.features) ? gisJson.data.features : [];
       const parsedFeatures = rawFeatures
@@ -323,7 +377,14 @@ export default function ProjetosPage() {
         .filter((feature: DrawnFeature | null): feature is DrawnFeature => feature !== null);
 
       replaceFeatures(parsedFeatures);
-      setProjectOptions(normalizeProjectOptions(rawFeatures));
+      const apiProjects = normalizeProjectOptionsFromApi((projectsJson as { data?: unknown } | null)?.data);
+      const inferredProjects = normalizeProjectOptionsFromFeatures(rawFeatures);
+      const mergedProjects = mergeProjectOptions(apiProjects, inferredProjects);
+
+      setProjectOptions(mergedProjects);
+      if (projectFilter !== "ALL" && !mergedProjects.some((project) => project.id === projectFilter)) {
+        setProjectFilter("ALL");
+      }
 
       const normalizedLayers: BaseLayerData[] = Array.isArray(baseJson?.data)
         ? baseJson.data
@@ -473,6 +534,13 @@ export default function ProjetosPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/app/projetos/gestao"
+            className="rounded-md border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-bold text-brand-700 hover:bg-brand-100"
+          >
+            CRUD de Projetos
+          </Link>
+
           <select
             value={assetTypeFilter}
             onChange={(event) => setAssetTypeFilter(event.target.value as AssetTypeFilter)}

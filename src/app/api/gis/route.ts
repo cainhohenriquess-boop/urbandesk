@@ -13,6 +13,12 @@ function isAllowedAssetType(value: string): value is AllowedAssetType {
   return (ALLOWED_ASSET_TYPES as readonly string[]).includes(value);
 }
 
+function parseBoundedInt(raw: string | null, fallback: number, max: number): number {
+  const parsed = Number.parseInt(raw ?? "", 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(max, parsed);
+}
+
 function toPlainObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return { ...(value as Record<string, unknown>) };
@@ -119,7 +125,7 @@ export async function GET(req: NextRequest) {
     const type = sanitizeOptionalString(searchParams.get("type"));
     const projectId = sanitizeOptionalString(searchParams.get("projectId"));
     const subType = sanitizeOptionalString(searchParams.get("subType"));
-    const limit = Math.min(2000, Number(searchParams.get("limit") ?? 1000));
+    const limit = parseBoundedInt(searchParams.get("limit"), 1000, 2000);
 
     const where: Prisma.AssetWhereInput = { tenantId: targetTenantId };
     if (type && isAllowedAssetType(type)) where.type = type;
@@ -229,6 +235,27 @@ export async function POST(req: NextRequest) {
     const geomWkt = sanitizeOptionalString(body?.geomWkt);
     const projectId = sanitizeOptionalString(body?.projectId);
     const descriptionFromBody = sanitizeOptionalString(body?.description);
+
+    if (projectId) {
+      const project = await prisma.project.findFirst({
+        where: { id: projectId, tenantId: targetTenantId },
+        select: { id: true, status: true },
+      });
+
+      if (!project) {
+        return NextResponse.json(
+          { error: "Projeto informado nao pertence ao tenant autenticado." },
+          { status: 400 }
+        );
+      }
+
+      if (project.status === "CANCELADO") {
+        return NextResponse.json(
+          { error: "Nao e permitido vincular ativos a projeto cancelado." },
+          { status: 409 }
+        );
+      }
+    }
 
     const rawAttributes = toPlainObject(body?.attributes);
     const requestPhotos = sanitizePhotoArray(body?.photos);

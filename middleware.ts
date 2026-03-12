@@ -22,6 +22,7 @@ const ROUTE_PERMISSIONS: Record<string, Role[]> = {
   "/app/secretaria": ["SUPERADMIN", "SECRETARIO"],
   "/app/projetos": ["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"],
   "/app/campo": ["SUPERADMIN", "SECRETARIO", "ENGENHEIRO", "CAMPO"],
+  "/api/projects": ["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"],
   "/api/tenant": ["SUPERADMIN"],
   "/api/auth/impersonate": ["SUPERADMIN"],
 };
