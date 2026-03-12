@@ -67,6 +67,7 @@ interface MapStore {
   resetUnsaved: () => void;
 
   features:      DrawnFeature[];
+  replaceFeatures: (features: DrawnFeature[]) => void;
   updateFeature: (id: string, data: Partial<DrawnFeature>) => void;
   removeFeature: (id: string) => void;
   clearFeatures: () => void;
@@ -146,6 +147,14 @@ export const useMapStore = create<MapStore>()(
       resetUnsaved: () => set({ unsavedCount: 0 }),
 
       features: [],
+      replaceFeatures: (features) =>
+        set({
+          features,
+          unsavedCount: 0,
+          selectedId: null,
+          draftPoints: [],
+          pendingFeature: null,
+        }),
 
       updateFeature: (id, data) =>
         set((s) => ({
@@ -187,7 +196,8 @@ export const useMapStore = create<MapStore>()(
 
       finishDraft: () => {
         const { drawMode, draftPoints } = get();
-        if (draftPoints.length > 1 && (drawMode === "line" || drawMode === "polygon")) {
+        const minPoints = drawMode === "polygon" ? 3 : 2;
+        if (draftPoints.length >= minPoints && (drawMode === "line" || drawMode === "polygon")) {
           set({ 
             pendingFeature: { type: drawMode, coords: draftPoints, color: "#3b82f6" },
             draftPoints: [] 

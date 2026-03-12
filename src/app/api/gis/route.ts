@@ -39,6 +39,47 @@ function normalizeClientRef(value: unknown): string | null {
   return trimmed.slice(0, 120);
 }
 
+function parseCoordPair(rawPair: string): [number, number] | null {
+  const [lngRaw, latRaw] = rawPair.trim().split(/\s+/);
+  const lng = Number(lngRaw);
+  const lat = Number(latRaw);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+  return [lng, lat];
+}
+
+function parseCoordList(raw: string): [number, number][] {
+  return raw
+    .split(",")
+    .map((pair) => parseCoordPair(pair))
+    .filter((pair): pair is [number, number] => pair !== null);
+}
+
+function parseWktGeometry(wkt: string | null): Record<string, unknown> | null {
+  if (!wkt || typeof wkt !== "string") return null;
+  const normalized = wkt.trim();
+
+  const pointMatch = normalized.match(/^POINT\s*\((.+)\)$/i);
+  if (pointMatch) {
+    const point = parseCoordPair(pointMatch[1]);
+    return point ? { type: "Point", coordinates: point } : null;
+  }
+
+  const lineMatch = normalized.match(/^LINESTRING\s*\((.+)\)$/i);
+  if (lineMatch) {
+    const coordinates = parseCoordList(lineMatch[1]);
+    return coordinates.length >= 2 ? { type: "LineString", coordinates } : null;
+  }
+
+  const polygonMatch = normalized.match(/^POLYGON\s*\(\((.+)\)\)$/i);
+  if (polygonMatch) {
+    const firstRingRaw = polygonMatch[1].split(/\)\s*,\s*\(/)[0];
+    const ring = parseCoordList(firstRingRaw);
+    return ring.length >= 3 ? { type: "Polygon", coordinates: [ring] } : null;
+  }
+
+  return null;
+}
+
 // GET /api/gis - Fetch GIS assets (supports superadmin impersonation)
 export async function GET(req: NextRequest) {
   try {
@@ -75,11 +116,25 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = req.nextUrl;
-    const type = searchParams.get("type");
+    const type = sanitizeOptionalString(searchParams.get("type"));
+    const projectId = sanitizeOptionalString(searchParams.get("projectId"));
+    const subType = sanitizeOptionalString(searchParams.get("subType"));
     const limit = Math.min(2000, Number(searchParams.get("limit") ?? 1000));
 
-    const where: Record<string, unknown> = { tenantId: targetTenantId };
-    if (type) where.type = type;
+    const where: Prisma.AssetWhereInput = { tenantId: targetTenantId };
+    if (type && isAllowedAssetType(type)) where.type = type;
+    if (projectId) where.projectId = projectId;
+    if (subType) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        {
+          attributes: {
+            path: ["subType"],
+            equals: subType,
+          },
+        },
+      ];
+    }
 
     const assets = await prisma.asset.findMany({
       where,
@@ -92,6 +147,7 @@ export async function GET(req: NextRequest) {
         geomWkt: true,
         attributes: true,
         projectId: true,
+        project: { select: { name: true } },
       },
     });
 
@@ -99,13 +155,14 @@ export async function GET(req: NextRequest) {
       type: "FeatureCollection",
       features: assets.map((asset) => ({
         type: "Feature",
-        geometry: null,
+        geometry: parseWktGeometry(asset.geomWkt),
         properties: {
           id: asset.id,
           name: asset.name,
           type: asset.type,
           geomWkt: asset.geomWkt,
           projectId: asset.projectId,
+          projectName: asset.project?.name ?? null,
           ...((asset.attributes as object) ?? {}),
         },
       })),
@@ -185,7 +242,7 @@ export async function POST(req: NextRequest) {
 
     const normalizedAttributes: Record<string, unknown> = { ...rawAttributes };
     if (clientRef) normalizedAttributes.clientRef = clientRef;
-    if (!normalizedAttributes.source) normalizedAttributes.source = "campo";
+    if (clientRef && !normalizedAttributes.source) normalizedAttributes.source = "campo";
     if (photos.length > 0) normalizedAttributes.photos = photos;
 
     const description =
