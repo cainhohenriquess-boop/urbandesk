@@ -93,6 +93,7 @@ export default function CampoPage() {
     // ✅ PASSO 1: UPLOAD PARA O STORAGE VIA FORMDATA
     if (isOnline && photos.length > 0) {
       const formData = new FormData();
+      formData.append("module", "campo");
       photos.forEach((file) => formData.append("files", file));
 
       try {
