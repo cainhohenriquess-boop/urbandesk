@@ -49,6 +49,14 @@ function isApiRoute(pathname: string): boolean {
   return pathname.startsWith("/api/");
 }
 
+function isBillingRoute(pathname: string): boolean {
+  return pathname === "/app/billing" || pathname.startsWith("/app/billing/");
+}
+
+function isBillingRedirectReason(reason: string): boolean {
+  return reason === "tenant_inactive" || reason === "trial_expired";
+}
+
 function isPublicRoute(pathname: string): boolean {
   if (PUBLIC_PAGE_ROUTES.includes(pathname)) return true;
   return NEXTAUTH_PUBLIC_API_PREFIXES.some(
@@ -77,6 +85,12 @@ function redirectToBlockedLogin(req: NextRequest, reason: string): NextResponse 
   const loginUrl = new URL("/login", req.url);
   loginUrl.searchParams.set("error", reason);
   return NextResponse.redirect(loginUrl);
+}
+
+function redirectToBilling(req: NextRequest, reason: string): NextResponse {
+  const billingUrl = new URL("/app/billing", req.url);
+  billingUrl.searchParams.set("reason", reason);
+  return NextResponse.redirect(billingUrl);
 }
 
 function redirectToRoleHome(req: NextRequest, role?: string | null): NextResponse {
@@ -109,6 +123,9 @@ export default withAuth(
       // Usuário autenticado e válido não precisa permanecer na tela de login
       if (pathname === "/login" && token) {
         const reason = getAccessBlockReason(token);
+        if (reason && isBillingRedirectReason(reason)) {
+          return redirectToBilling(req, reason);
+        }
         if (!reason) return redirectToRoleHome(req, token.role);
       }
       return NextResponse.next();
@@ -127,6 +144,12 @@ export default withAuth(
     if (blockReason) {
       if (isApiRoute(pathname)) {
         return jsonUnauthorized(getAccessBlockMessage(blockReason), 403);
+      }
+      if (isBillingRedirectReason(blockReason)) {
+        if (isBillingRoute(pathname)) {
+          return NextResponse.next();
+        }
+        return redirectToBilling(req, blockReason);
       }
       return redirectToBlockedLogin(req, blockReason);
     }

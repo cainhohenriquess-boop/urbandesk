@@ -10,6 +10,9 @@ export default async function AppTrafficController() {
 
   const reason = getAccessBlockReason(session.user);
   if (reason) {
+    if (reason === "tenant_inactive" || reason === "trial_expired") {
+      redirect(`/app/billing?reason=${reason}`);
+    }
     redirect(`/login?error=${reason}`);
   }
 
