@@ -140,10 +140,8 @@ async function main() {
       data: {
         name:      a.name,
         type:      a.type,
-        lat:       a.lat,
-        lng:       a.lng,
         geomWkt:   `POINT(${a.lng} ${a.lat})`,
-        attributes:{},
+        attributes:{ lat: a.lat, lng: a.lng },
         tenantId:  fortaleza.id,
         projectId: a.projectId,
       },

@@ -17,7 +17,7 @@ function coordsToWkt(feature: DrawnFeature): string {
   if (feature.type === "polygon") {
     const pts = feature.coords.map((c) => `${c.lng} ${c.lat}`);
     if (pts[0] !== pts[pts.length - 1]) pts.push(pts[0]);
-    return `POLYGON((-(${pts.join(", ")}))`; 
+    return `POLYGON((${pts.join(", ")}))`; 
   }
   return `POINT(${feature.coords[0].lng} ${feature.coords[0].lat})`;
 }

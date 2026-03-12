@@ -305,7 +305,7 @@ export default function CampoPage() {
               </svg>
               <div>
                 <p className="text-sm font-medium">Nenhum ativo capturado</p>
-                <p className="text-xs mt-0.5">Vá para "Capturar Ativo" para começar</p>
+                <p className="text-xs mt-0.5">Vá para &quot;Capturar Ativo&quot; para começar</p>
               </div>
             </div>
           ) : (

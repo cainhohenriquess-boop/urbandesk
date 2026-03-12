@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ data: tenant }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Dados inválidos", details: error.errors }, { status: 400 });
+      return NextResponse.json({ error: "Dados inválidos", details: error.issues }, { status: 400 });
     }
     console.error("[TENANT_POST_ERROR]", error);
     return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
@@ -126,7 +126,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ data: tenant });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Dados inválidos", details: error.errors }, { status: 400 });
+      return NextResponse.json({ error: "Dados inválidos", details: error.issues }, { status: 400 });
     }
     console.error("[TENANT_PATCH_ERROR]", error);
     return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });

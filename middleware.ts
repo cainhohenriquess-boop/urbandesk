@@ -28,7 +28,11 @@ const PUBLIC_ROUTES = [
 ];
 
 function isPublicRoute(pathname: string): boolean {
-  return PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
+  return PUBLIC_ROUTES.some((route) => {
+    if (route === "/") return pathname === "/";
+    if (route === "/api/auth") return pathname === route || pathname.startsWith(`${route}/`);
+    return pathname === route || pathname.startsWith(`${route}/`);
+  });
 }
 
 function getRequiredRoles(pathname: string): Role[] | null {
@@ -68,12 +72,10 @@ export default withAuth(
     }
 
     // 3. Verifica expiração do Trial (somente para rotas /app/*)
-    // Refatorado: Redireciona para /app/billing em vez de /login, evitando loop infinito de UX.
-    if (pathname.startsWith("/app") && !pathname.startsWith("/app/billing") && token.trialEndsAt) {
+    if (pathname.startsWith("/app") && token.trialEndsAt) {
       const trialEnd = new Date(token.trialEndsAt);
       if (trialEnd < new Date()) {
-        // Trial expirado: redireciona para página de pagamento/aviso
-        return NextResponse.redirect(new URL("/app/billing?reason=trial_expired", req.url));
+        return NextResponse.redirect(new URL("/login?error=trial_expired", req.url));
       }
     }
 

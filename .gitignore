@@ -1,2 +1,5 @@
 node_modules/
 .next/
+tsconfig.tsbuildinfo
+public/sw.js
+public/workbox-*.js

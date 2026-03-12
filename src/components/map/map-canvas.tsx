@@ -98,7 +98,7 @@ export function MapCanvas() {
     addDraftPoint({ lng: e.lngLat.lng, lat: e.lngLat.lat });
   };
 
-  const handleContextMenu = (e: MapLayerMouseEvent) => {
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (drawMode === "line" || drawMode === "polygon") finishDraft();
   };

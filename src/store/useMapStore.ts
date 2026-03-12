@@ -216,8 +216,15 @@ export const useMapStore = create<MapStore>()(
         basegis: true, ativos: true, obras: true, alertas: true, viario: true, topografia: false,
       },
       toggleLayer: (key) => set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
-      setLayerAll: (visible) => set((s) => ({
-        layers: Object.fromEntries(Object.keys(s.layers).map((k) => [k, visible])) as LayerVisibility,
+      setLayerAll: (visible) => set(() => ({
+        layers: {
+          basegis: visible,
+          ativos: visible,
+          obras: visible,
+          alertas: visible,
+          viario: visible,
+          topografia: visible,
+        },
       })),
 
       // 🚀 MAPA INICIA NO MODO GIS (Fundo Branco)

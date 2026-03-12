@@ -450,7 +450,7 @@ export default async function SuperAdminPage({
                 <select name="type" className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500 transition-all">
                   <option value="BOUNDARY">Limites do Município / Setores (Polígonos)</option>
                   <option value="STREETS">Formato das Ruas / Buffers (Polígonos)</option>
-                  <option value="STREET_NAMES">Nomes das Ruas (Linhas com coluna 'name')</option>
+                  <option value="STREET_NAMES">Nomes das Ruas (Linhas com coluna &apos;name&apos;)</option>
                 </select>
               </div>
 
