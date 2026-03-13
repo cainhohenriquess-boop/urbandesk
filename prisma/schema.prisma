@@ -98,6 +98,147 @@ enum ProjectTechnicalArea {
   ZELADORIA
 }
 
+enum ProjectContractStatus {
+  MINUTA
+  VIGENTE
+  ADITIVADO
+  SUSPENSO
+  ENCERRADO
+  RESCINDIDO
+}
+
+enum ProjectFundingSourceType {
+  TESOURO
+  CONVENIO
+  OPERACAO_CREDITO
+  FINANCIAMENTO
+  EMENDA
+  FUNDO
+  PARCERIA
+  OUTRO
+}
+
+enum ProjectFundingSourceStatus {
+  PLANEJADA
+  ASSEGURADA
+  LIBERADA
+  BLOQUEADA
+  ENCERRADA
+}
+
+enum ProjectPhaseStatus {
+  PLANEJADA
+  PRONTA
+  EM_EXECUCAO
+  BLOQUEADA
+  CONCLUIDA
+  CANCELADA
+}
+
+enum ProjectMilestoneStatus {
+  PLANEJADO
+  EM_RISCO
+  CONCLUIDO
+  ATRASADO
+  CANCELADO
+}
+
+enum ProjectDocumentType {
+  TERMO_REFERENCIA
+  PROJETO_BASICO
+  PROJETO_EXECUTIVO
+  MEMORIAL
+  ORCAMENTO
+  CRONOGRAMA
+  LICITACAO
+  CONTRATO
+  ADITIVO
+  MEDICAO
+  RELATORIO
+  LICENCA
+  MAPA
+  FOTO
+  OUTRO
+}
+
+enum ProjectMeasurementStatus {
+  RASCUNHO
+  SUBMETIDA
+  APROVADA
+  REJEITADA
+  PAGA
+}
+
+enum ProjectInspectionType {
+  ROTINA
+  MEDICAO
+  QUALIDADE
+  SEGURANCA
+  RECEBIMENTO
+  EXTRAORDINARIA
+}
+
+enum ProjectInspectionStatus {
+  AGENDADA
+  REALIZADA
+  CANCELADA
+}
+
+enum ProjectIssueType {
+  BLOQUEIO
+  NAO_CONFORMIDADE
+  SEGURANCA
+  AMBIENTAL
+  PRAZO
+  FINANCEIRO
+  DOCUMENTAL
+  COMUNITARIO
+  TECNICO
+  OUTRO
+}
+
+enum ProjectIssueStatus {
+  ABERTA
+  EM_TRATATIVA
+  RESOLVIDA
+  FECHADA
+  CANCELADA
+}
+
+enum ProjectRiskCategory {
+  PRAZO
+  FINANCEIRO
+  TECNICO
+  AMBIENTAL
+  JURIDICO
+  OPERACIONAL
+  SOCIAL
+  SEGURANCA
+  CLIMATICO
+  OUTRO
+}
+
+enum ProjectRiskStatus {
+  IDENTIFICADO
+  MONITORANDO
+  MITIGADO
+  MATERIALIZADO
+  ENCERRADO
+}
+
+enum ProjectRiskProbability {
+  BAIXA
+  MEDIA
+  ALTA
+}
+
+enum ProjectRiskImpact {
+  BAIXO
+  MEDIO
+  ALTO
+  CRITICO
+}
+
 enum AssetType {
   PONTO
   TRECHO
@@ -128,12 +269,22 @@ model Tenant {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  users      User[]
-  projects   Project[]
-  assets     Asset[]
-  invoices   Invoice[]
-  baseLayers BaseLayer[]
-  auditLogs  AuditLog[]
+  users                 User[]
+  projects              Project[]
+  projectContracts      ProjectContract[]
+  projectFundingSources ProjectFundingSource[]
+  projectPhases         ProjectPhase[]
+  projectMilestones     ProjectMilestone[]
+  projectDocuments      ProjectDocument[]
+  projectMeasurements   ProjectMeasurement[]
+  projectInspections    ProjectInspection[]
+  projectIssues         ProjectIssue[]
+  projectRisks          ProjectRisk[]
+  projectComments       ProjectComment[]
+  assets                Asset[]
+  invoices              Invoice[]
+  baseLayers            BaseLayer[]
+  auditLogs             AuditLog[]
 
   @@map("tenants")
 }
@@ -164,12 +315,22 @@ model User {
   updatedAt    DateTime @updatedAt
   tenantId     String?
 
-  tenant            Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  assetLogs         AssetLog[]
-  sessions          UserSession[]
-  auditLogs         AuditLog[]
-  managedProjects   Project[]     @relation("ProjectManager")
-  inspectedProjects Project[]     @relation("ProjectInspector")
+  tenant                      Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assetLogs                   AssetLog[]
+  sessions                    UserSession[]
+  auditLogs                   AuditLog[]
+  managedProjects             Project[]            @relation("ProjectManager")
+  inspectedProjects           Project[]            @relation("ProjectInspector")
+  phaseOwnerships             ProjectPhase[]       @relation("ProjectPhaseOwner")
+  milestoneResponsibilities   ProjectMilestone[]   @relation("ProjectMilestoneResponsible")
+  uploadedProjectDocuments    ProjectDocument[]    @relation("ProjectDocumentUploader")
+  projectMeasurementsTaken    ProjectMeasurement[] @relation("ProjectMeasurementMeasuredBy")
+  projectMeasurementsApproved ProjectMeasurement[] @relation("ProjectMeasurementApprovedBy")
+  projectInspectionsLed       ProjectInspection[]  @relation("ProjectInspectionInspector")
+  projectIssuesReported       ProjectIssue[]       @relation("ProjectIssueReportedBy")
+  projectIssuesAssigned       ProjectIssue[]       @relation("ProjectIssueAssignedTo")
+  projectRiskOwnerships       ProjectRisk[]        @relation("ProjectRiskOwner")
+  projectCommentsAuthored     ProjectComment[]     @relation("ProjectCommentAuthor")
 
   @@index([tenantId])
   @@map("users")
@@ -220,10 +381,20 @@ model Project {
   updatedAt             DateTime                 @updatedAt
   tenantId              String
 
-  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  manager   User?   @relation("ProjectManager", fields: [managerId], references: [id], onDelete: SetNull)
-  inspector User?   @relation("ProjectInspector", fields: [inspectorId], references: [id], onDelete: SetNull)
-  assets    Asset[]
+  tenant         Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  manager        User?                  @relation("ProjectManager", fields: [managerId], references: [id], onDelete: SetNull)
+  inspector      User?                  @relation("ProjectInspector", fields: [inspectorId], references: [id], onDelete: SetNull)
+  contracts      ProjectContract[]
+  fundingSources ProjectFundingSource[]
+  phases         ProjectPhase[]
+  milestones     ProjectMilestone[]
+  documents      ProjectDocument[]
+  measurements   ProjectMeasurement[]
+  inspections    ProjectInspection[]
+  issues         ProjectIssue[]
+  risks          ProjectRisk[]
+  comments       ProjectComment[]
+  assets         Asset[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -250,14 +421,386 @@ model Asset {
   tenantId    String
   projectId   String?
 
-  tenant  Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  project Project?   @relation(fields: [projectId], references: [id])
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project Project?       @relation(fields: [projectId], references: [id])
+  issues  ProjectIssue[]
   logs    AssetLog[]
 
   @@index([tenantId])
   @@index([projectId])
   @@index([type])
   @@map("assets")
+}
+
+model ProjectContract {
+  id                  String                @id @default(cuid())
+  contractNumber      String?
+  title               String
+  description         String?
+  contractorName      String?
+  contractorTaxId     String?
+  procurementProcess  String?
+  procurementModality String?
+  signedAt            DateTime?
+  startDate           DateTime?
+  endDate             DateTime?
+  status              ProjectContractStatus @default(MINUTA)
+  contractedAmount    Decimal?              @db.Decimal(15, 2)
+  additiveAmount      Decimal?              @db.Decimal(15, 2)
+  measuredAmount      Decimal?              @db.Decimal(15, 2)
+  paidAmount          Decimal?              @db.Decimal(15, 2)
+  notes               String?
+  metadata            Json                  @default("{}")
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  tenantId            String
+  projectId           String
+
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project      Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  documents    ProjectDocument[]
+  measurements ProjectMeasurement[]
+  comments     ProjectComment[]
+
+  @@unique([tenantId, contractNumber])
+  @@index([tenantId, projectId])
+  @@index([projectId, status])
+  @@map("project_contracts")
+}
+
+model ProjectFundingSource {
+  id                String                     @id @default(cuid())
+  sourceName        String
+  sourceType        ProjectFundingSourceType
+  status            ProjectFundingSourceStatus @default(PLANEJADA)
+  budgetCode        String?
+  externalReference String?
+  plannedAmount     Decimal?                   @db.Decimal(15, 2)
+  committedAmount   Decimal?                   @db.Decimal(15, 2)
+  releasedAmount    Decimal?                   @db.Decimal(15, 2)
+  usedAmount        Decimal?                   @db.Decimal(15, 2)
+  startDate         DateTime?
+  endDate           DateTime?
+  isPrimary         Boolean                    @default(false)
+  metadata          Json                       @default("{}")
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  tenantId          String
+  projectId         String
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, projectId])
+  @@index([projectId, sourceType])
+  @@index([projectId, status])
+  @@map("project_funding_sources")
+}
+
+model ProjectPhase {
+  id                   String                @id @default(cuid())
+  code                 String?
+  name                 String
+  description          String?
+  technicalArea        ProjectTechnicalArea?
+  sequence             Int
+  status               ProjectPhaseStatus    @default(PLANEJADA)
+  plannedStartDate     DateTime?
+  plannedEndDate       DateTime?
+  actualStartDate      DateTime?
+  actualEndDate        DateTime?
+  physicalProgressPct  Int                   @default(0)
+  financialProgressPct Int                   @default(0)
+  ownerId              String?
+  metadata             Json                  @default("{}")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  tenantId             String
+  projectId            String
+
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project      Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner        User?                @relation("ProjectPhaseOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  milestones   ProjectMilestone[]
+  documents    ProjectDocument[]
+  measurements ProjectMeasurement[]
+  inspections  ProjectInspection[]
+  issues       ProjectIssue[]
+  risks        ProjectRisk[]
+  comments     ProjectComment[]
+
+  @@unique([projectId, sequence])
+  @@unique([projectId, code])
+  @@index([tenantId, projectId])
+  @@index([projectId, status])
+  @@index([ownerId])
+  @@map("project_phases")
+}
+
+model ProjectMilestone {
+  id                String                 @id @default(cuid())
+  title             String
+  description       String?
+  status            ProjectMilestoneStatus @default(PLANEJADO)
+  targetDate        DateTime?
+  completedAt       DateTime?
+  responsibleUserId String?
+  metadata          Json                   @default("{}")
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  tenantId          String
+  projectId         String
+  phaseId           String?
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase           ProjectPhase?    @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  responsibleUser User?            @relation("ProjectMilestoneResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+  comments        ProjectComment[]
+
+  @@index([tenantId, projectId])
+  @@index([projectId, status])
+  @@index([phaseId, targetDate])
+  @@index([responsibleUserId])
+  @@map("project_milestones")
+}
+
+model ProjectDocument {
+  id            String              @id @default(cuid())
+  title         String
+  description   String?
+  documentType  ProjectDocumentType @default(OUTRO)
+  fileName      String
+  storageKey    String
+  fileUrl       String?
+  mimeType      String?
+  fileSize      Int?
+  documentDate  DateTime?
+  isPublic      Boolean             @default(false)
+  metadata      Json                @default("{}")
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  tenantId      String
+  projectId     String
+  phaseId       String?
+  contractId    String?
+  measurementId String?
+  inspectionId  String?
+  uploadedById  String?
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase       ProjectPhase?       @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  contract    ProjectContract?    @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  measurement ProjectMeasurement? @relation(fields: [measurementId], references: [id], onDelete: SetNull)
+  inspection  ProjectInspection?  @relation(fields: [inspectionId], references: [id], onDelete: SetNull)
+  uploadedBy  User?               @relation("ProjectDocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, projectId])
+  @@index([projectId, documentType])
+  @@index([tenantId, isPublic])
+  @@index([phaseId])
+  @@index([contractId])
+  @@index([measurementId])
+  @@index([inspectionId])
+  @@index([uploadedById])
+  @@map("project_documents")
+}
+
+model ProjectMeasurement {
+  id                   String                   @id @default(cuid())
+  measurementNumber    Int
+  referenceMonth       DateTime?
+  periodStart          DateTime?
+  periodEnd            DateTime?
+  measuredAt           DateTime?
+  status               ProjectMeasurementStatus @default(RASCUNHO)
+  physicalProgressPct  Int                      @default(0)
+  financialProgressPct Int                      @default(0)
+  measuredAmount       Decimal?                 @db.Decimal(15, 2)
+  approvedAmount       Decimal?                 @db.Decimal(15, 2)
+  paidAmount           Decimal?                 @db.Decimal(15, 2)
+  notes                String?
+  metadata             Json                     @default("{}")
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  tenantId             String
+  projectId            String
+  phaseId              String?
+  contractId           String?
+  measuredById         String?
+  approvedById         String?
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase       ProjectPhase?       @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  contract    ProjectContract?    @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  measuredBy  User?               @relation("ProjectMeasurementMeasuredBy", fields: [measuredById], references: [id], onDelete: SetNull)
+  approvedBy  User?               @relation("ProjectMeasurementApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  documents   ProjectDocument[]
+  inspections ProjectInspection[]
+  comments    ProjectComment[]
+
+  @@unique([projectId, measurementNumber])
+  @@index([tenantId, projectId])
+  @@index([projectId, status])
+  @@index([contractId])
+  @@index([phaseId])
+  @@index([measuredById])
+  @@index([approvedById])
+  @@map("project_measurements")
+}
+
+model ProjectInspection {
+  id              String                  @id @default(cuid())
+  inspectionType  ProjectInspectionType   @default(ROTINA)
+  status          ProjectInspectionStatus @default(AGENDADA)
+  scheduledAt     DateTime?
+  occurredAt      DateTime?
+  location        String?
+  summary         String?
+  findings        String?
+  recommendations String?
+  metadata        Json                    @default("{}")
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  tenantId        String
+  projectId       String
+  phaseId         String?
+  measurementId   String?
+  inspectorId     String?
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase       ProjectPhase?       @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  measurement ProjectMeasurement? @relation(fields: [measurementId], references: [id], onDelete: SetNull)
+  inspector   User?               @relation("ProjectInspectionInspector", fields: [inspectorId], references: [id], onDelete: SetNull)
+  documents   ProjectDocument[]
+  issues      ProjectIssue[]
+  comments    ProjectComment[]
+
+  @@index([tenantId, projectId])
+  @@index([projectId, status])
+  @@index([projectId, inspectionType])
+  @@index([phaseId])
+  @@index([measurementId])
+  @@index([inspectorId, occurredAt])
+  @@map("project_inspections")
+}
+
+model ProjectIssue {
+  id              String             @id @default(cuid())
+  title           String
+  description     String?
+  issueType       ProjectIssueType   @default(OUTRO)
+  status          ProjectIssueStatus @default(ABERTA)
+  priority        ProjectPriority    @default(MEDIA)
+  dueDate         DateTime?
+  resolvedAt      DateTime?
+  resolutionNotes String?
+  metadata        Json               @default("{}")
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  tenantId        String
+  projectId       String
+  phaseId         String?
+  inspectionId    String?
+  assetId         String?
+  reportedById    String?
+  assignedToId    String?
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase      ProjectPhase?      @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  inspection ProjectInspection? @relation(fields: [inspectionId], references: [id], onDelete: SetNull)
+  asset      Asset?             @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  reportedBy User?              @relation("ProjectIssueReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
+  assignedTo User?              @relation("ProjectIssueAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  comments   ProjectComment[]
+
+  @@index([tenantId, projectId])
+  @@index([projectId, status])
+  @@index([projectId, priority])
+  @@index([phaseId])
+  @@index([inspectionId])
+  @@index([assetId])
+  @@index([reportedById])
+  @@index([assignedToId])
+  @@map("project_issues")
+}
+
+model ProjectRisk {
+  id              String                 @id @default(cuid())
+  title           String
+  description     String?
+  category        ProjectRiskCategory    @default(OUTRO)
+  status          ProjectRiskStatus      @default(IDENTIFICADO)
+  probability     ProjectRiskProbability @default(MEDIA)
+  impact          ProjectRiskImpact      @default(MEDIO)
+  mitigationPlan  String?
+  contingencyPlan String?
+  reviewDate      DateTime?
+  metadata        Json                   @default("{}")
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  tenantId        String
+  projectId       String
+  phaseId         String?
+  ownerId         String?
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project  Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase    ProjectPhase?    @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  owner    User?            @relation("ProjectRiskOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  comments ProjectComment[]
+
+  @@index([tenantId, projectId])
+  @@index([projectId, status])
+  @@index([projectId, category])
+  @@index([phaseId])
+  @@index([ownerId])
+  @@map("project_risks")
+}
+
+model ProjectComment {
+  id            String   @id @default(cuid())
+  body          String
+  isInternal    Boolean  @default(true)
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenantId      String
+  projectId     String
+  authorId      String?
+  phaseId       String?
+  contractId    String?
+  milestoneId   String?
+  measurementId String?
+  inspectionId  String?
+  issueId       String?
+  riskId        String?
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author      User?               @relation("ProjectCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  phase       ProjectPhase?       @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  contract    ProjectContract?    @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  milestone   ProjectMilestone?   @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  measurement ProjectMeasurement? @relation(fields: [measurementId], references: [id], onDelete: SetNull)
+  inspection  ProjectInspection?  @relation(fields: [inspectionId], references: [id], onDelete: SetNull)
+  issue       ProjectIssue?       @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  risk        ProjectRisk?        @relation(fields: [riskId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, projectId, createdAt])
+  @@index([authorId, createdAt])
+  @@index([phaseId])
+  @@index([contractId])
+  @@index([milestoneId])
+  @@index([measurementId])
+  @@index([inspectionId])
+  @@index([issueId])
+  @@index([riskId])
+  @@map("project_comments")
 }
 
 model AssetLog {

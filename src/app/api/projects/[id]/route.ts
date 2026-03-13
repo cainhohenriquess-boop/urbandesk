@@ -9,10 +9,15 @@ import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit";
 import { enforceRequestRateLimit } from "@/lib/rate-limit";
 import { requireJsonContentType } from "@/lib/request-guards";
+import {
+  PROJECT_PRIORITY_VALUES,
+  PROJECT_STATUS_VALUES,
+  PROJECT_TYPE_VALUES,
+} from "@/lib/project-portfolio";
 
-const PROJECT_STATUSES = ["PLANEJADO", "EM_ANDAMENTO", "PARALISADO", "CONCLUIDO", "CANCELADO"] as const;
 const ALLOWED_ROLES = new Set(["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"]);
 const tenantIdSchema = z.string().cuid();
+const projectIdSchema = z.string().cuid();
 
 const nullableDateSchema = z.preprocess(
   (value) => (value === "" || value === undefined || value === null ? null : value),
@@ -24,14 +29,31 @@ const nullableNumberSchema = z.preprocess(
   z.coerce.number().finite().nonnegative().nullable()
 );
 
+const nullableTrimmedString = (max: number) =>
+  z.preprocess(
+    (value) => {
+      if (value === "" || value === undefined || value === null) return null;
+      return typeof value === "string" ? value.trim() : value;
+    },
+    z.string().max(max).nullable()
+  );
+
 const updateProjectSchema = z
   .object({
+    code: nullableTrimmedString(40).optional(),
     name: z.string().trim().min(3).max(140).optional(),
-    description: z.string().trim().max(2000).nullable().optional(),
-    status: z.enum(PROJECT_STATUSES).optional(),
-    budget: nullableNumberSchema.optional(),
-    startDate: nullableDateSchema.optional(),
-    endDate: nullableDateSchema.optional(),
+    description: nullableTrimmedString(2000).optional(),
+    status: z.enum(PROJECT_STATUS_VALUES).optional(),
+    projectType: z.preprocess(
+      (value) => (value === "" || value === undefined || value === null ? null : value),
+      z.enum(PROJECT_TYPE_VALUES).nullable()
+    ).optional(),
+    responsibleDepartment: nullableTrimmedString(120).optional(),
+    neighborhood: nullableTrimmedString(120).optional(),
+    priority: z.enum(PROJECT_PRIORITY_VALUES).optional(),
+    estimatedBudget: nullableNumberSchema.optional(),
+    plannedStartDate: nullableDateSchema.optional(),
+    plannedEndDate: nullableDateSchema.optional(),
     completionPct: z.coerce.number().int().min(0).max(100).optional(),
     geomWkt: z.string().trim().max(120000).nullable().optional(),
   })
@@ -39,17 +61,28 @@ const updateProjectSchema = z
   .refine((value) => Object.keys(value).length > 0, {
     message: "Informe ao menos um campo para atualizar.",
   });
-const projectIdSchema = z.string().cuid();
 
 function serializeProject(project: {
   id: string;
+  code: string | null;
   name: string;
   description: string | null;
   status: string;
+  projectType: string | null;
+  responsibleDepartment: string | null;
+  neighborhood: string | null;
+  district: string | null;
+  region: string | null;
+  priority: string;
   budget: Prisma.Decimal | null;
+  estimatedBudget: Prisma.Decimal | null;
   startDate: Date | null;
   endDate: Date | null;
+  plannedStartDate: Date | null;
+  plannedEndDate: Date | null;
   completionPct: number;
+  physicalProgressPct: number;
+  operationalStatus: string;
   geomWkt: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -58,6 +91,7 @@ function serializeProject(project: {
   return {
     ...project,
     budget: project.budget ? Number(project.budget) : null,
+    estimatedBudget: project.estimatedBudget ? Number(project.estimatedBudget) : null,
   };
 }
 
@@ -150,6 +184,44 @@ async function resolveProjectId(context: ProjectRouteContext): Promise<string> {
   return parsed.success ? parsed.data : "";
 }
 
+async function validateDuplicateProject(
+  tenantId: string,
+  payload: { name?: string; code?: string | null },
+  excludeId: string
+) {
+  if (payload.name !== undefined) {
+    const duplicateByName = await prisma.project.findFirst({
+      where: {
+        tenantId,
+        id: { not: excludeId },
+        name: { equals: payload.name, mode: "insensitive" },
+      },
+      select: { id: true },
+    });
+
+    if (duplicateByName) {
+      return "Já existe um projeto com este nome neste tenant.";
+    }
+  }
+
+  if (payload.code) {
+    const duplicateByCode = await prisma.project.findFirst({
+      where: {
+        tenantId,
+        id: { not: excludeId },
+        code: { equals: payload.code, mode: "insensitive" },
+      },
+      select: { id: true },
+    });
+
+    if (duplicateByCode) {
+      return "Já existe um projeto com este código neste tenant.";
+    }
+  }
+
+  return null;
+}
+
 export async function GET(req: NextRequest, context: ProjectRouteContext) {
   try {
     const rateLimitResponse = enforceRequestRateLimit(req, {
@@ -215,49 +287,63 @@ export async function PATCH(req: NextRequest, context: ProjectRouteContext) {
     const body = await req.json();
     const payload = updateProjectSchema.parse(body);
 
-    const nextStartDate = payload.startDate !== undefined ? payload.startDate : existing.startDate;
-    const nextEndDate = payload.endDate !== undefined ? payload.endDate : existing.endDate;
+    const nextStartDate =
+      payload.plannedStartDate !== undefined ? payload.plannedStartDate : existing.plannedStartDate;
+    const nextEndDate =
+      payload.plannedEndDate !== undefined ? payload.plannedEndDate : existing.plannedEndDate;
 
     const dateError = validateProjectDates(nextStartDate, nextEndDate);
     if (dateError) {
       return NextResponse.json({ error: dateError }, { status: 400 });
     }
 
-    if (payload.name !== undefined) {
-      const duplicate = await prisma.project.findFirst({
-        where: {
-          tenantId: tenantContext.tenantId,
-          id: { not: existing.id },
-          name: { equals: payload.name, mode: "insensitive" },
-        },
-        select: { id: true },
-      });
-
-      if (duplicate) {
-        return NextResponse.json(
-          { error: "Já existe um projeto com este nome neste tenant." },
-          { status: 409 }
-        );
-      }
+    const duplicateMessage = await validateDuplicateProject(
+      tenantContext.tenantId,
+      {
+        name: payload.name,
+        code: payload.code ?? undefined,
+      },
+      existing.id
+    );
+    if (duplicateMessage) {
+      return NextResponse.json({ error: duplicateMessage }, { status: 409 });
     }
+
+    const estimatedBudget =
+      payload.estimatedBudget === undefined
+        ? undefined
+        : payload.estimatedBudget === null
+          ? null
+          : new Prisma.Decimal(payload.estimatedBudget);
 
     const updated = await prisma.project.update({
       where: { id: existing.id },
       data: {
+        ...(payload.code !== undefined ? { code: payload.code } : {}),
         ...(payload.name !== undefined ? { name: payload.name } : {}),
         ...(payload.description !== undefined ? { description: payload.description } : {}),
         ...(payload.status !== undefined ? { status: payload.status } : {}),
-        ...(payload.budget !== undefined
+        ...(payload.projectType !== undefined ? { projectType: payload.projectType } : {}),
+        ...(payload.responsibleDepartment !== undefined
+          ? { responsibleDepartment: payload.responsibleDepartment }
+          : {}),
+        ...(payload.neighborhood !== undefined ? { neighborhood: payload.neighborhood } : {}),
+        ...(payload.priority !== undefined ? { priority: payload.priority } : {}),
+        ...(estimatedBudget !== undefined
+          ? { estimatedBudget, budget: estimatedBudget }
+          : {}),
+        ...(payload.plannedStartDate !== undefined
+          ? { plannedStartDate: payload.plannedStartDate, startDate: payload.plannedStartDate }
+          : {}),
+        ...(payload.plannedEndDate !== undefined
+          ? { plannedEndDate: payload.plannedEndDate, endDate: payload.plannedEndDate }
+          : {}),
+        ...(payload.completionPct !== undefined
           ? {
-              budget:
-                payload.budget === null
-                  ? null
-                  : new Prisma.Decimal(payload.budget),
+              completionPct: payload.completionPct,
+              physicalProgressPct: payload.completionPct,
             }
           : {}),
-        ...(payload.startDate !== undefined ? { startDate: payload.startDate } : {}),
-        ...(payload.endDate !== undefined ? { endDate: payload.endDate } : {}),
-        ...(payload.completionPct !== undefined ? { completionPct: payload.completionPct } : {}),
         ...(payload.geomWkt !== undefined ? { geomWkt: payload.geomWkt } : {}),
       },
       include: { _count: { select: { assets: true } } },
@@ -279,6 +365,8 @@ export async function PATCH(req: NextRequest, context: ProjectRouteContext) {
         changedFields: Object.keys(payload),
         previousStatus: existing.status,
         nextStatus: updated.status,
+        previousCode: existing.code,
+        nextCode: updated.code,
       },
     });
 

@@ -1,68 +1,62 @@
-"use client";
+﻿"use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ProjectPortfolioFilters } from "@/components/projetos/project-portfolio-filters";
+import { ProjectPortfolioForm } from "@/components/projetos/project-portfolio-form";
+import { ProjectPortfolioList } from "@/components/projetos/project-portfolio-list";
+import { ProjectPortfolioMetrics } from "@/components/projetos/project-portfolio-metrics";
+import type {
+  PortfolioViewMode,
+  ProjectPortfolioFiltersState,
+  ProjectPortfolioFormState,
+  ProjectPortfolioItem,
+  ProjectPortfolioResponse,
+  ProjectPortfolioSummary,
+} from "@/components/projetos/project-portfolio-model";
 
-type ProjectStatus =
-  | "PLANEJADO"
-  | "EM_ANDAMENTO"
-  | "PARALISADO"
-  | "CONCLUIDO"
-  | "CANCELADO";
+const EMPTY_FILTERS: ProjectPortfolioFiltersState = {
+  search: "",
+  status: "ALL",
+  department: "",
+  projectType: "ALL",
+  neighborhood: "",
+  priority: "ALL",
+  deadline: "ALL",
+  budgetMin: "",
+  budgetMax: "",
+  includeCancelled: false,
+};
 
-interface ProjectItem {
-  id: string;
-  name: string;
-  description: string | null;
-  status: ProjectStatus;
-  budget: number | null;
-  startDate: string | null;
-  endDate: string | null;
-  completionPct: number;
-  geomWkt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  _count?: { assets: number };
-}
+const EMPTY_SUMMARY: ProjectPortfolioSummary = {
+  totalProjects: 0,
+  delayedProjects: 0,
+  inExecutionProjects: 0,
+  completedProjects: 0,
+  consolidatedBudget: 0,
+};
 
-interface ProjectsResponse {
-  data: ProjectItem[];
-  total: number;
-  page: number;
-  perPage: number;
-  pages: number;
-}
+const EMPTY_OPTIONS: ProjectPortfolioResponse["filterOptions"] = {
+  departments: [],
+  neighborhoods: [],
+  types: [],
+  priorities: [],
+  statuses: [],
+};
 
-interface ProjectFormState {
-  id: string | null;
-  name: string;
-  description: string;
-  status: ProjectStatus;
-  budget: string;
-  startDate: string;
-  endDate: string;
-  completionPct: string;
-  geomWkt: string;
-}
-
-const STATUS_OPTIONS: Array<{ value: ProjectStatus; label: string }> = [
-  { value: "PLANEJADO", label: "Planejado" },
-  { value: "EM_ANDAMENTO", label: "Em andamento" },
-  { value: "PARALISADO", label: "Paralisado" },
-  { value: "CONCLUIDO", label: "Concluído" },
-  { value: "CANCELADO", label: "Cancelado" },
-];
-
-const EMPTY_FORM: ProjectFormState = {
+const EMPTY_FORM: ProjectPortfolioFormState = {
   id: null,
+  code: "",
   name: "",
   description: "",
   status: "PLANEJADO",
-  budget: "",
-  startDate: "",
-  endDate: "",
+  projectType: "",
+  responsibleDepartment: "",
+  neighborhood: "",
+  priority: "MEDIA",
+  estimatedBudget: "",
+  plannedStartDate: "",
+  plannedEndDate: "",
   completionPct: "0",
-  geomWkt: "",
 };
 
 function formatDateInput(raw: string | null): string {
@@ -72,130 +66,174 @@ function formatDateInput(raw: string | null): string {
   return date.toISOString().slice(0, 10);
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || Number.isNaN(value)) return "-";
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
-}
-
-function validateForm(form: ProjectFormState): string | null {
+function validateForm(form: ProjectPortfolioFormState): string | null {
   if (form.name.trim().length < 3) {
     return "Nome deve ter pelo menos 3 caracteres.";
   }
 
   const completion = Number(form.completionPct);
-  if (
-    !Number.isFinite(completion) ||
-    !Number.isInteger(completion) ||
-    completion < 0 ||
-    completion > 100
-  ) {
-    return "Percentual deve ser inteiro entre 0 e 100.";
+  if (!Number.isFinite(completion) || completion < 0 || completion > 100) {
+    return "Avanço deve estar entre 0 e 100%.";
   }
 
   if (
-    form.startDate &&
-    form.endDate &&
-    new Date(form.endDate).getTime() < new Date(form.startDate).getTime()
+    form.plannedStartDate &&
+    form.plannedEndDate &&
+    new Date(form.plannedEndDate).getTime() < new Date(form.plannedStartDate).getTime()
   ) {
     return "Data final não pode ser anterior à data inicial.";
   }
 
-  if (form.budget && (!Number.isFinite(Number(form.budget)) || Number(form.budget) < 0)) {
-    return "Orçamento inválido.";
+  if (
+    form.estimatedBudget.trim() &&
+    (!Number.isFinite(Number(form.estimatedBudget)) || Number(form.estimatedBudget) < 0)
+  ) {
+    return "Orçamento estimado inválido.";
   }
 
   return null;
 }
 
+function toForm(project: ProjectPortfolioItem): ProjectPortfolioFormState {
+  return {
+    id: project.id,
+    code: project.code ?? "",
+    name: project.name,
+    description: project.description ?? "",
+    status: project.status,
+    projectType: project.projectType ?? "",
+    responsibleDepartment: project.responsibleDepartment ?? "",
+    neighborhood: project.neighborhood ?? "",
+    priority: project.priority,
+    estimatedBudget:
+      project.estimatedBudget === null && project.budget === null
+        ? ""
+        : String(project.estimatedBudget ?? project.budget ?? ""),
+    plannedStartDate: formatDateInput(project.plannedStartDate ?? project.startDate),
+    plannedEndDate: formatDateInput(project.plannedEndDate ?? project.endDate),
+    completionPct: String(project.completionPct),
+  };
+}
+
 export function ProjectPortfolioClient() {
-  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [projects, setProjects] = useState<ProjectPortfolioItem[]>([]);
+  const [summary, setSummary] = useState<ProjectPortfolioSummary>(EMPTY_SUMMARY);
+  const [options, setOptions] =
+    useState<ProjectPortfolioResponse["filterOptions"]>(EMPTY_OPTIONS);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
-
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | ProjectStatus>("ALL");
-  const [includeCancelled, setIncludeCancelled] = useState(false);
-
+  const [viewMode, setViewMode] = useState<PortfolioViewMode>("table");
+  const [filters, setFilters] = useState<ProjectPortfolioFiltersState>(EMPTY_FILTERS);
+  const [form, setForm] = useState<ProjectPortfolioFormState>(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const [form, setForm] = useState<ProjectFormState>(EMPTY_FORM);
-
-  const isEditing = !!form.id;
+  const isEditing = Boolean(form.id);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setFetchError(null);
 
     try {
       const params = new URLSearchParams({
         page: String(page),
-        limit: "25",
-        includeCancelled: includeCancelled ? "true" : "false",
+        limit: "18",
+        includeCancelled: filters.includeCancelled ? "true" : "false",
       });
 
-      if (search.trim()) params.set("q", search.trim());
-      if (statusFilter !== "ALL") params.set("status", statusFilter);
+      if (filters.search.trim()) params.set("q", filters.search.trim());
+      if (filters.status !== "ALL") params.set("status", filters.status);
+      if (filters.department) params.set("department", filters.department);
+      if (filters.projectType !== "ALL") params.set("projectType", filters.projectType);
+      if (filters.neighborhood) params.set("neighborhood", filters.neighborhood);
+      if (filters.priority !== "ALL") params.set("priority", filters.priority);
+      if (filters.deadline !== "ALL") params.set("deadline", filters.deadline);
+      if (filters.budgetMin.trim()) params.set("budgetMin", filters.budgetMin.trim());
+      if (filters.budgetMax.trim()) params.set("budgetMax", filters.budgetMax.trim());
 
-      const response = await fetch(`/api/projects?${params.toString()}`);
-      const payload = (await response.json()) as ProjectsResponse | { error?: string };
+      const response = await fetch(`/api/projects?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as
+        | ProjectPortfolioResponse
+        | { error?: string };
 
       if (!response.ok) {
         throw new Error(
-          (payload as { error?: string }).error ?? "Falha ao carregar projetos."
+          (payload as { error?: string }).error ?? "Falha ao carregar a carteira."
         );
       }
 
-      const parsed = payload as ProjectsResponse;
+      const parsed = payload as ProjectPortfolioResponse;
       setProjects(parsed.data);
+      setSummary(parsed.summary);
+      setOptions(parsed.filterOptions);
       setTotal(parsed.total);
       setPages(parsed.pages);
-    } catch (err) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : "Erro ao carregar projetos.");
+    } catch (error) {
+      console.error(error);
+      setFetchError(
+        error instanceof Error ? error.message : "Erro ao carregar a carteira."
+      );
       setProjects([]);
+      setSummary(EMPTY_SUMMARY);
       setTotal(0);
       setPages(1);
     } finally {
       setLoading(false);
     }
-  }, [includeCancelled, page, search, statusFilter]);
+  }, [filters, page]);
 
   useEffect(() => {
     void loadProjects();
   }, [loadProjects]);
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const updateFilters = useCallback(
+    (patch: Partial<ProjectPortfolioFiltersState>) => {
+      setFilters((current) => ({ ...current, ...patch }));
+      setPage(1);
+    },
+    []
+  );
+
+  const handleResetFilters = useCallback(() => {
+    setFilters(EMPTY_FILTERS);
+    setPage(1);
+  }, []);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const validationError = validateForm(form);
     if (validationError) {
-      setError(validationError);
+      setSubmitError(validationError);
       return;
     }
 
     setSaving(true);
-    setError(null);
+    setSubmitError(null);
 
     try {
       const body = {
+        code: form.code.trim() || null,
         name: form.name.trim(),
         description: form.description.trim() || null,
         status: form.status,
-        budget: form.budget.trim() ? Number(form.budget) : null,
-        startDate: form.startDate || null,
-        endDate: form.endDate || null,
+        projectType: form.projectType || null,
+        responsibleDepartment: form.responsibleDepartment.trim() || null,
+        neighborhood: form.neighborhood.trim() || null,
+        priority: form.priority,
+        estimatedBudget: form.estimatedBudget.trim() ? Number(form.estimatedBudget) : null,
+        plannedStartDate: form.plannedStartDate || null,
+        plannedEndDate: form.plannedEndDate || null,
         completionPct: Number(form.completionPct),
-        geomWkt: form.geomWkt.trim() || null,
       };
 
-      const endpoint = isEditing ? `/api/projects/${form.id}` : "/api/projects";
-      const method = isEditing ? "PATCH" : "POST";
+      const endpoint = form.id ? `/api/projects/${form.id}` : "/api/projects";
+      const method = form.id ? "PATCH" : "POST";
 
       const response = await fetch(endpoint, {
         method,
@@ -211,388 +249,86 @@ export function ProjectPortfolioClient() {
       setForm(EMPTY_FORM);
       setPage(1);
       await loadProjects();
-    } catch (err) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : "Erro ao salvar projeto.");
+    } catch (error) {
+      console.error(error);
+      setSubmitError(error instanceof Error ? error.message : "Erro ao salvar projeto.");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleEdit = (project: ProjectItem) => {
-    setForm({
-      id: project.id,
-      name: project.name,
-      description: project.description ?? "",
-      status: project.status,
-      budget: project.budget === null ? "" : String(project.budget),
-      startDate: formatDateInput(project.startDate),
-      endDate: formatDateInput(project.endDate),
-      completionPct: String(project.completionPct),
-      geomWkt: project.geomWkt ?? "",
-    });
-    setError(null);
-  };
-
-  const handleDelete = async (project: ProjectItem) => {
-    const assetsCount = project._count?.assets ?? 0;
-    const safeMode = assetsCount > 0 ? "soft" : "hard";
-    const confirmation =
-      safeMode === "soft"
-        ? `Este projeto possui ${assetsCount} ativo(s). Ele será cancelado (soft delete). Continuar?`
-        : "Excluir projeto definitivamente?";
-
-    if (!window.confirm(confirmation)) return;
-
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/projects/${project.id}?mode=${safeMode}`, {
-        method: "DELETE",
-      });
-
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(payload?.error ?? "Falha ao excluir projeto.");
-      }
-
-      if (form.id === project.id) {
-        setForm(EMPTY_FORM);
-      }
-
-      await loadProjects();
-    } catch (err) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : "Erro ao excluir projeto.");
+  const handleEdit = useCallback((project: ProjectPortfolioItem) => {
+    setForm(toForm(project));
+    setSubmitError(null);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  };
+  }, []);
 
-  const activeFilters = useMemo(() => {
+  const activeFilterLabels = useMemo(() => {
     return [
-      search.trim() ? `Busca: ${search.trim()}` : null,
-      statusFilter !== "ALL" ? `Status: ${statusFilter}` : null,
-      includeCancelled ? "Inclui cancelados" : null,
-    ].filter((item): item is string => !!item);
-  }, [includeCancelled, search, statusFilter]);
+      filters.search.trim() ? `Busca: ${filters.search.trim()}` : null,
+      filters.status !== "ALL" ? `Status: ${filters.status}` : null,
+      filters.department ? `Secretaria: ${filters.department}` : null,
+      filters.projectType !== "ALL" ? `Tipo: ${filters.projectType}` : null,
+      filters.neighborhood ? `Bairro: ${filters.neighborhood}` : null,
+      filters.priority !== "ALL" ? `Prioridade: ${filters.priority}` : null,
+      filters.deadline !== "ALL" ? `Prazo: ${filters.deadline}` : null,
+      filters.budgetMin.trim() ? `Min: R$ ${filters.budgetMin.trim()}` : null,
+      filters.budgetMax.trim() ? `Máx: R$ ${filters.budgetMax.trim()}` : null,
+      filters.includeCancelled ? "Inclui cancelados" : null,
+    ].filter((item): item is string => Boolean(item));
+  }, [filters]);
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-border bg-card p-4 shadow-card">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h2 className="font-display text-lg font-700 text-foreground">
-              Carteira operacional
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Liste, filtre, crie e ajuste projetos sem sair da carteira.
-            </p>
-          </div>
+      <ProjectPortfolioMetrics summary={summary} loading={loading} />
 
-          <div className="rounded-full bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700">
-            {total} projeto(s)
-          </div>
+      <ProjectPortfolioFilters
+        filters={filters}
+        options={options}
+        onChange={updateFilters}
+        onReset={handleResetFilters}
+      />
+
+      {activeFilterLabels.length > 0 ? (
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          {activeFilterLabels.map((label) => (
+            <span key={label} className="rounded-full bg-muted px-3 py-1.5">
+              {label}
+            </span>
+          ))}
         </div>
+      ) : null}
 
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          <input
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Buscar por nome/descrição"
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-          />
+      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <ProjectPortfolioForm
+          form={form}
+          saving={saving}
+          isEditing={isEditing}
+          submitError={submitError}
+          onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+          onSubmit={handleSubmit}
+          onCancel={() => {
+            setForm(EMPTY_FORM);
+            setSubmitError(null);
+          }}
+        />
 
-          <select
-            value={statusFilter}
-            onChange={(event) => {
-              setStatusFilter(event.target.value as "ALL" | ProjectStatus);
-              setPage(1);
-            }}
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-          >
-            <option value="ALL">Todos os status</option>
-            {STATUS_OPTIONS.map((status) => (
-              <option key={status.value} value={status.value}>
-                {status.label}
-              </option>
-            ))}
-          </select>
-
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={includeCancelled}
-              onChange={(event) => {
-                setIncludeCancelled(event.target.checked);
-                setPage(1);
-              }}
-            />
-            Incluir cancelados
-          </label>
-
-          <button
-            onClick={() => {
-              setSearch("");
-              setStatusFilter("ALL");
-              setIncludeCancelled(false);
-              setPage(1);
-            }}
-            className="rounded-md border border-border px-3 py-2 text-sm font-semibold hover:bg-muted"
-          >
-            Limpar filtros
-          </button>
-        </div>
-
-        {activeFilters.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-            {activeFilters.map((label) => (
-              <span key={label} className="rounded-full bg-muted px-2 py-1">
-                {label}
-              </span>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-5">
-        <div className="rounded-xl border border-border bg-card p-4 shadow-card lg:col-span-2">
-          <h2 className="mb-3 font-display text-sm font-bold text-foreground">
-            {isEditing ? "Editar projeto" : "Novo projeto"}
-          </h2>
-
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <input
-              value={form.name}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, name: event.target.value }))
-              }
-              placeholder="Nome do projeto"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              required
-            />
-
-            <textarea
-              value={form.description}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, description: event.target.value }))
-              }
-              placeholder="Descrição"
-              className="min-h-[80px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            />
-
-            <div className="grid grid-cols-2 gap-2">
-              <select
-                value={form.status}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    status: event.target.value as ProjectStatus,
-                  }))
-                }
-                className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-              >
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status.value} value={status.value}>
-                    {status.label}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                value={form.completionPct}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    completionPct: event.target.value,
-                  }))
-                }
-                type="number"
-                min={0}
-                max={100}
-                step={1}
-                placeholder="% conclusão"
-                className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-              />
-            </div>
-
-            <input
-              value={form.budget}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, budget: event.target.value }))
-              }
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder="Orçamento (R$)"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            />
-
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                value={form.startDate}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, startDate: event.target.value }))
-                }
-                type="date"
-                className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-              />
-              <input
-                value={form.endDate}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, endDate: event.target.value }))
-                }
-                type="date"
-                className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-              />
-            </div>
-
-            <textarea
-              value={form.geomWkt}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, geomWkt: event.target.value }))
-              }
-              placeholder="GeomWkt (opcional)"
-              className="min-h-[80px] w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
-            />
-
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 rounded-md bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-500 disabled:opacity-60"
-              >
-                {saving ? "Salvando..." : isEditing ? "Atualizar" : "Criar"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setForm(EMPTY_FORM);
-                  setError(null);
-                }}
-                className="rounded-md border border-border px-3 py-2 text-sm font-semibold hover:bg-muted"
-              >
-                Limpar
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <div className="rounded-xl border border-border bg-card p-4 shadow-card lg:col-span-3">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-display text-sm font-bold text-foreground">
-              Projetos ({total})
-            </h2>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>
-                Página {page} de {pages}
-              </span>
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                className="rounded border border-border px-2 py-1 disabled:opacity-40"
-              >
-                ◀
-              </button>
-              <button
-                disabled={page >= pages}
-                onClick={() => setPage((current) => Math.min(pages, current + 1))}
-                className="rounded border border-border px-2 py-1 disabled:opacity-40"
-              >
-                ▶
-              </button>
-            </div>
-          </div>
-
-          {loading ? (
-            <p className="text-sm text-muted-foreground">Carregando projetos...</p>
-          ) : projects.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhum projeto encontrado para os filtros aplicados.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30">
-                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">
-                      Projeto
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">
-                      Status
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">
-                      Orçamento
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">
-                      Ativos
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {projects.map((project) => (
-                    <tr key={project.id} className="border-b border-border/70">
-                      <td className="px-3 py-2">
-                        <p className="font-semibold text-foreground">{project.name}</p>
-                        {project.description && (
-                          <p className="line-clamp-2 text-xs text-muted-foreground">
-                            {project.description}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-xs font-semibold">
-                        {project.status}
-                      </td>
-                      <td className="px-3 py-2">
-                        {formatCurrency(project.budget)}
-                      </td>
-                      <td className="px-3 py-2">{project._count?.assets ?? 0}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Link
-                            href={`/app/projetos/${project.id}`}
-                            className="rounded border border-brand-300 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
-                          >
-                            Ficha 360º
-                          </Link>
-                          <Link
-                            href={`/app/projetos/${project.id}/mapa`}
-                            className="rounded border border-brand-300 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
-                          >
-                            Mapa
-                          </Link>
-                          <button
-                            onClick={() => handleEdit(project)}
-                            className="rounded border border-border px-2 py-1 text-xs font-semibold hover:bg-muted"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            onClick={() => void handleDelete(project)}
-                            className="rounded border border-danger-300 px-2 py-1 text-xs font-semibold text-danger-600 hover:bg-danger-50"
-                          >
-                            Excluir
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {error && (
-        <div className="rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">
-          {error}
-        </div>
-      )}
+        <ProjectPortfolioList
+          projects={projects}
+          total={total}
+          page={page}
+          pages={pages}
+          viewMode={viewMode}
+          loading={loading}
+          error={fetchError}
+          onRetry={() => void loadProjects()}
+          onPageChange={setPage}
+          onViewModeChange={setViewMode}
+          onEdit={handleEdit}
+        />
+      </div>
     </div>
   );
 }
