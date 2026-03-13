@@ -1,4 +1,7 @@
 import type { Config } from "tailwindcss";
+import animate from "tailwindcss-animate";
+import typography from "@tailwindcss/typography";
+import containerQueries from "@tailwindcss/container-queries";
 
 const config: Config = {
   darkMode: ["class"],
@@ -201,9 +204,9 @@ const config: Config = {
     },
   },
   plugins: [
-    require("tailwindcss-animate"),
-    require("@tailwindcss/typography"),
-    require("@tailwindcss/container-queries"),
+    animate,
+    typography,
+    containerQueries,
   ],
 } satisfies Config;
 
