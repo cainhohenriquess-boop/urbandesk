@@ -236,7 +236,7 @@ export default async function SecretariaPage({
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 className="font-display text-sm font-700 text-foreground">Projetos Lidos da Base de Dados</h2>
           <Link href="/app/projetos" className="text-xs font-medium text-brand-600 hover:text-brand-500 transition-colors">
-            Ir para Projetos GIS →
+            Abrir carteira de projetos →
           </Link>
         </div>
         <div className="overflow-x-auto">
@@ -252,7 +252,7 @@ export default async function SecretariaPage({
               {PROJETOS_RECENTES.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-5 py-8 text-center text-sm text-muted-foreground">
-                    Nenhum projeto encontrado. <Link href="/app/projetos" className="text-brand-600 hover:underline">Crie o primeiro na aba Projetos GIS.</Link>
+                    Nenhum projeto encontrado. <Link href="/app/projetos" className="text-brand-600 hover:underline">Crie o primeiro na Carteira de Projetos.</Link>
                   </td>
                 </tr>
               ) : (

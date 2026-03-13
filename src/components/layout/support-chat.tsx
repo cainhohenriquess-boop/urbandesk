@@ -20,7 +20,7 @@ const INITIAL_MSG: Message = {
 // Respostas automáticas simples
 const AUTO_REPLIES: [RegExp, string][] = [
   [/mapa|gis|mapbox/i,       "Para dúvidas sobre o mapa GIS, consulte nossa documentação em docs.urbandesk.com.br/gis ou entre em contato com suporte técnico."],
-  [/obra|projeto/i,          "Projetos e obras são gerenciados no módulo Projetos GIS. Posso te ajudar a navegar até lá!"],
+  [/obra|projeto/i,          "Projetos e obras ficam na Carteira de Projetos. A partir dela você acessa carteira, mapa e execução de campo."],
   [/campo|gps|foto/i,        "O App de Campo funciona offline! Basta acessar /app/campo pelo navegador e adicionar ao Home Screen."],
   [/pagamento|plano|fatura/i,"Para questões financeiras, entre em contato com vendas@urbandesk.com.br ou acesse o painel de faturas."],
   [/senha|acesso|login/i,    "Para redefinir senha, contate o administrador do sistema ou envie email para suporte@urbandesk.com.br."],

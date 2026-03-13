@@ -17,18 +17,18 @@ const NAV_BY_ROLE: Record<Role, { label: string; href: string; icon: string; des
   SUPERADMIN: [
     { label: "Secretaria",   href: "/app/secretaria", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", description: "Dashboard executivo" },
     { label: "Usuários",     href: "/app/secretaria/usuarios", icon: "M17 20h5v-2a4 4 0 00-5-3.87M9 20H4v-2a4 4 0 015-3.87m8-5a4 4 0 11-8 0 4 4 0 018 0zm-8 0a4 4 0 11-8 0 4 4 0 018 0z", description: "Perfis e acessos" },
-    { label: "Projetos GIS", href: "/app/projetos",   icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Workstation cartográfica" },
+    { label: "Projetos",     href: "/app/projetos",   icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Carteira, mapa e ativos" },
     { label: "Campo",        href: "/app/campo",      icon: "M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z", description: "App PWA offline" },
     { label: "Billing",      href: "/app/billing",    icon: "M9 14l2 2 4-4m-8-9h10a2 2 0 012 2v14l-3-2-3 2-3-2-3 2V5a2 2 0 012-2z", description: "Plano e faturas" },
   ],
   SECRETARIO: [
     { label: "Secretaria",   href: "/app/secretaria", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", description: "Dashboard executivo" },
     { label: "Usuários",     href: "/app/secretaria/usuarios", icon: "M17 20h5v-2a4 4 0 00-5-3.87M9 20H4v-2a4 4 0 015-3.87m8-5a4 4 0 11-8 0 4 4 0 018 0zm-8 0a4 4 0 11-8 0 4 4 0 018 0z", description: "Perfis e acessos" },
-    { label: "Projetos GIS", href: "/app/projetos",   icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Workstation cartográfica" },
+    { label: "Projetos",     href: "/app/projetos",   icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Carteira, mapa e ativos" },
     { label: "Billing",      href: "/app/billing",    icon: "M9 14l2 2 4-4m-8-9h10a2 2 0 012 2v14l-3-2-3 2-3-2-3 2V5a2 2 0 012-2z", description: "Plano e faturas" },
   ],
   ENGENHEIRO: [
-    { label: "Projetos GIS", href: "/app/projetos",   icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Workstation cartográfica" },
+    { label: "Projetos",     href: "/app/projetos",   icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", description: "Carteira, mapa e ativos" },
     { label: "Campo",        href: "/app/campo",      icon: "M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z", description: "App PWA offline" },
     { label: "Billing",      href: "/app/billing",    icon: "M9 14l2 2 4-4m-8-9h10a2 2 0 012 2v14l-3-2-3 2-3-2-3 2V5a2 2 0 012-2z", description: "Plano e faturas" },
   ],

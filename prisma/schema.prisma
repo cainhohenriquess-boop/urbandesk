@@ -1,7 +1,5 @@
-// ─────────────────────────────────────────────
-// UrbanDesk — Prisma Schema
-// Banco: PostgreSQL + PostGIS
-// ─────────────────────────────────────────────
+// UrbanDesk Prisma schema
+// Database: PostgreSQL + PostGIS
 
 generator client {
   provider        = "prisma-client-js"
@@ -11,13 +9,9 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  directUrl  = env("DIRECT_URL") // <-- ADICIONE ESTA LINHA
+  directUrl  = env("DIRECT_URL")
   extensions = [postgis]
 }
-
-// ─────────────────────────────────────────────
-// ENUMS
-// ─────────────────────────────────────────────
 
 enum TenantStatus {
   TRIAL
@@ -47,10 +41,67 @@ enum ProjectStatus {
   CANCELADO
 }
 
+enum ProjectType {
+  OBRA
+  SERVICO_ENGENHARIA
+  MANUTENCAO
+  ESTUDO_PROJETO
+  FISCALIZACAO
+  LICITACAO
+  PLANO_SETORIAL
+  REGULARIZACAO
+}
+
+enum ProjectPriority {
+  BAIXA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum ProjectCriticality {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum ProjectOperationalStatus {
+  CADASTRADO
+  EM_ESTUDO
+  EM_LICITACAO
+  CONTRATADO
+  EM_EXECUCAO
+  EM_MEDICAO
+  PARALISADO
+  EM_RECEBIMENTO
+  ENCERRADO
+  CANCELADO
+}
+
+enum ProjectVisibility {
+  INTERNO
+  PUBLICO_RESUMIDO
+  PUBLICO_INTEGRAL
+}
+
+enum ProjectTechnicalArea {
+  DRENAGEM
+  PAVIMENTACAO
+  ILUMINACAO
+  ARBORIZACAO
+  SINALIZACAO
+  FISCALIZACAO
+  MOBILIDADE
+  SANEAMENTO
+  EDIFICACOES
+  ZELADORIA
+}
+
 enum AssetType {
-  PONTO   
-  TRECHO      
-  AREA        
+  PONTO
+  TRECHO
+  AREA
 }
 
 enum InvoiceStatus {
@@ -60,58 +111,47 @@ enum InvoiceStatus {
   CANCELADO
 }
 
-// ─────────────────────────────────────────────
-// TENANT (Prefeitura / Município)
-// ─────────────────────────────────────────────
 model Tenant {
-  id           String       @id @default(cuid())
-  name         String
-  slug         String       @unique
-  cnpj         String       @unique
-  state        String       @db.Char(2)
-  plan         TenantPlan   @default(STARTER)
-  status       TenantStatus @default(TRIAL)
-  mrr          Decimal      @default(0)         @db.Decimal(12, 2)
-  trialEndsAt  DateTime?
-  logoUrl      String?
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  cnpj        String       @unique
+  state       String       @db.Char(2)
+  plan        TenantPlan   @default(STARTER)
+  status      TenantStatus @default(TRIAL)
+  mrr         Decimal      @default(0) @db.Decimal(12, 2)
+  trialEndsAt DateTime?
+  logoUrl     String?
+  mapLat      Float?
+  mapLng      Float?
+  mapZoom     Float?       @default(12)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
-  // NOVO: Centro geográfico do município para o mapa voar (FlyTo)
-  mapLat       Float?       // Ex: -3.7319 (Fortaleza)
-  mapLng       Float?       // Ex: -38.5267
-  mapZoom      Float?       @default(12)
-
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-
-  users        User[]
-  projects     Project[]
-  assets       Asset[]
-  invoices     Invoice[]
-  baseLayers   BaseLayer[]  // Shapefiles da Prefeitura
-  auditLogs    AuditLog[]
+  users      User[]
+  projects   Project[]
+  assets     Asset[]
+  invoices   Invoice[]
+  baseLayers BaseLayer[]
+  auditLogs  AuditLog[]
 
   @@map("tenants")
 }
 
-// NOVO: Tabela para armazenar os Shapefiles (Ruas e Limites) do SuperAdmin
 model BaseLayer {
   id          String   @id @default(cuid())
-  name        String   // Ex: "Malha Viária Centro" ou "Limite Municipal"
-  type        String   // Ex: "STREETS", "BOUNDARY"
-  geoJsonData Json     // O shapefile convertido armazenado de forma hiper-rápida para o frontend ler
-  
+  name        String
+  type        String
+  geoJsonData Json
   tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
   createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@map("base_layers")
 }
 
-// ─────────────────────────────────────────────
-// USER
-// ─────────────────────────────────────────────
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -122,72 +162,97 @@ model User {
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
   tenantId     String?
-  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  assetLogs    AssetLog[]
-  sessions     UserSession[]
-  auditLogs    AuditLog[]
+  tenant            Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assetLogs         AssetLog[]
+  sessions          UserSession[]
+  auditLogs         AuditLog[]
+  managedProjects   Project[]     @relation("ProjectManager")
+  inspectedProjects Project[]     @relation("ProjectInspector")
 
   @@index([tenantId])
   @@map("users")
 }
 
-// ─────────────────────────────────────────────
-// PROJECT (Obra / Intervenção / Área de Projeto)
-// ─────────────────────────────────────────────
 model Project {
-  id           String        @id @default(cuid())
-  name         String
-  description  String?
-  status       ProjectStatus @default(PLANEJADO)
-  budget       Decimal?      @db.Decimal(15, 2)
-  startDate    DateTime?
-  endDate      DateTime?
-  completionPct Int          @default(0)
+  id                    String                   @id @default(cuid())
+  code                  String?
+  name                  String
+  description           String?
+  projectType           ProjectType?
+  responsibleDepartment String?
+  responsibleArea       String?
+  technicalAreas        ProjectTechnicalArea[]   @default([])
+  neighborhood          String?
+  district              String?
+  region                String?
+  priority              ProjectPriority          @default(MEDIA)
+  criticality           ProjectCriticality       @default(MEDIA)
+  status                ProjectStatus            @default(PLANEJADO)
+  operationalStatus     ProjectOperationalStatus @default(CADASTRADO)
+  publicVisibility      ProjectVisibility        @default(INTERNO)
+  budget                Decimal?                 @db.Decimal(15, 2)
+  estimatedBudget       Decimal?                 @db.Decimal(15, 2)
+  contractedBudget      Decimal?                 @db.Decimal(15, 2)
+  measuredBudget        Decimal?                 @db.Decimal(15, 2)
+  paidBudget            Decimal?                 @db.Decimal(15, 2)
+  startDate             DateTime?
+  endDate               DateTime?
+  plannedStartDate      DateTime?
+  plannedEndDate        DateTime?
+  actualStartDate       DateTime?
+  actualEndDate         DateTime?
+  completionPct         Int                      @default(0)
+  physicalProgressPct   Int                      @default(0)
+  financialProgressPct  Int                      @default(0)
+  managerId             String?
+  inspectorId           String?
+  contractorName        String?
+  address               String?
+  referencePoint        String?
+  procurementProcess    String?
+  procurementModality   String?
+  contractNumber        String?
+  metadata              Json                     @default("{}")
+  geomWkt               String?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  tenantId              String
 
-  // NOVO: Polígono que delimita onde os técnicos podem operar
-  geomWkt      String?       // Polígono do Loteamento/Área
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  manager   User?   @relation("ProjectManager", fields: [managerId], references: [id], onDelete: SetNull)
+  inspector User?   @relation("ProjectInspector", fields: [inspectorId], references: [id], onDelete: SetNull)
+  assets    Asset[]
 
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  tenantId     String
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  assets       Asset[]
-
+  @@unique([tenantId, code])
   @@index([tenantId])
   @@index([status])
+  @@index([tenantId, projectType])
+  @@index([tenantId, operationalStatus])
+  @@index([tenantId, publicVisibility])
+  @@index([managerId])
+  @@index([inspectorId])
   @@map("projects")
 }
 
-// ─────────────────────────────────────────────
-// ASSET (Ativos Projetados: Tubulações, Bocas de Lobo, etc)
-// ─────────────────────────────────────────────
 model Asset {
-  id           String    @id @default(cuid())
-  name         String
-  type         AssetType
-  description  String?
-  photos       String[]  
-  
-  // AQUI É A MÁGICA DOS FORMULÁRIOS: Um JSON dinâmico que vai guardar os atributos de engenharia (custo, material, diâmetro da tubulação)
-  attributes   Json      @default("{}")  
-  
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  name        String
+  type        AssetType
+  description String?
+  photos      String[]
+  attributes  Json      @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  geomWkt     String?
+  srid        Int       @default(4326)
+  tenantId    String
+  projectId   String?
 
-  geomWkt      String?   
-  srid         Int       @default(4326) 
-
-  tenantId     String
-  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  projectId    String?
-  project      Project?  @relation(fields: [projectId], references: [id])
-  logs         AssetLog[]
+  tenant  Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project Project?   @relation(fields: [projectId], references: [id])
+  logs    AssetLog[]
 
   @@index([tenantId])
   @@index([projectId])
@@ -196,33 +261,32 @@ model Asset {
 }
 
 model AssetLog {
-  id          String   @id @default(cuid())
-  note        String
-  photos      String[]
-  lat         Float?
-  lng         Float?
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  note      String
+  photos    String[]
+  lat       Float?
+  lng       Float?
+  createdAt DateTime @default(now())
+  assetId   String
+  userId    String
 
-  assetId     String
-  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
 
   @@index([assetId])
   @@map("asset_logs")
 }
 
 model Invoice {
-  id          String        @id @default(cuid())
-  amount      Decimal       @db.Decimal(12, 2)
-  status      InvoiceStatus @default(PENDENTE)
-  dueDate     DateTime
-  paidAt      DateTime?
-  createdAt   DateTime      @default(now())
+  id        String        @id @default(cuid())
+  amount    Decimal       @db.Decimal(12, 2)
+  status    InvoiceStatus @default(PENDENTE)
+  dueDate   DateTime
+  paidAt    DateTime?
+  createdAt DateTime      @default(now())
+  tenantId  String
 
-  tenantId    String
-  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([status])
@@ -230,13 +294,13 @@ model Invoice {
 }
 
 model UserSession {
-  id          String   @id @default(cuid())
-  ip          String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  userId    String
 
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("user_sessions")
@@ -247,20 +311,18 @@ model AuditLog {
   action     String
   entityType String?
   entityId   String?
-
   userId     String?
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   userName   String?
   userEmail  String?
   userRole   String?
-
   tenantId   String?
-  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-
   ip         String?
   userAgent  String?
   metadata   Json     @default("{}")
   createdAt  DateTime @default(now())
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, createdAt])
   @@index([userId, createdAt])
