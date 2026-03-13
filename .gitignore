@@ -4,3 +4,15 @@ tsconfig.tsbuildinfo
 public/sw.js
 public/workbox-*.js
 public/uploads/
+
+# Environment files (never commit real secrets)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Keys / certificates
+*.pem
+*.key
+*.p12
+*.pfx

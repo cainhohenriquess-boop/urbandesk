@@ -3,10 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { resolveUserAdminContext } from "@/lib/user-admin";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
+import { z } from "zod";
 
 type ResetPasswordRouteContext = {
   params: Promise<{ id: string }>;
 };
+
+const userIdSchema = z.string().cuid();
 
 function generateTemporaryPassword(length = 12): string {
   const raw = randomBytes(length).toString("base64url");
@@ -16,11 +20,20 @@ function generateTemporaryPassword(length = 12): string {
 
 async function resolveUserId(context: ResetPasswordRouteContext): Promise<string> {
   const params = await context.params;
-  return typeof params.id === "string" ? params.id : "";
+  if (typeof params.id !== "string") return "";
+  const parsed = userIdSchema.safeParse(params.id);
+  return parsed.success ? parsed.data : "";
 }
 
 export async function POST(req: NextRequest, context: ResetPasswordRouteContext) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:users:id:reset-password:post",
+      limit: 10,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const adminContext = await resolveUserAdminContext(req);
     if ("response" in adminContext) return adminContext.response;
 

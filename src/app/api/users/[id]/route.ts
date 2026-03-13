@@ -6,6 +6,8 @@ import {
   TENANT_MANAGED_ROLES,
   resolveUserAdminContext,
 } from "@/lib/user-admin";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
+import { requireJsonContentType } from "@/lib/request-guards";
 
 type UserRouteContext = {
   params: Promise<{ id: string }>;
@@ -19,9 +21,12 @@ const updateUserSchema = z
     isActive: z.boolean().optional(),
     password: z.string().min(8).max(72).optional(),
   })
+  .strict()
   .refine((value) => Object.keys(value).length > 0, {
     message: "Informe ao menos um campo para atualizar.",
   });
+
+const userIdSchema = z.string().cuid();
 
 function serializeUser(user: {
   id: string;
@@ -54,7 +59,9 @@ function serializeUser(user: {
 
 async function resolveUserId(context: UserRouteContext): Promise<string> {
   const params = await context.params;
-  return typeof params.id === "string" ? params.id : "";
+  if (typeof params.id !== "string") return "";
+  const parsed = userIdSchema.safeParse(params.id);
+  return parsed.success ? parsed.data : "";
 }
 
 async function hasAnotherActiveSecretary(
@@ -74,6 +81,13 @@ async function hasAnotherActiveSecretary(
 
 export async function GET(req: NextRequest, context: UserRouteContext) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:users:id:get",
+      limit: 120,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const adminContext = await resolveUserAdminContext(req);
     if ("response" in adminContext) return adminContext.response;
 
@@ -125,6 +139,16 @@ export async function GET(req: NextRequest, context: UserRouteContext) {
 
 export async function PATCH(req: NextRequest, context: UserRouteContext) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:users:id:patch",
+      limit: 40,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
+    const contentTypeError = requireJsonContentType(req);
+    if (contentTypeError) return contentTypeError;
+
     const adminContext = await resolveUserAdminContext(req);
     if ("response" in adminContext) return adminContext.response;
 
@@ -258,6 +282,13 @@ export async function PATCH(req: NextRequest, context: UserRouteContext) {
 
 export async function DELETE(req: NextRequest, context: UserRouteContext) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:users:id:delete",
+      limit: 25,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const adminContext = await resolveUserAdminContext(req);
     if ("response" in adminContext) return adminContext.response;
 

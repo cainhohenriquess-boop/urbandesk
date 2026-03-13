@@ -8,6 +8,8 @@ import {
   isTenantManagedRole,
   resolveUserAdminContext,
 } from "@/lib/user-admin";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
+import { requireJsonContentType } from "@/lib/request-guards";
 
 const createUserSchema = z.object({
   name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres").max(120),
@@ -20,7 +22,7 @@ const createUserSchema = z.object({
   role: z.enum(TENANT_MANAGED_ROLES),
   password: z.string().min(8, "Senha deve ter no mínimo 8 caracteres").max(72),
   isActive: z.boolean().optional().default(true),
-});
+}).strict();
 
 function parseBoundedInt(
   raw: string | null,
@@ -70,6 +72,13 @@ function serializeUser(user: {
 
 export async function GET(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:users:get",
+      limit: 120,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const context = await resolveUserAdminContext(req);
     if ("response" in context) return context.response;
 
@@ -84,6 +93,10 @@ export async function GET(req: NextRequest) {
       tenantId: context.tenantId,
       role: { in: [...TENANT_MANAGED_ROLES] },
     };
+
+    if (roleParam && !isTenantManagedRole(roleParam)) {
+      return NextResponse.json({ error: "Parâmetro role inválido." }, { status: 400 });
+    }
 
     if (roleParam && isTenantManagedRole(roleParam)) {
       where.role = roleParam;
@@ -156,6 +169,16 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:users:post",
+      limit: 30,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
+    const contentTypeError = requireJsonContentType(req);
+    if (contentTypeError) return contentTypeError;
+
     const context = await resolveUserAdminContext(req);
     if ("response" in context) return context.response;
 

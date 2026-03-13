@@ -4,12 +4,24 @@ import { authOptions } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
+import { z } from "zod";
+
+const tenantIdSchema = z.string().cuid();
 
 export async function GET(request: Request) {
+  const rateLimitResponse = enforceRequestRateLimit(request, {
+    namespace: "api:auth:impersonate:get",
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   const session = await getServerSession(authOptions);
   const cookieStore = await cookies();
   const url = new URL(request.url);
-  const tenantId = url.searchParams.get("tenantId");
+  const rawTenantId = url.searchParams.get("tenantId");
+  const tenantId = rawTenantId ? tenantIdSchema.safeParse(rawTenantId).data : null;
 
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
@@ -25,9 +37,13 @@ export async function GET(request: Request) {
   }
 
   // Se não passar ID da prefeitura, assumimos que o SuperAdmin quer SAIR do modo fantasma
-  if (!tenantId) {
+  if (!rawTenantId) {
     cookieStore.delete("impersonate_tenant");
     return NextResponse.redirect(new URL("/superadmin", request.url));
+  }
+
+  if (!tenantId) {
+    return NextResponse.redirect(new URL("/superadmin?error=tenant_invalid_id", request.url));
   }
 
   const targetTenant = await prisma.tenant.findUnique({

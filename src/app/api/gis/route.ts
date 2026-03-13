@@ -6,9 +6,48 @@ import { cookies } from "next/headers";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 import { Prisma } from "@prisma/client";
 import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
+import { z } from "zod";
+import { requireJsonContentType } from "@/lib/request-guards";
 
 const ALLOWED_ASSET_TYPES = ["PONTO", "TRECHO", "AREA"] as const;
 type AllowedAssetType = (typeof ALLOWED_ASSET_TYPES)[number];
+const tenantOrEntityIdSchema = z.string().cuid();
+
+const createAssetSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160),
+    type: z.enum(ALLOWED_ASSET_TYPES),
+    geomWkt: z.string().trim().max(120000).nullable().optional(),
+    projectId: z.string().cuid().nullable().optional(),
+    description: z.string().trim().max(2000).nullable().optional(),
+    attributes: z.record(z.string(), z.unknown()).optional(),
+    photos: z.array(z.string().trim().min(1).max(2048)).max(20).optional(),
+    clientRef: z.string().trim().min(1).max(120).optional(),
+  })
+  .strict();
+
+const updateAssetSchema = z
+  .object({
+    id: z.string().cuid(),
+    name: z.string().trim().min(1).max(160).optional(),
+    type: z.enum(ALLOWED_ASSET_TYPES).optional(),
+    geomWkt: z.string().trim().max(120000).nullable().optional(),
+    description: z.string().trim().max(2000).nullable().optional(),
+    projectId: z.string().cuid().nullable().optional(),
+    attributes: z.record(z.string(), z.unknown()).optional(),
+    photos: z.array(z.string().trim().min(1).max(2048)).max(20).optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      Object.keys(value).some((key) => key !== "id"),
+    { message: "Informe ao menos um campo para atualizar." }
+  );
+
+const deleteAssetSchema = z.object({
+  id: z.string().cuid(),
+}).strict();
 
 function isAllowedAssetType(value: string): value is AllowedAssetType {
   return (ALLOWED_ASSET_TYPES as readonly string[]).includes(value);
@@ -96,6 +135,13 @@ function parseWktGeometry(wkt: string | null): Record<string, unknown> | null {
 // GET /api/gis - Fetch GIS assets (supports superadmin impersonation)
 export async function GET(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:gis:get",
+      limit: 240,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const session = await getServerSession(authOptions);
     const cookieStore = await cookies();
 
@@ -115,16 +161,27 @@ export async function GET(req: NextRequest) {
     let targetTenantId = user.tenantId;
 
     if (user.role === "SUPERADMIN") {
-      const impersonatedId = cookieStore.get("impersonate_tenant")?.value;
+      const impersonatedRaw = cookieStore.get("impersonate_tenant")?.value ?? null;
+      const impersonatedId = impersonatedRaw
+        ? tenantOrEntityIdSchema.safeParse(impersonatedRaw).data ?? null
+        : null;
+      const paramRaw = req.nextUrl.searchParams.get("tenantId");
+      const paramId = paramRaw
+        ? tenantOrEntityIdSchema.safeParse(paramRaw).data ?? null
+        : null;
+
+      if ((impersonatedRaw && !impersonatedId) || (paramRaw && !paramId)) {
+        return NextResponse.json({ error: "Tenant inválido." }, { status: 400 });
+      }
+
       if (impersonatedId) {
         targetTenantId = impersonatedId;
       } else {
-        const paramId = req.nextUrl.searchParams.get("tenantId");
         if (paramId) targetTenantId = paramId;
       }
     }
 
-    if (!targetTenantId) {
+    if (!targetTenantId || !tenantOrEntityIdSchema.safeParse(targetTenantId).success) {
       return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
     }
 
@@ -191,6 +248,16 @@ export async function GET(req: NextRequest) {
 // POST /api/gis - Create GIS asset with offline idempotency
 export async function POST(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:gis:post",
+      limit: 90,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
+    const contentTypeError = requireJsonContentType(req);
+    if (contentTypeError) return contentTypeError;
+
     const session = await getServerSession(authOptions);
     const cookieStore = await cookies();
 
@@ -210,38 +277,27 @@ export async function POST(req: NextRequest) {
     let targetTenantId = user.tenantId;
 
     if (user.role === "SUPERADMIN") {
-      const impersonatedId = cookieStore.get("impersonate_tenant")?.value;
+      const impersonatedRaw = cookieStore.get("impersonate_tenant")?.value ?? null;
+      const impersonatedId = impersonatedRaw
+        ? tenantOrEntityIdSchema.safeParse(impersonatedRaw).data ?? null
+        : null;
+      if (impersonatedRaw && !impersonatedId) {
+        return NextResponse.json({ error: "Tenant inválido." }, { status: 400 });
+      }
       if (impersonatedId) targetTenantId = impersonatedId;
     }
 
-    if (!targetTenantId) {
+    if (!targetTenantId || !tenantOrEntityIdSchema.safeParse(targetTenantId).success) {
       return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
     }
 
-    const body = await req.json();
+    const body = createAssetSchema.parse(await req.json());
 
-    const name = sanitizeOptionalString(body?.name);
-    const normalizedTypeRaw =
-      typeof body?.type === "string" ? body.type.toUpperCase().trim() : "";
-
-    if (!name || !normalizedTypeRaw) {
-      return NextResponse.json(
-        { error: "name e type são obrigatórios" },
-        { status: 400 }
-      );
-    }
-
-    if (!isAllowedAssetType(normalizedTypeRaw)) {
-      return NextResponse.json(
-        { error: "type inválido. Use PONTO, TRECHO ou AREA." },
-        { status: 400 }
-      );
-    }
-
-    const normalizedType: AllowedAssetType = normalizedTypeRaw;
-    const geomWkt = sanitizeOptionalString(body?.geomWkt);
-    const projectId = sanitizeOptionalString(body?.projectId);
-    const descriptionFromBody = sanitizeOptionalString(body?.description);
+    const name = body.name;
+    const normalizedType: AllowedAssetType = body.type;
+    const geomWkt = sanitizeOptionalString(body.geomWkt ?? null);
+    const projectId = body.projectId ?? null;
+    const descriptionFromBody = sanitizeOptionalString(body.description ?? null);
 
     if (projectId) {
       const project = await prisma.project.findFirst({
@@ -264,14 +320,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const rawAttributes = toPlainObject(body?.attributes);
-    const requestPhotos = sanitizePhotoArray(body?.photos);
+    const rawAttributes = toPlainObject(body.attributes);
+    const requestPhotos = sanitizePhotoArray(body.photos);
     const attributePhotos = sanitizePhotoArray(rawAttributes.photos);
     const photos = requestPhotos.length > 0 ? requestPhotos : attributePhotos;
 
     const headerClientRef = normalizeClientRef(req.headers.get("x-offline-client-ref"));
     const attributeClientRef = normalizeClientRef(rawAttributes.clientRef);
-    const bodyClientRef = normalizeClientRef(body?.clientRef);
+    const bodyClientRef = normalizeClientRef(body.clientRef);
     const clientRef = headerClientRef ?? attributeClientRef ?? bodyClientRef;
 
     const normalizedAttributes: Record<string, unknown> = { ...rawAttributes };
@@ -363,6 +419,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ data: asset }, { status: 201 });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Payload inválido", details: error.issues },
+        { status: 400 }
+      );
+    }
     console.error("[GIS_POST_ERROR]", error);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
@@ -371,6 +433,16 @@ export async function POST(req: NextRequest) {
 // PATCH /api/gis - Update GIS asset
 export async function PATCH(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:gis:patch",
+      limit: 90,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
+    const contentTypeError = requireJsonContentType(req);
+    if (contentTypeError) return contentTypeError;
+
     const session = await getServerSession(authOptions);
     const cookieStore = await cookies();
 
@@ -390,19 +462,22 @@ export async function PATCH(req: NextRequest) {
     let targetTenantId = user.tenantId;
 
     if (user.role === "SUPERADMIN") {
-      const impersonatedId = cookieStore.get("impersonate_tenant")?.value;
+      const impersonatedRaw = cookieStore.get("impersonate_tenant")?.value ?? null;
+      const impersonatedId = impersonatedRaw
+        ? tenantOrEntityIdSchema.safeParse(impersonatedRaw).data ?? null
+        : null;
+      if (impersonatedRaw && !impersonatedId) {
+        return NextResponse.json({ error: "Tenant inválido." }, { status: 400 });
+      }
       if (impersonatedId) targetTenantId = impersonatedId;
     }
 
-    if (!targetTenantId) {
+    if (!targetTenantId || !tenantOrEntityIdSchema.safeParse(targetTenantId).success) {
       return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
     }
 
-    const body = await req.json();
-    const id = sanitizeRequiredString(body?.id);
-    if (!id) {
-      return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 });
-    }
+    const body = updateAssetSchema.parse(await req.json());
+    const id = body.id;
 
     const existing = await prisma.asset.findFirst({
       where: { id, tenantId: targetTenantId },
@@ -415,7 +490,7 @@ export async function PATCH(req: NextRequest) {
     const updateData: Prisma.AssetUpdateInput = {};
     const changedFields: string[] = [];
 
-    if (body?.name !== undefined) {
+    if (body.name !== undefined) {
       const name = sanitizeRequiredString(body.name);
       if (!name) {
         return NextResponse.json({ error: "name inválido" }, { status: 400 });
@@ -424,9 +499,8 @@ export async function PATCH(req: NextRequest) {
       changedFields.push("name");
     }
 
-    if (body?.type !== undefined) {
-      const typeRaw =
-        typeof body.type === "string" ? body.type.toUpperCase().trim() : "";
+    if (body.type !== undefined) {
+      const typeRaw = body.type.toUpperCase().trim();
       if (!isAllowedAssetType(typeRaw)) {
         return NextResponse.json(
           { error: "type inválido. Use PONTO, TRECHO ou AREA." },
@@ -437,17 +511,17 @@ export async function PATCH(req: NextRequest) {
       changedFields.push("type");
     }
 
-    if (body?.geomWkt !== undefined) {
+    if (body.geomWkt !== undefined) {
       updateData.geomWkt = sanitizeOptionalString(body.geomWkt);
       changedFields.push("geomWkt");
     }
 
-    if (body?.description !== undefined) {
+    if (body.description !== undefined) {
       updateData.description = sanitizeOptionalString(body.description);
       changedFields.push("description");
     }
 
-    if (body?.projectId !== undefined) {
+    if (body.projectId !== undefined) {
       const projectId = sanitizeOptionalString(body.projectId);
 
       if (projectId) {
@@ -475,13 +549,13 @@ export async function PATCH(req: NextRequest) {
       changedFields.push("projectId");
     }
 
-    if (body?.attributes !== undefined) {
+    if (body.attributes !== undefined) {
       const attrs = toPlainObject(body.attributes);
       updateData.attributes = attrs as Prisma.InputJsonValue;
       changedFields.push("attributes");
     }
 
-    if (body?.photos !== undefined) {
+    if (body.photos !== undefined) {
       const photos = sanitizePhotoArray(body.photos);
       updateData.photos = photos;
       changedFields.push("photos");
@@ -522,6 +596,12 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ data: updated });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Payload inválido", details: error.issues },
+        { status: 400 }
+      );
+    }
     console.error("[GIS_PATCH_ERROR]", error);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
@@ -530,6 +610,16 @@ export async function PATCH(req: NextRequest) {
 // DELETE /api/gis - Remove GIS asset (supports superadmin impersonation)
 export async function DELETE(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:gis:delete",
+      limit: 60,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
+    const contentTypeError = requireJsonContentType(req);
+    if (contentTypeError) return contentTypeError;
+
     const session = await getServerSession(authOptions);
     const cookieStore = await cookies();
 
@@ -549,24 +639,34 @@ export async function DELETE(req: NextRequest) {
     let currentTenantId = user.tenantId;
 
     if (user.role === "SUPERADMIN") {
-      const impersonatedId = cookieStore.get("impersonate_tenant")?.value;
-      if (impersonatedId) currentTenantId = impersonatedId;
+      const queryTenantIdRaw = req.nextUrl.searchParams.get("tenantId");
+      const cookieTenantIdRaw = cookieStore.get("impersonate_tenant")?.value ?? null;
+      const cookieTenantId = cookieTenantIdRaw
+        ? tenantOrEntityIdSchema.safeParse(cookieTenantIdRaw).data ?? null
+        : null;
+      const queryTenantId = queryTenantIdRaw
+        ? tenantOrEntityIdSchema.safeParse(queryTenantIdRaw).data ?? null
+        : null;
+
+      if ((cookieTenantIdRaw && !cookieTenantId) || (queryTenantIdRaw && !queryTenantId)) {
+        return NextResponse.json({ error: "Tenant inválido." }, { status: 400 });
+      }
+
+      currentTenantId = cookieTenantId ?? queryTenantId ?? currentTenantId;
     }
 
-    const { id } = await req.json();
-    if (!id) {
-      return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 });
+    if (!currentTenantId || !tenantOrEntityIdSchema.safeParse(currentTenantId).success) {
+      return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
     }
+
+    const { id } = deleteAssetSchema.parse(await req.json());
 
     const asset = await prisma.asset.findUnique({ where: { id } });
     if (!asset) {
       return NextResponse.json({ error: "Ativo não encontrado" }, { status: 404 });
     }
 
-    if (
-      user.role !== "SUPERADMIN" &&
-      (!currentTenantId || asset.tenantId !== currentTenantId)
-    ) {
+    if (asset.tenantId !== currentTenantId) {
       return NextResponse.json(
         { error: "Não autorizado a remover ativos de outra prefeitura" },
         { status: 403 }
@@ -576,6 +676,12 @@ export async function DELETE(req: NextRequest) {
     await prisma.asset.delete({ where: { id } });
     return NextResponse.json({ message: "Ativo removido com sucesso" });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Payload inválido", details: error.issues },
+        { status: 400 }
+      );
+    }
     console.error("[GIS_DELETE_ERROR]", error);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }

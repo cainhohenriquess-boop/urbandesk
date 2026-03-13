@@ -5,8 +5,11 @@ import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 import { prisma } from "@/lib/prisma";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
+import { z } from "zod";
 
 const ALLOWED_ROLES = new Set(["SUPERADMIN", "SECRETARIO"]);
+const tenantIdSchema = z.string().cuid();
 
 function parseBoundedInt(
   raw: string | null,
@@ -62,13 +65,26 @@ async function resolveAuditScope(req: NextRequest): Promise<
 
   if (role === "SUPERADMIN") {
     const cookieStore = await cookies();
-    const tenantIdFromCookie = cookieStore.get("impersonate_tenant")?.value ?? null;
-    const tenantIdFromQuery = req.nextUrl.searchParams.get("tenantId");
+    const tenantIdFromCookieRaw = cookieStore.get("impersonate_tenant")?.value ?? null;
+    const tenantIdFromQueryRaw = req.nextUrl.searchParams.get("tenantId");
+    const tenantIdFromCookie = tenantIdFromCookieRaw
+      ? tenantIdSchema.safeParse(tenantIdFromCookieRaw).data ?? null
+      : null;
+    const tenantIdFromQuery = tenantIdFromQueryRaw
+      ? tenantIdSchema.safeParse(tenantIdFromQueryRaw).data ?? null
+      : null;
+
+    if ((tenantIdFromCookieRaw && !tenantIdFromCookie) || (tenantIdFromQueryRaw && !tenantIdFromQuery)) {
+      return {
+        response: NextResponse.json({ error: "Tenant inválido para auditoria." }, { status: 400 }),
+      };
+    }
+
     return { role, tenantId: tenantIdFromCookie ?? tenantIdFromQuery ?? null };
   }
 
   const tenantId = session.user.tenantId ?? null;
-  if (!tenantId) {
+  if (!tenantId || !tenantIdSchema.safeParse(tenantId).success) {
     return {
       response: NextResponse.json(
         { error: "Tenant não identificado para auditoria." },
@@ -82,6 +98,13 @@ async function resolveAuditScope(req: NextRequest): Promise<
 
 export async function GET(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:audit:get",
+      limit: 90,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const scope = await resolveAuditScope(req);
     if ("response" in scope) return scope.response;
 

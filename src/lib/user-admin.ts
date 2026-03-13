@@ -7,12 +7,14 @@ import {
   getAccessBlockReason,
   type AppRole,
 } from "@/lib/auth-shared";
+import { z } from "zod";
 
 export const TENANT_MANAGED_ROLES = ["SECRETARIO", "ENGENHEIRO", "CAMPO"] as const;
 export type TenantManagedRole = (typeof TENANT_MANAGED_ROLES)[number];
 
 const TENANT_MANAGED_ROLE_SET = new Set<string>(TENANT_MANAGED_ROLES);
 const ALLOWED_MANAGER_ROLES = new Set<AppRole>(["SUPERADMIN", "SECRETARIO"]);
+const tenantIdSchema = z.string().cuid();
 
 export interface UserAdminContext {
   userId: string;
@@ -29,7 +31,7 @@ export async function resolveUserAdminContext(
 ): Promise<UserAdminContext | { response: NextResponse }> {
   const session = await getServerSession(authOptions);
   if (!session) {
-    return { response: NextResponse.json({ error: "Nao autenticado" }, { status: 401 }) };
+    return { response: NextResponse.json({ error: "Não autenticado" }, { status: 401 }) };
   }
 
   const reason = getAccessBlockReason(session.user);
@@ -44,21 +46,54 @@ export async function resolveUserAdminContext(
 
   const role = session.user.role as AppRole | undefined;
   if (!role || !ALLOWED_MANAGER_ROLES.has(role)) {
-    return { response: NextResponse.json({ error: "Nao autorizado" }, { status: 403 }) };
+    return { response: NextResponse.json({ error: "Não autorizado" }, { status: 403 }) };
   }
 
   const cookieStore = await cookies();
-  const queryTenantId = req.nextUrl.searchParams.get("tenantId");
+  const queryTenantIdRaw = req.nextUrl.searchParams.get("tenantId");
+  const queryTenantId = queryTenantIdRaw
+    ? tenantIdSchema.safeParse(queryTenantIdRaw).data ?? null
+    : null;
+  if (queryTenantIdRaw && !queryTenantId) {
+    return {
+      response: NextResponse.json(
+        { error: "Tenant inválido na query." },
+        { status: 400 }
+      ),
+    };
+  }
 
   let tenantId = session.user.tenantId ?? null;
   if (role === "SUPERADMIN") {
-    tenantId = cookieStore.get("impersonate_tenant")?.value ?? queryTenantId ?? tenantId;
+    const impersonatedRaw = cookieStore.get("impersonate_tenant")?.value ?? null;
+    const impersonatedTenantId = impersonatedRaw
+      ? tenantIdSchema.safeParse(impersonatedRaw).data ?? null
+      : null;
+    if (impersonatedRaw && !impersonatedTenantId) {
+      return {
+        response: NextResponse.json(
+          { error: "Tenant inválido no cookie de impersonação." },
+          { status: 400 }
+        ),
+      };
+    }
+
+    tenantId = impersonatedTenantId ?? queryTenantId ?? tenantId;
+  }
+
+  if (tenantId && !tenantIdSchema.safeParse(tenantId).success) {
+    return {
+      response: NextResponse.json(
+        { error: "Tenant inválido na sessão." },
+        { status: 400 }
+      ),
+    };
   }
 
   if (!tenantId) {
     return {
       response: NextResponse.json(
-        { error: "Tenant nao identificado para operacao." },
+        { error: "Tenant não identificado para operação." },
         { status: 400 }
       ),
     };
@@ -68,7 +103,7 @@ export async function resolveUserAdminContext(
   if (!userId) {
     return {
       response: NextResponse.json(
-        { error: "Sessao invalida: usuario sem identificador." },
+        { error: "Sessão inválida: usuário sem identificador." },
         { status: 401 }
       ),
     };

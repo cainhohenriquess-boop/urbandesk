@@ -5,6 +5,17 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import type { AppRole, TenantLifecycleStatus } from "@/lib/auth-shared";
 import { AUDIT_ACTIONS, writeAuditLog } from "@/lib/audit";
+import { consumeRateLimit, extractClientIpFromHeaders } from "@/lib/rate-limit";
+
+const nextAuthSecret = process.env.NEXTAUTH_SECRET?.trim() ?? "";
+if (process.env.NODE_ENV === "production") {
+  if (!nextAuthSecret || nextAuthSecret.length < 32) {
+    throw new Error("NEXTAUTH_SECRET inválido para produção. Use um segredo forte com no mínimo 32 caracteres.");
+  }
+  if (!process.env.NEXTAUTH_URL) {
+    throw new Error("NEXTAUTH_URL é obrigatório em produção.");
+  }
+}
 
 // ─────────────────────────────────────────────
 // Tipos estendidos
@@ -67,9 +78,16 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Senha", type: "password" },
       },
 
-      async authorize(credentials): Promise<User | null> {
+      async authorize(credentials, req): Promise<User | null> {
         if (!credentials?.email || !credentials.password) return null;
         const normalizedEmail = credentials.email.trim().toLowerCase();
+        const clientIp = extractClientIpFromHeaders(req?.headers ?? {});
+        const loginRate = consumeRateLimit({
+          key: `auth:credentials:${clientIp}:${normalizedEmail}`,
+          limit: 20,
+          windowMs: 10 * 60 * 1000,
+        });
+        if (!loginRate.allowed) return null;
 
         // Busca usuário com tenant
         const user = await prisma.user.findUnique({
@@ -190,5 +208,5 @@ export const authOptions: NextAuthOptions = {
   // Loga erros em desenvolvimento
   debug: process.env.NODE_ENV === "development",
 
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: nextAuthSecret || undefined,
 };

@@ -5,32 +5,41 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
+import { requireJsonContentType } from "@/lib/request-guards";
 
 // ─────────────────────────────────────────────
 // Schemas de Validação (Zod)
 // ─────────────────────────────────────────────
 const createTenantSchema = z.object({
-  name: z.string().min(2, "O nome deve ter pelo menos 2 caracteres"),
-  slug: z.string().min(2, "O slug deve ter pelo menos 2 caracteres"),
-  cnpj: z.string().length(14, "O CNPJ deve ter exatamente 14 caracteres (apenas números)"),
-  state: z.string().length(2, "O estado deve ter 2 letras"),
+  name: z.string().trim().min(2, "O nome deve ter pelo menos 2 caracteres").max(120),
+  slug: z.string().trim().toLowerCase().regex(/^[a-z0-9-]{2,80}$/, "Slug inválido."),
+  cnpj: z.string().trim().regex(/^\d{14}$/, "O CNPJ deve conter 14 dígitos numéricos."),
+  state: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, "O estado deve ter 2 letras."),
   plan: z.enum(["STARTER", "PRO", "ENTERPRISE"]).optional().default("STARTER"),
   trialDays: z.number().int().min(1).optional().default(14),
-});
+}).strict();
 
 const updateTenantSchema = z.object({
-  id: z.string().min(1, "O ID do tenant é obrigatório"),
+  id: z.string().cuid("O ID do tenant é inválido"),
   name: z.string().optional(),
   slug: z.string().optional(),
   status: z.enum(["TRIAL", "ATIVO", "INADIMPLENTE", "CANCELADO"]).optional(),
   plan: z.enum(["STARTER", "PRO", "ENTERPRISE"]).optional(),
-});
+}).strict();
 
 // ─────────────────────────────────────────────
 // GET /api/tenant — Lista todos os tenants (SuperAdmin)
 // ─────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:tenant:get",
+      limit: 60,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
@@ -47,6 +56,10 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("filter");
     const page   = Math.max(1, Number(searchParams.get("page") ?? 1));
     const limit  = Math.min(100, Number(searchParams.get("limit") ?? 20));
+
+    if (status && !["TRIAL", "ATIVO", "INADIMPLENTE", "CANCELADO"].includes(status.toUpperCase())) {
+      return NextResponse.json({ error: "Parâmetro filter inválido." }, { status: 400 });
+    }
 
     const where = status ? { status: status.toUpperCase() as any } : {};
 
@@ -79,6 +92,16 @@ export async function GET(req: NextRequest) {
 // ─────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:tenant:post",
+      limit: 20,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
+    const contentTypeError = requireJsonContentType(req);
+    if (contentTypeError) return contentTypeError;
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
@@ -124,6 +147,16 @@ export async function POST(req: NextRequest) {
 // ─────────────────────────────────────────────
 export async function PATCH(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:tenant:patch",
+      limit: 20,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
+    const contentTypeError = requireJsonContentType(req);
+    if (contentTypeError) return contentTypeError;
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });

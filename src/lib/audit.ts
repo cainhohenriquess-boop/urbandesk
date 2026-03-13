@@ -43,6 +43,18 @@ function sanitizeIp(value: string | null | undefined): string | null {
   if (!value) return null;
   const first = value.split(",")[0]?.trim();
   if (!first) return null;
+
+  const ipv4Match = first.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    return `${ipv4Match[1]}.${ipv4Match[2]}.${ipv4Match[3]}.0`;
+  }
+
+  if (first.includes(":")) {
+    const parts = first.split(":").filter((part) => part.length > 0);
+    const masked = parts.slice(0, 4).join(":");
+    return `${masked}::`;
+  }
+
   return first.slice(0, 128);
 }
 

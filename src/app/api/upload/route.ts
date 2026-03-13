@@ -9,6 +9,7 @@ import {
   extractRequestContextFromHeaders,
   writeAuditLog,
 } from "@/lib/audit";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -64,6 +65,13 @@ function resolveTenantId(
 
 export async function POST(request: Request) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(request, {
+      namespace: "api:upload:post",
+      limit: 30,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });

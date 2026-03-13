@@ -7,8 +7,11 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
+import { requireJsonContentType } from "@/lib/request-guards";
 
 const PROJECT_STATUSES = ["PLANEJADO", "EM_ANDAMENTO", "PARALISADO", "CONCLUIDO", "CANCELADO"] as const;
+const tenantIdSchema = z.string().cuid();
 
 const ALLOWED_ROLES = new Set(["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"]);
 
@@ -31,7 +34,7 @@ const createProjectSchema = z.object({
   endDate: nullableDateSchema.optional(),
   completionPct: z.coerce.number().int().min(0).max(100).optional().default(0),
   geomWkt: z.string().trim().max(120000).nullable().optional(),
-});
+}).strict();
 
 function serializeProject(project: {
   id: string;
@@ -100,14 +103,32 @@ async function resolveTenantContext(req: NextRequest): Promise<
   }
 
   const cookieStore = await cookies();
-  const queryTenantId = req.nextUrl.searchParams.get("tenantId");
+  const queryTenantIdRaw = req.nextUrl.searchParams.get("tenantId");
+  const queryTenantId = queryTenantIdRaw
+    ? tenantIdSchema.safeParse(queryTenantIdRaw).data ?? null
+    : null;
+  if (queryTenantIdRaw && !queryTenantId) {
+    return {
+      response: NextResponse.json({ error: "Tenant inválido na query." }, { status: 400 }),
+    };
+  }
 
   let tenantId = session.user.tenantId ?? null;
   if (role === "SUPERADMIN") {
-    tenantId = cookieStore.get("impersonate_tenant")?.value ?? queryTenantId ?? tenantId;
+    const impersonatedRaw = cookieStore.get("impersonate_tenant")?.value ?? null;
+    const impersonatedTenantId = impersonatedRaw
+      ? tenantIdSchema.safeParse(impersonatedRaw).data ?? null
+      : null;
+    if (impersonatedRaw && !impersonatedTenantId) {
+      return {
+        response: NextResponse.json({ error: "Tenant inválido no cookie." }, { status: 400 }),
+      };
+    }
+
+    tenantId = impersonatedTenantId ?? queryTenantId ?? tenantId;
   }
 
-  if (!tenantId) {
+  if (!tenantId || !tenantIdSchema.safeParse(tenantId).success) {
     return {
       response: NextResponse.json({ error: "Tenant não identificado para operação." }, { status: 400 }),
     };
@@ -131,6 +152,13 @@ function validateProjectDates(startDate: Date | null | undefined, endDate: Date 
 
 export async function GET(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:projects:get",
+      limit: 180,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const context = await resolveTenantContext(req);
     if ("response" in context) return context.response;
 
@@ -144,6 +172,10 @@ export async function GET(req: NextRequest) {
     const limit = parseBoundedInt(searchParams.get("limit"), 25, 1, 100);
 
     const where: Prisma.ProjectWhereInput = { tenantId };
+
+    if (statusParam && !isValidStatus(statusParam)) {
+      return NextResponse.json({ error: "Parâmetro status inválido." }, { status: 400 });
+    }
 
     if (isValidStatus(statusParam)) {
       where.status = statusParam;
@@ -195,6 +227,16 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:projects:post",
+      limit: 60,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
+    const contentTypeError = requireJsonContentType(req);
+    if (contentTypeError) return contentTypeError;
+
     const context = await resolveTenantContext(req);
     if ("response" in context) return context.response;
 

@@ -7,9 +7,12 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
+import { requireJsonContentType } from "@/lib/request-guards";
 
 const PROJECT_STATUSES = ["PLANEJADO", "EM_ANDAMENTO", "PARALISADO", "CONCLUIDO", "CANCELADO"] as const;
 const ALLOWED_ROLES = new Set(["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"]);
+const tenantIdSchema = z.string().cuid();
 
 const nullableDateSchema = z.preprocess(
   (value) => (value === "" || value === undefined || value === null ? null : value),
@@ -32,9 +35,11 @@ const updateProjectSchema = z
     completionPct: z.coerce.number().int().min(0).max(100).optional(),
     geomWkt: z.string().trim().max(120000).nullable().optional(),
   })
+  .strict()
   .refine((value) => Object.keys(value).length > 0, {
     message: "Informe ao menos um campo para atualizar.",
   });
+const projectIdSchema = z.string().cuid();
 
 function serializeProject(project: {
   id: string;
@@ -88,14 +93,31 @@ async function resolveTenantContext(req: NextRequest): Promise<
   }
 
   const cookieStore = await cookies();
-  const queryTenantId = req.nextUrl.searchParams.get("tenantId");
+  const queryTenantIdRaw = req.nextUrl.searchParams.get("tenantId");
+  const queryTenantId = queryTenantIdRaw
+    ? tenantIdSchema.safeParse(queryTenantIdRaw).data ?? null
+    : null;
+  if (queryTenantIdRaw && !queryTenantId) {
+    return {
+      response: NextResponse.json({ error: "Tenant inválido na query." }, { status: 400 }),
+    };
+  }
 
   let tenantId = session.user.tenantId ?? null;
   if (role === "SUPERADMIN") {
-    tenantId = cookieStore.get("impersonate_tenant")?.value ?? queryTenantId ?? tenantId;
+    const impersonatedRaw = cookieStore.get("impersonate_tenant")?.value ?? null;
+    const impersonatedTenantId = impersonatedRaw
+      ? tenantIdSchema.safeParse(impersonatedRaw).data ?? null
+      : null;
+    if (impersonatedRaw && !impersonatedTenantId) {
+      return {
+        response: NextResponse.json({ error: "Tenant inválido no cookie." }, { status: 400 }),
+      };
+    }
+    tenantId = impersonatedTenantId ?? queryTenantId ?? tenantId;
   }
 
-  if (!tenantId) {
+  if (!tenantId || !tenantIdSchema.safeParse(tenantId).success) {
     return {
       response: NextResponse.json({ error: "Tenant não identificado para operação." }, { status: 400 }),
     };
@@ -123,11 +145,20 @@ type ProjectRouteContext = {
 
 async function resolveProjectId(context: ProjectRouteContext): Promise<string> {
   const params = await context.params;
-  return typeof params.id === "string" ? params.id : "";
+  if (typeof params.id !== "string") return "";
+  const parsed = projectIdSchema.safeParse(params.id);
+  return parsed.success ? parsed.data : "";
 }
 
 export async function GET(req: NextRequest, context: ProjectRouteContext) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:projects:id:get",
+      limit: 180,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const tenantContext = await resolveTenantContext(req);
     if ("response" in tenantContext) return tenantContext.response;
 
@@ -154,6 +185,16 @@ export async function GET(req: NextRequest, context: ProjectRouteContext) {
 
 export async function PATCH(req: NextRequest, context: ProjectRouteContext) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:projects:id:patch",
+      limit: 60,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
+    const contentTypeError = requireJsonContentType(req);
+    if (contentTypeError) return contentTypeError;
+
     const tenantContext = await resolveTenantContext(req);
     if ("response" in tenantContext) return tenantContext.response;
 
@@ -254,6 +295,13 @@ export async function PATCH(req: NextRequest, context: ProjectRouteContext) {
 
 export async function DELETE(req: NextRequest, context: ProjectRouteContext) {
   try {
+    const rateLimitResponse = enforceRequestRateLimit(req, {
+      namespace: "api:projects:id:delete",
+      limit: 40,
+      windowMs: 60_000,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const tenantContext = await resolveTenantContext(req);
     if ("response" in tenantContext) return tenantContext.response;
 

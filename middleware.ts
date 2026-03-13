@@ -23,6 +23,9 @@ const ROUTE_PERMISSIONS: Record<string, Role[]> = {
   "/app/projetos": ["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"],
   "/app/campo": ["SUPERADMIN", "SECRETARIO", "ENGENHEIRO", "CAMPO"],
   "/api/projects": ["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"],
+  "/api/gis": ["SUPERADMIN", "SECRETARIO", "ENGENHEIRO", "CAMPO"],
+  "/api/baselayers": ["SUPERADMIN", "SECRETARIO", "ENGENHEIRO", "CAMPO"],
+  "/api/upload": ["SUPERADMIN", "SECRETARIO", "ENGENHEIRO", "CAMPO"],
   "/api/users": ["SUPERADMIN", "SECRETARIO"],
   "/api/audit": ["SUPERADMIN", "SECRETARIO"],
   "/api/tenant": ["SUPERADMIN"],
@@ -35,6 +38,11 @@ const ROUTE_PERMISSIONS: Record<string, Role[]> = {
 const PUBLIC_PAGE_ROUTES = [
   "/",
   "/login",
+  "/termos-de-uso",
+  "/privacidade",
+  "/cookies",
+  "/lgpd",
+  "/seguranca",
 ];
 
 const NEXTAUTH_PUBLIC_API_PREFIXES = [
