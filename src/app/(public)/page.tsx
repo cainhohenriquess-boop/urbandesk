@@ -75,17 +75,17 @@ const STATS = [
   { value:"4.9",  label:"Avaliação dos usuários"   },
 ];
 
+const LEGAL_LINKS = [
+  { label: "Privacidade", href: "/privacidade" },
+  { label: "Termos", href: "/termos-de-uso" },
+  { label: "LGPD", href: "/lgpd" },
+  { label: "Segurança", href: "/seguranca" },
+];
+
 // ─────────────────────────────────────────────
 // Layout público
 // ─────────────────────────────────────────────
 export default function LandingPage() {
-  
-  // Trata cliques em links não finalizados do rodapé
-  const handleLegalClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    alert("Páginas legais (Termos, Privacidade, LGPD) serão disponibilizadas na publicação oficial.");
-  };
-
   return (
     <div className="min-h-screen bg-[#0a0f1e] text-white overflow-x-hidden scroll-smooth">
 
@@ -435,15 +435,14 @@ export default function LandingPage() {
           </div>
           
           <div className="flex gap-5">
-            {["Privacidade","Termos","LGPD","Segurança"].map((l) => (
-              <a 
-                key={l} 
-                href="#" 
-                onClick={handleLegalClick}
+            {LEGAL_LINKS.map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
                 className="hover:text-slate-300 transition-colors"
               >
-                {l}
-              </a>
+                {item.label}
+              </Link>
             ))}
           </div>
           
