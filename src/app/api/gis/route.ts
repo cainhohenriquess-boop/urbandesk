@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
     const cookieStore = await cookies();
 
     if (!session) {
-      return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
     const reason = getAccessBlockReason(session.user);
@@ -125,7 +125,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (!targetTenantId) {
-      return NextResponse.json({ error: "Tenant nao identificado" }, { status: 400 });
+      return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
     }
 
     const { searchParams } = req.nextUrl;
@@ -195,7 +195,7 @@ export async function POST(req: NextRequest) {
     const cookieStore = await cookies();
 
     if (!session) {
-      return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
     const reason = getAccessBlockReason(session.user);
@@ -215,7 +215,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!targetTenantId) {
-      return NextResponse.json({ error: "Tenant nao identificado" }, { status: 400 });
+      return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
     }
 
     const body = await req.json();
@@ -226,14 +226,14 @@ export async function POST(req: NextRequest) {
 
     if (!name || !normalizedTypeRaw) {
       return NextResponse.json(
-        { error: "name e type sao obrigatorios" },
+        { error: "name e type são obrigatórios" },
         { status: 400 }
       );
     }
 
     if (!isAllowedAssetType(normalizedTypeRaw)) {
       return NextResponse.json(
-        { error: "type invalido. Use PONTO, TRECHO ou AREA." },
+        { error: "type inválido. Use PONTO, TRECHO ou AREA." },
         { status: 400 }
       );
     }
@@ -251,14 +251,14 @@ export async function POST(req: NextRequest) {
 
       if (!project) {
         return NextResponse.json(
-          { error: "Projeto informado nao pertence ao tenant autenticado." },
+          { error: "Projeto informado não pertence ao tenant autenticado." },
           { status: 400 }
         );
       }
 
       if (project.status === "CANCELADO") {
         return NextResponse.json(
-          { error: "Nao e permitido vincular ativos a projeto cancelado." },
+          { error: "Não é permitido vincular ativos a projeto cancelado." },
           { status: 409 }
         );
       }
@@ -318,7 +318,7 @@ export async function POST(req: NextRequest) {
         if (incomingComparable !== existingComparable) {
           return NextResponse.json(
             {
-              error: "Conflito de sincronizacao para este item offline.",
+              error: "Conflito de sincronização para este item offline.",
               code: "conflict",
               data: { id: existing.id },
             },
@@ -375,7 +375,7 @@ export async function PATCH(req: NextRequest) {
     const cookieStore = await cookies();
 
     if (!session) {
-      return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
     const reason = getAccessBlockReason(session.user);
@@ -395,13 +395,13 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (!targetTenantId) {
-      return NextResponse.json({ error: "Tenant nao identificado" }, { status: 400 });
+      return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
     }
 
     const body = await req.json();
     const id = sanitizeRequiredString(body?.id);
     if (!id) {
-      return NextResponse.json({ error: "ID e obrigatorio" }, { status: 400 });
+      return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 });
     }
 
     const existing = await prisma.asset.findFirst({
@@ -409,7 +409,7 @@ export async function PATCH(req: NextRequest) {
     });
 
     if (!existing) {
-      return NextResponse.json({ error: "Ativo nao encontrado" }, { status: 404 });
+      return NextResponse.json({ error: "Ativo não encontrado" }, { status: 404 });
     }
 
     const updateData: Prisma.AssetUpdateInput = {};
@@ -418,7 +418,7 @@ export async function PATCH(req: NextRequest) {
     if (body?.name !== undefined) {
       const name = sanitizeRequiredString(body.name);
       if (!name) {
-        return NextResponse.json({ error: "name invalido" }, { status: 400 });
+        return NextResponse.json({ error: "name inválido" }, { status: 400 });
       }
       updateData.name = name;
       changedFields.push("name");
@@ -429,7 +429,7 @@ export async function PATCH(req: NextRequest) {
         typeof body.type === "string" ? body.type.toUpperCase().trim() : "";
       if (!isAllowedAssetType(typeRaw)) {
         return NextResponse.json(
-          { error: "type invalido. Use PONTO, TRECHO ou AREA." },
+          { error: "type inválido. Use PONTO, TRECHO ou AREA." },
           { status: 400 }
         );
       }
@@ -458,14 +458,14 @@ export async function PATCH(req: NextRequest) {
 
         if (!project) {
           return NextResponse.json(
-            { error: "Projeto informado nao pertence ao tenant autenticado." },
+            { error: "Projeto informado não pertence ao tenant autenticado." },
             { status: 400 }
           );
         }
 
         if (project.status === "CANCELADO") {
           return NextResponse.json(
-            { error: "Nao e permitido vincular ativos a projeto cancelado." },
+            { error: "Não é permitido vincular ativos a projeto cancelado." },
             { status: 409 }
           );
         }
@@ -534,7 +534,7 @@ export async function DELETE(req: NextRequest) {
     const cookieStore = await cookies();
 
     if (!session) {
-      return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
     const reason = getAccessBlockReason(session.user);
@@ -555,12 +555,12 @@ export async function DELETE(req: NextRequest) {
 
     const { id } = await req.json();
     if (!id) {
-      return NextResponse.json({ error: "ID e obrigatorio" }, { status: 400 });
+      return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 });
     }
 
     const asset = await prisma.asset.findUnique({ where: { id } });
     if (!asset) {
-      return NextResponse.json({ error: "Ativo nao encontrado" }, { status: 404 });
+      return NextResponse.json({ error: "Ativo não encontrado" }, { status: 404 });
     }
 
     if (
@@ -568,7 +568,7 @@ export async function DELETE(req: NextRequest) {
       (!currentTenantId || asset.tenantId !== currentTenantId)
     ) {
       return NextResponse.json(
-        { error: "Nao autorizado a remover ativos de outra prefeitura" },
+        { error: "Não autorizado a remover ativos de outra prefeitura" },
         { status: 403 }
       );
     }

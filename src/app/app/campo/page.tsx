@@ -41,19 +41,19 @@ const SYNC_CONFIG: Record<
   error: {
     label: "Erro",
     color: "text-danger-500",
-    description: "Falha no envio. Retry automatico habilitado.",
+    description: "Falha no envio. Retry automático habilitado.",
   },
   conflict: {
     label: "Conflito",
     color: "text-danger-600",
-    description: "Conflito detectado (idempotencia). Requer retry manual.",
+    description: "Conflito detectado (idempotência). Requer retry manual.",
   },
 };
 
 const ASSET_TYPES: { value: CampoAssetType; label: string; desc: string }[] = [
   { value: "PONTO", label: "Ponto", desc: "Hidrante, bueiro..." },
   { value: "TRECHO", label: "Trecho", desc: "Via, rede..." },
-  { value: "AREA", label: "Area", desc: "Lote, praca..." },
+  { value: "AREA", label: "Área", desc: "Lote, praça..." },
 ];
 
 export default function CampoPage() {
@@ -167,7 +167,7 @@ export default function CampoPage() {
     setGpsError(null);
 
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGpsError("Geolocalizacao indisponivel neste dispositivo.");
+      setGpsError("Geolocalização indisponível neste dispositivo.");
       setGpsLoading(false);
       return;
     }
@@ -178,7 +178,7 @@ export default function CampoPage() {
         setGpsLoading(false);
       },
       () => {
-        setGpsError("GPS indisponivel. Verifique as permissoes.");
+        setGpsError("GPS indisponível. Verifique as permissões.");
         setGpsLoading(false);
       },
       { enableHighAccuracy: true, timeout: 10_000 }
@@ -234,7 +234,7 @@ export default function CampoPage() {
 
     try {
       if (!isCampoOfflineSupported()) {
-        throw new Error("Seu navegador nao suporta fila offline (IndexedDB).");
+        throw new Error("Seu navegador não suporta fila offline (IndexedDB).");
       }
 
       await createCampoQueueItem({
@@ -294,7 +294,7 @@ export default function CampoPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-xl font-700 text-foreground">App de Campo</h1>
-          <p className="text-sm text-muted-foreground">Captura offline-first com fila persistente e sync automatico</p>
+          <p className="text-sm text-muted-foreground">Captura offline-first com fila persistente e sync automático</p>
         </div>
         <div
           className={cn(
@@ -314,7 +314,7 @@ export default function CampoPage() {
 
       {!offlineSupported && (
         <div className="rounded-xl border border-warning-300 bg-warning-50 px-4 py-3 text-xs text-warning-700">
-          IndexedDB indisponivel neste navegador. O modo offline completo nao pode ser habilitado.
+          IndexedDB indisponível neste navegador. O modo offline completo não pode ser habilitado.
         </div>
       )}
 
@@ -348,7 +348,7 @@ export default function CampoPage() {
                 <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <p className="text-sm text-accent-700 font-medium">
-                Ativo salvo localmente na fila. {isOnline ? "Sincronizacao disparada." : "Sincroniza quando a conexao voltar."}
+                Ativo salvo localmente na fila. {isOnline ? "Sincronização disparada." : "Sincroniza quando a conexão voltar."}
               </p>
             </div>
           )}
@@ -390,24 +390,24 @@ export default function CampoPage() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: Bueiro Av. Domingos Olimpio n 42"
+                placeholder="Ex: Bueiro Av. Domingos Olímpio n 42"
                 className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 transition-all"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground uppercase tracking-wider">Observacoes de Campo</label>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground uppercase tracking-wider">Observações de Campo</label>
               <textarea
                 rows={3}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Estado de conservacao, anomalias, notas tecnicas..."
+                placeholder="Estado de conservação, anomalias, notas técnicas..."
                 className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 transition-all"
               />
             </div>
           </div>
 
           <div className="rounded-xl border bg-card p-4">
-            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Localizacao GPS</p>
+            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Localização GPS</p>
             {coords ? (
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -435,7 +435,7 @@ export default function CampoPage() {
                   <svg className={cn("h-4 w-4", gpsLoading && "animate-spin")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  {gpsLoading ? "Obtendo localizacao..." : "Capturar GPS atual"}
+                  {gpsLoading ? "Obtendo localização..." : "Capturar GPS atual"}
                 </button>
                 {gpsError && <p className="text-xs text-danger-600">{gpsError}</p>}
               </div>
@@ -583,7 +583,7 @@ export default function CampoPage() {
 
                       {item.status === "error" && item.nextRetryAt && (
                         <p className="mt-1 text-[11px] text-warning-600">
-                          Proxima tentativa automatica: {formatDateTime(item.nextRetryAt)}
+                          Próxima tentativa automática: {formatDateTime(item.nextRetryAt)}
                         </p>
                       )}
 

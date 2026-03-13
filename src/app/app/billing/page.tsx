@@ -121,7 +121,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
           <p className="mt-2 font-display text-2xl font-800 text-foreground">
             {PLAN_LABELS[tenant.plan] ?? tenant.plan}
           </p>
-          <p className="mt-2 text-xs text-muted-foreground">Ultima atualizacao em {formatDate(tenant.updatedAt)}.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Última atualização em {formatDate(tenant.updatedAt)}.</p>
         </article>
 
         <article className="rounded-xl border border-border bg-card p-5 shadow-card">
@@ -141,8 +141,8 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
             </>
           ) : (
             <>
-              <p className="mt-2 text-lg font-semibold text-foreground">Nao aplicavel</p>
-              <p className="mt-1 text-sm text-muted-foreground">O tenant nao esta em periodo de trial.</p>
+              <p className="mt-2 text-lg font-semibold text-foreground">Não aplicável</p>
+              <p className="mt-1 text-sm text-muted-foreground">O tenant não está em período de trial.</p>
             </>
           )}
         </article>
@@ -151,7 +151,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
       <section className="rounded-xl border border-border bg-card shadow-card">
         <div className="border-b border-border px-5 py-4">
           <h2 className="font-display text-sm font-700 text-foreground">Faturas</h2>
-          <p className="text-xs text-muted-foreground">Historico financeiro e vencimentos.</p>
+          <p className="text-xs text-muted-foreground">Histórico financeiro e vencimentos.</p>
         </div>
         {tenant.invoices.length === 0 ? (
           <div className="px-5 py-8 text-sm text-muted-foreground">
@@ -198,11 +198,11 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
       </section>
 
       <section className="rounded-xl border border-border bg-card p-5 shadow-card">
-        <h2 className="font-display text-sm font-700 text-foreground">Gateway de cobranca</h2>
+        <h2 className="font-display text-sm font-700 text-foreground">Gateway de cobrança</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Provider configurado:{" "}
           <span className="font-semibold text-foreground">
-            {billingGateway.provider === "none" ? "Nao configurado" : billingGateway.provider.toUpperCase()}
+            {billingGateway.provider === "none" ? "Não configurado" : billingGateway.provider.toUpperCase()}
           </span>
           .
         </p>
@@ -222,7 +222,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
               disabled
               className="inline-flex cursor-not-allowed items-center rounded-md border border-border px-4 py-2 text-sm font-semibold text-muted-foreground"
             >
-              Portal indisponivel
+              Portal indisponível
             </button>
           )}
           <code className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
@@ -233,4 +233,3 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
     </div>
   );
 }
-

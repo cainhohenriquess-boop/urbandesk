@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -40,8 +40,8 @@ interface UserFormState {
 }
 
 const ROLE_OPTIONS: Array<{ value: ManagedRole; label: string; note: string }> = [
-  { value: "SECRETARIO", label: "Secretario", note: "Gestor do tenant (admin local)." },
-  { value: "ENGENHEIRO", label: "Engenheiro", note: "Operacao tecnica e modulo GIS." },
+  { value: "SECRETARIO", label: "Secretário", note: "Gestor do tenant (admin local)." },
+  { value: "ENGENHEIRO", label: "Engenheiro", note: "Operação técnica e módulo GIS." },
   { value: "CAMPO", label: "Campo", note: "Equipe operacional em campo." },
 ];
 
@@ -70,15 +70,15 @@ function validateForm(form: UserFormState): string | null {
 
   const email = form.email.trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return "E-mail invalido.";
+    return "E-mail inválido.";
   }
 
   if (!form.id && form.password.trim().length < 8) {
-    return "Senha deve ter no minimo 8 caracteres.";
+    return "Senha deve ter no mínimo 8 caracteres.";
   }
 
   if (form.id && form.password.trim().length > 0 && form.password.trim().length < 8) {
-    return "Quando informada, a nova senha deve ter no minimo 8 caracteres.";
+    return "Quando informada, a nova senha deve ter no mínimo 8 caracteres.";
   }
 
   return null;
@@ -127,7 +127,7 @@ export default function UsuariosPage() {
       const payload = (await response.json()) as UsersResponse | { error?: string };
 
       if (!response.ok) {
-        throw new Error((payload as { error?: string }).error ?? "Falha ao carregar usuarios.");
+        throw new Error((payload as { error?: string }).error ?? "Falha ao carregar usuários.");
       }
 
       const parsed = payload as UsersResponse;
@@ -137,7 +137,7 @@ export default function UsuariosPage() {
       setRoleSummary(parsed.roleSummary ?? {});
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Erro ao carregar usuarios.");
+      setError(err instanceof Error ? err.message : "Erro ao carregar usuários.");
       setUsers([]);
       setTotal(0);
       setPages(1);
@@ -185,16 +185,16 @@ export default function UsuariosPage() {
 
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.error ?? "Falha ao salvar usuario.");
+        throw new Error(payload?.error ?? "Falha ao salvar usuário.");
       }
 
       setForm(EMPTY_FORM);
-      setNotice(isEditing ? "Usuario atualizado com sucesso." : "Usuario criado com sucesso.");
+      setNotice(isEditing ? "Usuário atualizado com sucesso." : "Usuário criado com sucesso.");
       setPage(1);
       await loadUsers();
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Erro ao salvar usuario.");
+      setError(err instanceof Error ? err.message : "Erro ao salvar usuário.");
     } finally {
       setSaving(false);
     }
@@ -232,8 +232,8 @@ export default function UsuariosPage() {
 
       setNotice(
         !user.isActive
-          ? `Usuario ${user.name} ativado com sucesso.`
-          : `Usuario ${user.name} desativado com sucesso.`
+          ? `Usuário ${user.name} ativado com sucesso.`
+          : `Usuário ${user.name} desativado com sucesso.`
       );
       await loadUsers();
     } catch (err) {
@@ -243,7 +243,7 @@ export default function UsuariosPage() {
   };
 
   const handleResetPassword = async (user: UserItem) => {
-    if (!window.confirm(`Gerar senha temporaria para ${user.name}?`)) return;
+    if (!window.confirm(`Gerar senha temporária para ${user.name}?`)) return;
 
     setError(null);
     setNotice(null);
@@ -260,14 +260,14 @@ export default function UsuariosPage() {
 
       const temporaryPassword = payload?.data?.temporaryPassword as string | undefined;
       if (!temporaryPassword) {
-        throw new Error("Resposta invalida do servidor.");
+        throw new Error("Resposta inválida do servidor.");
       }
 
       setTempPasswordInfo({
         userName: user.name,
         temporaryPassword,
       });
-      setNotice(`Senha temporaria gerada para ${user.name}.`);
+      setNotice(`Senha temporária gerada para ${user.name}.`);
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Erro ao resetar senha.");
@@ -279,8 +279,8 @@ export default function UsuariosPage() {
     const mode = usageCount > 0 ? "soft" : "hard";
     const message =
       mode === "soft"
-        ? `Usuario possui historico (${usageCount} registro(s)). Sera desativado (soft delete). Continuar?`
-        : "Remover usuario permanentemente?";
+        ? `Usuário possui histórico (${usageCount} registro(s)). Será desativado (soft delete). Continuar?`
+        : "Remover usuário permanentemente?";
 
     if (!window.confirm(message)) return;
 
@@ -294,7 +294,7 @@ export default function UsuariosPage() {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.error ?? "Falha ao remover usuario.");
+        throw new Error(payload?.error ?? "Falha ao remover usuário.");
       }
 
       if (form.id === user.id) {
@@ -303,13 +303,13 @@ export default function UsuariosPage() {
 
       setNotice(
         payload?.mode === "hard"
-          ? `Usuario ${user.name} removido permanentemente.`
-          : `Usuario ${user.name} desativado com sucesso.`
+          ? `Usuário ${user.name} removido permanentemente.`
+          : `Usuário ${user.name} desativado com sucesso.`
       );
       await loadUsers();
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Erro ao remover usuario.");
+      setError(err instanceof Error ? err.message : "Erro ao remover usuário.");
     }
   };
 
@@ -329,9 +329,9 @@ export default function UsuariosPage() {
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="font-display text-2xl font-800 text-foreground">Gestao de Usuarios</h1>
+          <h1 className="font-display text-2xl font-800 text-foreground">Gestão de Usuários</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Administracao de usuarios por tenant com controle de papeis e bloqueio de escalonamento.
+            Administração de usuários por tenant com controle de papéis e bloqueio de escalonamento.
           </p>
         </div>
 
@@ -346,10 +346,10 @@ export default function UsuariosPage() {
       <section className="rounded-xl border border-border bg-card p-4 shadow-card">
         <h2 className="font-display text-sm font-bold text-foreground mb-2">Regras por papel</h2>
         <ul className="space-y-1 text-xs text-muted-foreground">
-          <li>SECRETARIO: administra usuarios do proprio tenant.</li>
-          <li>ENGENHEIRO: opera GIS e rotinas tecnicas, sem acesso administrativo.</li>
-          <li>CAMPO: operacao em campo, sem acesso administrativo.</li>
-          <li>SUPERADMIN nao e gerenciavel por esta area de tenant.</li>
+          <li>SECRETARIO: administra usuários do próprio tenant.</li>
+          <li>ENGENHEIRO: opera GIS e rotinas técnicas, sem acesso administrativo.</li>
+          <li>CAMPO: operação em campo, sem acesso administrativo.</li>
+          <li>SUPERADMIN não é gerenciável por esta área de tenant.</li>
         </ul>
       </section>
 
@@ -374,7 +374,7 @@ export default function UsuariosPage() {
             }}
             className="rounded-md border border-border bg-background px-3 py-2 text-sm"
           >
-            <option value="ALL">Todos os papeis</option>
+            <option value="ALL">Todos os papéis</option>
             {ROLE_OPTIONS.map((role) => (
               <option key={role.value} value={role.value}>
                 {role.label}
@@ -422,7 +422,7 @@ export default function UsuariosPage() {
       <section className="grid gap-6 lg:grid-cols-5">
         <div className="rounded-xl border border-border bg-card p-4 shadow-card lg:col-span-2">
           <h2 className="font-display text-sm font-bold text-foreground mb-3">
-            {isEditing ? "Editar Usuario" : "Novo Usuario"}
+            {isEditing ? "Editar Usuário" : "Novo Usuário"}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-3">
@@ -470,7 +470,7 @@ export default function UsuariosPage() {
                 checked={form.isActive}
                 onChange={(event) => setForm((prev) => ({ ...prev, isActive: event.target.checked }))}
               />
-              Usuario ativo
+              Usuário ativo
             </label>
 
             <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -503,15 +503,15 @@ export default function UsuariosPage() {
         <div className="rounded-xl border border-border bg-card p-4 shadow-card lg:col-span-3">
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <h2 className="font-display text-sm font-bold text-foreground">Usuarios ({total})</h2>
+              <h2 className="font-display text-sm font-bold text-foreground">Usuários ({total})</h2>
               <p className="text-xs text-muted-foreground">
-                Secretarios: {roleSummary.SECRETARIO ?? 0} | Engenheiros: {roleSummary.ENGENHEIRO ?? 0} | Campo: {roleSummary.CAMPO ?? 0}
+                Secretários: {roleSummary.SECRETARIO ?? 0} | Engenheiros: {roleSummary.ENGENHEIRO ?? 0} | Campo: {roleSummary.CAMPO ?? 0}
               </p>
             </div>
 
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>
-                Pagina {page} de {pages}
+                Página {page} de {pages}
               </span>
               <button
                 disabled={page <= 1}
@@ -531,19 +531,19 @@ export default function UsuariosPage() {
           </div>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Carregando usuarios...</p>
+            <p className="text-sm text-muted-foreground">Carregando usuários...</p>
           ) : users.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum usuario encontrado para os filtros aplicados.</p>
+            <p className="text-sm text-muted-foreground">Nenhum usuário encontrado para os filtros aplicados.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Usuario</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Usuário</th>
                     <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Papel</th>
                     <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Status</th>
-                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Historico</th>
-                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Acoes</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Histórico</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -570,7 +570,7 @@ export default function UsuariosPage() {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">
-                        logs: {user.usage?.assetLogs ?? 0} | sessoes: {user.usage?.sessions ?? 0}
+                        logs: {user.usage?.assetLogs ?? 0} | sessões: {user.usage?.sessions ?? 0}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap items-center gap-2">
@@ -594,7 +594,7 @@ export default function UsuariosPage() {
                             onClick={() => void handleResetPassword(user)}
                             className="rounded border border-brand-300 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
                           >
-                            Reset senha
+                            Resetar senha
                           </button>
                           <button
                             onClick={() => void handleDelete(user)}
@@ -615,7 +615,7 @@ export default function UsuariosPage() {
 
       {tempPasswordInfo && (
         <div className="rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-800">
-          Senha temporaria de <strong>{tempPasswordInfo.userName}</strong>:{" "}
+          Senha temporária de <strong>{tempPasswordInfo.userName}</strong>:{" "}
           <code className="rounded bg-warning-100 px-2 py-0.5">{tempPasswordInfo.temporaryPassword}</code>
         </div>
       )}
@@ -634,3 +634,4 @@ export default function UsuariosPage() {
     </div>
   );
 }
+

@@ -44,7 +44,7 @@ const STATUS_OPTIONS: Array<{ value: ProjectStatus; label: string }> = [
   { value: "PLANEJADO", label: "Planejado" },
   { value: "EM_ANDAMENTO", label: "Em andamento" },
   { value: "PARALISADO", label: "Paralisado" },
-  { value: "CONCLUIDO", label: "Concluido" },
+  { value: "CONCLUIDO", label: "Concluído" },
   { value: "CANCELADO", label: "Cancelado" },
 ];
 
@@ -81,11 +81,11 @@ function validateForm(form: ProjectFormState): string | null {
   }
 
   if (form.startDate && form.endDate && new Date(form.endDate).getTime() < new Date(form.startDate).getTime()) {
-    return "Data final nao pode ser anterior a data inicial.";
+    return "Data final não pode ser anterior à data inicial.";
   }
 
   if (form.budget && (!Number.isFinite(Number(form.budget)) || Number(form.budget) < 0)) {
-    return "Orcamento invalido.";
+    return "Orçamento inválido.";
   }
 
   return null;
@@ -258,8 +258,8 @@ export default function ProjetosGestaoPage() {
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="font-display text-2xl font-800 text-foreground">Gestao de Projetos</h1>
-          <p className="mt-1 text-sm text-muted-foreground">CRUD completo com isolamento por tenant e exclusao segura.</p>
+          <h1 className="font-display text-2xl font-800 text-foreground">Gestão de Projetos</h1>
+          <p className="mt-1 text-sm text-muted-foreground">CRUD completo com isolamento por tenant e exclusão segura.</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -278,7 +278,7 @@ export default function ProjetosGestaoPage() {
               setSearch(event.target.value);
               setPage(1);
             }}
-            placeholder="Buscar por nome/descricao"
+            placeholder="Buscar por nome/descrição"
             className="rounded-md border border-border bg-background px-3 py-2 text-sm"
           />
 
@@ -346,7 +346,7 @@ export default function ProjetosGestaoPage() {
             <textarea
               value={form.description}
               onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-              placeholder="Descricao"
+              placeholder="Descrição"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm min-h-[80px]"
             />
 
@@ -368,7 +368,7 @@ export default function ProjetosGestaoPage() {
                 min={0}
                 max={100}
                 step={1}
-                placeholder="% conclusao"
+                placeholder="% conclusão"
                 className="rounded-md border border-border bg-background px-3 py-2 text-sm"
               />
             </div>
@@ -379,7 +379,7 @@ export default function ProjetosGestaoPage() {
               type="number"
               min={0}
               step="0.01"
-              placeholder="Orcamento (R$)"
+              placeholder="Orçamento (R$)"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
             />
 
@@ -431,7 +431,7 @@ export default function ProjetosGestaoPage() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display text-sm font-bold text-foreground">Projetos ({total})</h2>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Pagina {page} de {pages}</span>
+              <span>Página {page} de {pages}</span>
               <button
                 disabled={page <= 1}
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
@@ -460,9 +460,9 @@ export default function ProjetosGestaoPage() {
                   <tr className="border-b border-border bg-muted/30">
                     <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Projeto</th>
                     <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Status</th>
-                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Orcamento</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Orçamento</th>
                     <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Ativos</th>
-                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Acoes</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Ações</th>
                   </tr>
                 </thead>
                 <tbody>

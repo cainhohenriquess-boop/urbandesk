@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, context: ResetPasswordRouteContext)
 
     const id = await resolveUserId(context);
     if (!id) {
-      return NextResponse.json({ error: "ID de usuario invalido." }, { status: 400 });
+      return NextResponse.json({ error: "ID de usuário inválido." }, { status: 400 });
     }
 
     const target = await prisma.user.findFirst({
@@ -41,12 +41,12 @@ export async function POST(req: NextRequest, context: ResetPasswordRouteContext)
     });
 
     if (!target) {
-      return NextResponse.json({ error: "Usuario nao encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
     }
 
     if (target.role === "SUPERADMIN") {
       return NextResponse.json(
-        { error: "Usuario de plataforma nao pode ser gerenciado aqui." },
+        { error: "Usuário de plataforma não pode ser gerenciado aqui." },
         { status: 403 }
       );
     }
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest, context: ResetPasswordRouteContext)
       data: {
         userId: target.id,
         temporaryPassword,
-        note: "Senha temporaria gerada. Oriente o usuario a trocar no proximo acesso.",
+        note: "Senha temporária gerada. Oriente o usuário a trocar no próximo acesso.",
       },
     });
   } catch (error) {

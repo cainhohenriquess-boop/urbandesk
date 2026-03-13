@@ -15,10 +15,10 @@ const createUserSchema = z.object({
     .string()
     .trim()
     .toLowerCase()
-    .email("E-mail invalido")
+    .email("E-mail inválido")
     .max(180),
   role: z.enum(TENANT_MANAGED_ROLES),
-  password: z.string().min(8, "Senha deve ter no minimo 8 caracteres").max(72),
+  password: z.string().min(8, "Senha deve ter no mínimo 8 caracteres").max(72),
   isActive: z.boolean().optional().default(true),
 });
 
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
 
     if (existing) {
       return NextResponse.json(
-        { error: "Ja existe usuario com este e-mail." },
+        { error: "Já existe usuário com este e-mail." },
         { status: 409 }
       );
     }
@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: "Payload invalido", details: error.issues },
+        { error: "Payload inválido", details: error.issues },
         { status: 400 }
       );
     }

@@ -146,7 +146,7 @@ export async function PATCH(req: NextRequest) {
     });
 
     if (!previous) {
-      return NextResponse.json({ error: "Tenant nao encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "Tenant não encontrado." }, { status: 404 });
     }
 
     const tenant = await prisma.tenant.update({

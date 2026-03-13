@@ -79,7 +79,7 @@ export async function GET(req: NextRequest, context: UserRouteContext) {
 
     const id = await resolveUserId(context);
     if (!id) {
-      return NextResponse.json({ error: "ID de usuario invalido." }, { status: 400 });
+      return NextResponse.json({ error: "ID de usuário inválido." }, { status: 400 });
     }
 
     const user = await prisma.user.findFirst({
@@ -106,12 +106,12 @@ export async function GET(req: NextRequest, context: UserRouteContext) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: "Usuario nao encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
     }
 
     if (user.role === "SUPERADMIN") {
       return NextResponse.json(
-        { error: "Usuario de plataforma nao pode ser gerenciado aqui." },
+        { error: "Usuário de plataforma não pode ser gerenciado aqui." },
         { status: 403 }
       );
     }
@@ -130,7 +130,7 @@ export async function PATCH(req: NextRequest, context: UserRouteContext) {
 
     const id = await resolveUserId(context);
     if (!id) {
-      return NextResponse.json({ error: "ID de usuario invalido." }, { status: 400 });
+      return NextResponse.json({ error: "ID de usuário inválido." }, { status: 400 });
     }
 
     const existing = await prisma.user.findFirst({
@@ -157,12 +157,12 @@ export async function PATCH(req: NextRequest, context: UserRouteContext) {
     });
 
     if (!existing) {
-      return NextResponse.json({ error: "Usuario nao encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
     }
 
     if (existing.role === "SUPERADMIN") {
       return NextResponse.json(
-        { error: "Usuario de plataforma nao pode ser alterado aqui." },
+        { error: "Usuário de plataforma não pode ser alterado aqui." },
         { status: 403 }
       );
     }
@@ -177,7 +177,7 @@ export async function PATCH(req: NextRequest, context: UserRouteContext) {
       (payload.role !== undefined || payload.isActive === false)
     ) {
       return NextResponse.json(
-        { error: "Nao e permitido alterar seu proprio papel ou desativar sua conta." },
+        { error: "Não é permitido alterar seu próprio papel ou desativar sua conta." },
         { status: 403 }
       );
     }
@@ -191,7 +191,7 @@ export async function PATCH(req: NextRequest, context: UserRouteContext) {
       const hasBackup = await hasAnotherActiveSecretary(adminContext.tenantId, existing.id);
       if (!hasBackup) {
         return NextResponse.json(
-          { error: "O tenant precisa manter ao menos um secretario ativo." },
+          { error: "O tenant precisa manter ao menos um secretário ativo." },
           { status: 409 }
         );
       }
@@ -204,7 +204,7 @@ export async function PATCH(req: NextRequest, context: UserRouteContext) {
       });
       if (duplicate && duplicate.id !== existing.id) {
         return NextResponse.json(
-          { error: "Ja existe usuario com este e-mail." },
+          { error: "Já existe usuário com este e-mail." },
           { status: 409 }
         );
       }
@@ -246,7 +246,7 @@ export async function PATCH(req: NextRequest, context: UserRouteContext) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: "Payload invalido", details: error.issues },
+        { error: "Payload inválido", details: error.issues },
         { status: 400 }
       );
     }
@@ -263,7 +263,7 @@ export async function DELETE(req: NextRequest, context: UserRouteContext) {
 
     const id = await resolveUserId(context);
     if (!id) {
-      return NextResponse.json({ error: "ID de usuario invalido." }, { status: 400 });
+      return NextResponse.json({ error: "ID de usuário inválido." }, { status: 400 });
     }
 
     const mode = req.nextUrl.searchParams.get("mode");
@@ -287,19 +287,19 @@ export async function DELETE(req: NextRequest, context: UserRouteContext) {
     });
 
     if (!existing) {
-      return NextResponse.json({ error: "Usuario nao encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
     }
 
     if (existing.id === adminContext.userId) {
       return NextResponse.json(
-        { error: "Nao e permitido remover seu proprio usuario." },
+        { error: "Não é permitido remover seu próprio usuário." },
         { status: 400 }
       );
     }
 
     if (existing.role === "SUPERADMIN") {
       return NextResponse.json(
-        { error: "Usuario de plataforma nao pode ser removido aqui." },
+        { error: "Usuário de plataforma não pode ser removido aqui." },
         { status: 403 }
       );
     }
@@ -308,7 +308,7 @@ export async function DELETE(req: NextRequest, context: UserRouteContext) {
       const hasBackup = await hasAnotherActiveSecretary(adminContext.tenantId, existing.id);
       if (!hasBackup) {
         return NextResponse.json(
-          { error: "O tenant precisa manter ao menos um secretario ativo." },
+          { error: "O tenant precisa manter ao menos um secretário ativo." },
           { status: 409 }
         );
       }
@@ -347,7 +347,7 @@ export async function DELETE(req: NextRequest, context: UserRouteContext) {
     return NextResponse.json({
       mode: "soft",
       reason: hardRequested && !hardEligible
-        ? "Usuario possui historico vinculado e nao pode ser removido fisicamente."
+        ? "Usuário possui histórico vinculado e não pode ser removido fisicamente."
         : "Soft delete aplicado.",
       data: serializeUser(updated),
     });

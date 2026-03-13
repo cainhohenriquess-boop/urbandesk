@@ -22,7 +22,7 @@ const GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf"
 
 const BLANK_STYLE = {
   version: 8,
-  name: "Base Cartografica",
+  name: "Base Cartográfica",
   glyphs: GLYPHS_URL,
   sources: {},
   layers: [{ id: "background", type: "background", paint: { "background-color": "#ffffff" } }],
@@ -58,15 +58,15 @@ const TOPO_STYLE = {
 
 const ASSET_STYLES = {
   BOCA_LOBO: { color: "bg-blue-500", hex: "#3b82f6", ring: "ring-blue-500/50", icon: "💧", label: "Boca de Lobo" },
-  POCO_VISITA: { color: "bg-slate-600", hex: "#475569", ring: "ring-slate-600/50", icon: "🕳️", label: "Poco de Visita" },
+  POCO_VISITA: { color: "bg-slate-600", hex: "#475569", ring: "ring-slate-600/50", icon: "🕳️", label: "Poço de Visita" },
   HIDRANTE: { color: "bg-red-500", hex: "#ef4444", ring: "ring-red-500/50", icon: "🚒", label: "Hidrante" },
-  SEMAFORO: { color: "bg-amber-500", hex: "#f59e0b", ring: "ring-amber-500/50", icon: "🚦", label: "Semaforo" },
+  SEMAFORO: { color: "bg-amber-500", hex: "#f59e0b", ring: "ring-amber-500/50", icon: "🚦", label: "Semáforo" },
   PLACA_TRANSITO: { color: "bg-red-600", hex: "#dc2626", ring: "ring-red-600/50", icon: "🛑", label: "Placa" },
   LOMBADA: { color: "bg-orange-500", hex: "#f97316", ring: "ring-orange-500/50", icon: "〰️", label: "Lombada" },
-  PONTO_ONIBUS: { color: "bg-cyan-500", hex: "#06b6d4", ring: "ring-cyan-500/50", icon: "🚏", label: "Ponto de Onibus" },
+  PONTO_ONIBUS: { color: "bg-cyan-500", hex: "#06b6d4", ring: "ring-cyan-500/50", icon: "🚏", label: "Ponto de Ônibus" },
   RADAR: { color: "bg-slate-700", hex: "#334155", ring: "ring-slate-700/50", icon: "📸", label: "Radar" },
   POSTE_LUZ: { color: "bg-yellow-400", hex: "#facc15", ring: "ring-yellow-400/50", icon: "💡", label: "Poste" },
-  ARVORE: { color: "bg-emerald-500", hex: "#10b981", ring: "ring-emerald-500/50", icon: "🌳", label: "Arvore" },
+  ARVORE: { color: "bg-emerald-500", hex: "#10b981", ring: "ring-emerald-500/50", icon: "🌳", label: "Árvore" },
   LIXEIRA: { color: "bg-zinc-500", hex: "#71717a", ring: "ring-zinc-500/50", icon: "🗑️", label: "Lixeira" },
   BURACO: { color: "bg-amber-600", hex: "#d97706", ring: "ring-amber-600/50", icon: "🚧", label: "Buraco" },
 };
@@ -88,7 +88,7 @@ function parseBaseLayerGeoJson(raw: unknown): GeoJsonFeatureCollection {
       return { type: "FeatureCollection", features };
     }
   } catch (error) {
-    console.error("GeoJSON de baselayer invalido", error);
+    console.error("GeoJSON de baselayer inválido", error);
   }
 
   return { type: "FeatureCollection", features: [] };
@@ -137,7 +137,7 @@ function EngineeringPanel() {
   const title = isGeometry
     ? pendingFeature.type === "line"
       ? "Nova Rede/Trecho"
-      : "Nova Area/Lote"
+      : "Nova Área/Lote"
     : ASSET_STYLES[pendingFeature.type as keyof typeof ASSET_STYLES]?.label || pendingFeature.type;
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -395,7 +395,7 @@ export function MapCanvas() {
         <div className="absolute top-4 left-4 z-50 rounded-xl border border-border bg-card/95 backdrop-blur-md px-4 py-3 shadow-xl w-72">
           <p className="text-xs font-bold text-foreground">Selecionado: {selectedFeature.label || selectedFeature.type}</p>
           <p className="text-[11px] text-muted-foreground mt-1">
-            {selectedGeometry ? "Arraste os vertices para editar geometria." : "Ativo de ponto selecionado."}
+            {selectedGeometry ? "Arraste os vértices para editar geometria." : "Ativo de ponto selecionado."}
           </p>
           <div className="mt-3 flex gap-2">
             <button
@@ -586,7 +586,7 @@ export function MapCanvas() {
       {drawMode !== "SELECT" && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full border border-brand-400 bg-brand-600/90 backdrop-blur-md px-6 py-2.5 text-sm font-bold text-white shadow-2xl flex items-center gap-2 pointer-events-none z-40">
           {drawMode === "line" || drawMode === "polygon"
-            ? "Clique para adicionar vertices. Botao direito finaliza."
+            ? "Clique para adicionar vértices. Botão direito finaliza."
             : `Clique no mapa para projetar: ${ASSET_STYLES[drawMode as keyof typeof ASSET_STYLES]?.label}`}
         </div>
       )}

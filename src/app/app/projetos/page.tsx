@@ -182,7 +182,7 @@ function normalizeBaseLayer(layer: any): BaseLayerData | null {
       geoJsonData = JSON.parse(geoJsonData);
     }
   } catch (error) {
-    console.error("Baselayer com JSON invalido", layer.id, error);
+    console.error("Baselayer com JSON inválido", layer.id, error);
     geoJsonData = null;
   }
 
@@ -407,7 +407,7 @@ export default function ProjetosPage() {
       }
     } catch (error) {
       if ((error as Error).name === "AbortError") return;
-      console.error("Erro ao carregar modulo GIS", error);
+      console.error("Erro ao carregar módulo GIS", error);
       setLoadError(error instanceof Error ? error.message : "Erro inesperado ao carregar GIS");
       replaceFeatures([]);
       setBaseLayersData([]);
@@ -464,7 +464,7 @@ export default function ProjetosPage() {
         .filter((request): request is Promise<void> => request !== null);
 
       if (requests.length === 0) {
-        throw new Error("Nao ha geometrias validas para sincronizar.");
+        throw new Error("Não há geometrias válidas para sincronizar.");
       }
 
       await Promise.all(requests);
@@ -524,7 +524,7 @@ export default function ProjetosPage() {
     <div className="flex h-full w-full flex-col bg-background relative overflow-hidden">
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/80 px-6 backdrop-blur-md z-10 relative gap-4">
         <div className="flex items-center gap-4 min-w-0">
-          <h1 className="font-display text-lg font-bold text-foreground">Gestao de Projetos GIS</h1>
+          <h1 className="font-display text-lg font-bold text-foreground">Gestão de Projetos GIS</h1>
           {isLoading && (
             <span className="flex items-center gap-2 text-xs text-brand-500 font-medium">
               <span className="h-2 w-2 rounded-full bg-brand-500 animate-pulse" /> Carregando dados GIS...
@@ -549,7 +549,7 @@ export default function ProjetosPage() {
             <option value="ALL">Todos os tipos</option>
             <option value="PONTO">Pontos</option>
             <option value="TRECHO">Trechos</option>
-            <option value="AREA">Areas</option>
+            <option value="AREA">Áreas</option>
           </select>
 
           <select

@@ -81,7 +81,7 @@ async function resolveTenantContext(req: NextRequest): Promise<
   const session = await getServerSession(authOptions);
 
   if (!session) {
-    return { response: NextResponse.json({ error: "Nao autenticado" }, { status: 401 }) };
+    return { response: NextResponse.json({ error: "Não autenticado" }, { status: 401 }) };
   }
 
   const reason = getAccessBlockReason(session.user);
@@ -96,7 +96,7 @@ async function resolveTenantContext(req: NextRequest): Promise<
 
   const role = session.user.role ?? "";
   if (!ALLOWED_ROLES.has(role)) {
-    return { response: NextResponse.json({ error: "Nao autorizado" }, { status: 403 }) };
+    return { response: NextResponse.json({ error: "Não autorizado" }, { status: 403 }) };
   }
 
   const cookieStore = await cookies();
@@ -109,7 +109,7 @@ async function resolveTenantContext(req: NextRequest): Promise<
 
   if (!tenantId) {
     return {
-      response: NextResponse.json({ error: "Tenant nao identificado para operacao." }, { status: 400 }),
+      response: NextResponse.json({ error: "Tenant não identificado para operação." }, { status: 400 }),
     };
   }
 
@@ -124,7 +124,7 @@ async function resolveTenantContext(req: NextRequest): Promise<
 
 function validateProjectDates(startDate: Date | null | undefined, endDate: Date | null | undefined): string | null {
   if (startDate && endDate && endDate.getTime() < startDate.getTime()) {
-    return "Data final nao pode ser anterior a data inicial.";
+    return "Data final não pode ser anterior à data inicial.";
   }
   return null;
 }
@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
 
     if (duplicate) {
       return NextResponse.json(
-        { error: "Ja existe um projeto com este nome neste tenant." },
+        { error: "Já existe um projeto com este nome neste tenant." },
         { status: 409 }
       );
     }
@@ -257,7 +257,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ data: serializeProject(created) }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Payload invalido", details: error.issues }, { status: 400 });
+      return NextResponse.json({ error: "Payload inválido", details: error.issues }, { status: 400 });
     }
 
     console.error("[PROJECTS_POST_ERROR]", error);

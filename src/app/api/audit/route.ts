@@ -42,7 +42,7 @@ async function resolveAuditScope(req: NextRequest): Promise<
   const session = await getServerSession(authOptions);
 
   if (!session) {
-    return { response: NextResponse.json({ error: "Nao autenticado" }, { status: 401 }) };
+    return { response: NextResponse.json({ error: "Não autenticado" }, { status: 401 }) };
   }
 
   const reason = getAccessBlockReason(session.user);
@@ -57,7 +57,7 @@ async function resolveAuditScope(req: NextRequest): Promise<
 
   const role = session.user.role ?? "";
   if (!ALLOWED_ROLES.has(role)) {
-    return { response: NextResponse.json({ error: "Nao autorizado" }, { status: 403 }) };
+    return { response: NextResponse.json({ error: "Não autorizado" }, { status: 403 }) };
   }
 
   if (role === "SUPERADMIN") {
@@ -71,7 +71,7 @@ async function resolveAuditScope(req: NextRequest): Promise<
   if (!tenantId) {
     return {
       response: NextResponse.json(
-        { error: "Tenant nao identificado para auditoria." },
+        { error: "Tenant não identificado para auditoria." },
         { status: 400 }
       ),
     };

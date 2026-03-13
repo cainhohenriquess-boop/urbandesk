@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
-      return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
     const reason = getAccessBlockReason(session.user);
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
 
     if (!tenantId) {
       return NextResponse.json(
-        { error: "Tenant nao identificado para upload." },
+        { error: "Tenant não identificado para upload." },
         { status: 400 }
       );
     }
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
     const moduleName = resolveUploadModule(formData);
     if (!moduleName) {
       return NextResponse.json(
-        { error: "Modulo de upload invalido." },
+        { error: "Módulo de upload inválido." },
         { status: 400 }
       );
     }
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
 
     if (rawFiles.length !== files.length) {
       return NextResponse.json(
-        { error: "Payload de arquivos invalido." },
+        { error: "Payload de arquivos inválido." },
         { status: 400 }
       );
     }
@@ -130,14 +130,14 @@ export async function POST(request: Request) {
     for (const file of files) {
       if (!(file.type in ALLOWED_MIME_TYPES)) {
         return NextResponse.json(
-          { error: `Tipo de arquivo invalido: ${file.type || "desconhecido"}.` },
+          { error: `Tipo de arquivo inválido: ${file.type || "desconhecido"}.` },
           { status: 400 }
         );
       }
 
       if (file.size <= 0) {
         return NextResponse.json(
-          { error: "Arquivo vazio nao permitido." },
+          { error: "Arquivo vazio não permitido." },
           { status: 400 }
         );
       }
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
       const extension = inferExtension(file);
       if (!extension) {
         return NextResponse.json(
-          { error: "Nao foi possivel validar a extensao do arquivo." },
+          { error: "Não foi possível validar a extensão do arquivo." },
           { status: 400 }
         );
       }
