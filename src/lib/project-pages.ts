@@ -6,6 +6,10 @@ import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { getAccessBlockReason } from "@/lib/auth-shared";
 import { prisma } from "@/lib/prisma";
+import {
+  getProjectSchemaCompatibility,
+  type ProjectSchemaCompatibility,
+} from "@/lib/project-schema-compat";
 
 const projectShellInclude = {
   manager: {
@@ -58,6 +62,12 @@ export type ProjectShellRecord = Prisma.ProjectGetPayload<{
   include: typeof projectShellInclude;
 }>;
 
+export type ProjectShellData = {
+  tenantId: string | null;
+  project: ProjectShellRecord | null;
+  compatibility: ProjectSchemaCompatibility;
+};
+
 export async function resolveProjectsTenantId() {
   const session = await getServerSession(authOptions);
 
@@ -83,13 +93,23 @@ export async function resolveProjectsTenantId() {
   return tenantId;
 }
 
-const getProjectShellDataCached = cache(async (projectId: string) => {
+const getProjectShellDataCached = cache(async (projectId: string): Promise<ProjectShellData> => {
   const tenantId = await resolveProjectsTenantId();
+  const compatibility = await getProjectSchemaCompatibility();
 
   if (!tenantId) {
     return {
       tenantId: null,
       project: null,
+      compatibility,
+    };
+  }
+
+  if (!compatibility.governanceSchemaReady) {
+    return {
+      tenantId,
+      project: null,
+      compatibility,
     };
   }
 
@@ -101,6 +121,7 @@ const getProjectShellDataCached = cache(async (projectId: string) => {
   return {
     tenantId,
     project,
+    compatibility,
   };
 });
 

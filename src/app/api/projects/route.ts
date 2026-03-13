@@ -23,6 +23,7 @@ import {
   type ProjectSortBy,
   type ProjectSortOrder,
 } from "@/lib/project-portfolio-query";
+import { getProjectSchemaCompatibility } from "@/lib/project-schema-compat";
 
 const tenantIdSchema = z.string().cuid();
 const ALLOWED_ROLES = new Set(["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"]);
@@ -369,6 +370,19 @@ export async function GET(req: NextRequest) {
     const context = await resolveTenantContext(req);
     if ("response" in context) return context.response;
 
+    const projectSchema = await getProjectSchemaCompatibility();
+    if (!projectSchema.executiveSchemaReady) {
+      return NextResponse.json(
+        {
+          error:
+            projectSchema.notice ??
+            "A base de dados ainda não recebeu a migration estrutural do módulo Projetos.",
+          code: "project_schema_legacy",
+        },
+        { status: 503 }
+      );
+    }
+
     const { tenantId } = context;
     const searchParams = req.nextUrl.searchParams;
     const q = searchParams.get("q")?.trim() ?? "";
@@ -649,6 +663,19 @@ export async function POST(req: NextRequest) {
 
     const context = await resolveTenantContext(req);
     if ("response" in context) return context.response;
+
+    const projectSchema = await getProjectSchemaCompatibility();
+    if (!projectSchema.executiveSchemaReady) {
+      return NextResponse.json(
+        {
+          error:
+            projectSchema.notice ??
+            "A base de dados ainda não recebeu a migration estrutural do módulo Projetos.",
+          code: "project_schema_legacy",
+        },
+        { status: 503 }
+      );
+    }
 
     const body = await req.json();
     const payload = createProjectSchema.parse(body);

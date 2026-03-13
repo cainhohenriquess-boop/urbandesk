@@ -3,8 +3,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { Prisma } from "@prisma/client";
 import { formatBRLCompact, formatPercent, formatNumber, getStatusConfig } from "@/lib/utils";
 import { UrbanAreaChart, UrbanBarChart } from "@/components/dashboard/charts";
+import { getProjectSchemaCompatibility } from "@/lib/project-schema-compat";
 
 // ─────────────────────────────────────────────
 // Sub-componentes UI
@@ -68,12 +70,85 @@ export default async function SecretariaPage({
     );
   }
 
-  // 1. Buscas Reais no PostgreSQL via Prisma
-  const projects = await prisma.project.findMany({
-    where: { tenantId },
-    include: { _count: { select: { assets: true } } },
-    orderBy: { createdAt: 'desc' }
-  });
+  const projectSchema = await getProjectSchemaCompatibility();
+
+  type DashboardProject = {
+    id: string;
+    name: string;
+    status: string;
+    budget: number;
+    completionPct: number;
+    assetsCount: number;
+    endDate: Date | null;
+    createdAt: Date;
+  };
+
+  let projects: DashboardProject[] = [];
+
+  if (projectSchema.executiveSchemaReady) {
+    const projectRows = await prisma.project.findMany({
+      where: { tenantId },
+      include: { _count: { select: { assets: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    projects = projectRows.map((project) => ({
+      id: project.id,
+      name: project.name,
+      status: project.status,
+      budget: Number(project.budget || 0),
+      completionPct: project.completionPct || 0,
+      assetsCount: project._count.assets,
+      endDate: project.endDate,
+      createdAt: project.createdAt,
+    }));
+  } else {
+    const legacyProjects = await prisma.$queryRaw<
+      {
+        id: string;
+        name: string;
+        status: string;
+        budget: Prisma.Decimal | number | null;
+        completionPct: number | null;
+        assetsCount: number;
+        endDate: Date | null;
+        createdAt: Date;
+      }[]
+    >(Prisma.sql`
+      SELECT
+        p.id,
+        p.name,
+        p.status::text AS status,
+        p.budget,
+        p."completionPct" AS "completionPct",
+        p."endDate" AS "endDate",
+        p."createdAt" AS "createdAt",
+        COUNT(a.id)::int AS "assetsCount"
+      FROM projects p
+      LEFT JOIN assets a ON a."projectId" = p.id
+      WHERE p."tenantId" = ${tenantId}
+      GROUP BY
+        p.id,
+        p.name,
+        p.status,
+        p.budget,
+        p."completionPct",
+        p."endDate",
+        p."createdAt"
+      ORDER BY p."createdAt" DESC
+    `);
+
+    projects = legacyProjects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      status: project.status,
+      budget: Number(project.budget || 0),
+      completionPct: project.completionPct || 0,
+      assetsCount: project.assetsCount,
+      endDate: project.endDate,
+      createdAt: project.createdAt,
+    }));
+  }
 
   const assetsCount = await prisma.asset.count({ where: { tenantId } });
 
@@ -110,7 +185,7 @@ export default async function SecretariaPage({
     status: proj.status,
     budget: Number(proj.budget || 0),
     pct: proj.completionPct || 0,
-    assets: proj._count.assets,
+    assets: proj.assetsCount,
     dueDate: proj.endDate ? new Date(proj.endDate).toLocaleDateString("pt-BR") : "Não definido",
   }));
 
@@ -126,6 +201,13 @@ export default async function SecretariaPage({
 
   return (
     <div className="space-y-6">
+      {!projectSchema.executiveSchemaReady && projectSchema.notice ? (
+        <div className="rounded-2xl border border-warning-200 bg-warning-50 px-5 py-4 text-sm text-warning-900 shadow-card">
+          <p className="font-semibold">Modo compatível do módulo Projetos ativo</p>
+          <p className="mt-1 text-warning-800">{projectSchema.notice}</p>
+        </div>
+      ) : null}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -257,7 +339,7 @@ export default async function SecretariaPage({
                 </tr>
               ) : (
                 PROJETOS_RECENTES.map((proj) => {
-                  const s = getStatusConfig(proj.status);
+                  const s = getStatusConfig(proj.status as "PLANEJADO" | "EM_ANDAMENTO" | "PARALISADO" | "CONCLUIDO" | "CANCELADO");
                   return (
                     <tr key={proj.id} className="transition-colors hover:bg-muted/20">
                       <td className="max-w-[240px] px-5 py-3.5">

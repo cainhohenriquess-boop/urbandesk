@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { ProjectPortfolioClient } from "@/components/projetos/project-portfolio-client";
 import { resolveProjectsTenantId } from "@/lib/project-pages";
+import { getProjectSchemaCompatibility } from "@/lib/project-schema-compat";
 
 type SearchParams = Promise<{ projectId?: string }>;
 
@@ -18,6 +19,7 @@ export default async function ProjetosPage({
   }
 
   const tenantId = await resolveProjectsTenantId();
+  const projectSchema = await getProjectSchemaCompatibility();
 
   if (!tenantId) {
     return (
@@ -40,6 +42,13 @@ export default async function ProjetosPage({
 
   return (
     <div className="space-y-6">
+      {!projectSchema.executiveSchemaReady && projectSchema.notice ? (
+        <section className="rounded-2xl border border-warning-200 bg-warning-50 px-6 py-4 text-sm text-warning-900 shadow-card">
+          <p className="font-semibold">Módulo de Projetos em modo compatível</p>
+          <p className="mt-1 text-warning-800">{projectSchema.notice}</p>
+        </section>
+      ) : null}
+
       <section className="grid gap-4 xl:grid-cols-[1.35fr_0.95fr]">
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">

@@ -14,6 +14,7 @@ import {
   PROJECT_STATUS_VALUES,
   PROJECT_TYPE_VALUES,
 } from "@/lib/project-portfolio";
+import { getProjectSchemaCompatibility } from "@/lib/project-schema-compat";
 
 const ALLOWED_ROLES = new Set(["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"]);
 const tenantIdSchema = z.string().cuid();
@@ -234,6 +235,19 @@ export async function GET(req: NextRequest, context: ProjectRouteContext) {
     const tenantContext = await resolveTenantContext(req);
     if ("response" in tenantContext) return tenantContext.response;
 
+    const projectSchema = await getProjectSchemaCompatibility();
+    if (!projectSchema.executiveSchemaReady) {
+      return NextResponse.json(
+        {
+          error:
+            projectSchema.notice ??
+            "A base de dados ainda não recebeu a migration estrutural do módulo Projetos.",
+          code: "project_schema_legacy",
+        },
+        { status: 503 }
+      );
+    }
+
     const id = await resolveProjectId(context);
     if (!id) {
       return NextResponse.json({ error: "ID de projeto inválido" }, { status: 400 });
@@ -269,6 +283,19 @@ export async function PATCH(req: NextRequest, context: ProjectRouteContext) {
 
     const tenantContext = await resolveTenantContext(req);
     if ("response" in tenantContext) return tenantContext.response;
+
+    const projectSchema = await getProjectSchemaCompatibility();
+    if (!projectSchema.executiveSchemaReady) {
+      return NextResponse.json(
+        {
+          error:
+            projectSchema.notice ??
+            "A base de dados ainda não recebeu a migration estrutural do módulo Projetos.",
+          code: "project_schema_legacy",
+        },
+        { status: 503 }
+      );
+    }
 
     const id = await resolveProjectId(context);
     if (!id) {
@@ -392,6 +419,19 @@ export async function DELETE(req: NextRequest, context: ProjectRouteContext) {
 
     const tenantContext = await resolveTenantContext(req);
     if ("response" in tenantContext) return tenantContext.response;
+
+    const projectSchema = await getProjectSchemaCompatibility();
+    if (!projectSchema.executiveSchemaReady) {
+      return NextResponse.json(
+        {
+          error:
+            projectSchema.notice ??
+            "A base de dados ainda não recebeu a migration estrutural do módulo Projetos.",
+          code: "project_schema_legacy",
+        },
+        { status: 503 }
+      );
+    }
 
     const id = await resolveProjectId(context);
     if (!id) {
