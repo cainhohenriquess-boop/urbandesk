@@ -3,15 +3,15 @@
 const FEATURES = [
   {
     title: "Workstation GIS",
-    desc: "Mapa interativo com desenho de pontos, linhas e poligonos, controle de camadas e exportacao GeoJSON.",
+    desc: "Mapa interativo com desenho de pontos, linhas e polígonos, controle de camadas e exportação GeoJSON.",
   },
   {
     title: "App de Campo Offline",
-    desc: "PWA instalavel no celular com captura de GPS, fotos e sincronizacao automatica quando a conexao retorna.",
+    desc: "PWA instalável no celular com captura de GPS, fotos e sincronização automática quando a conexão retorna.",
   },
   {
     title: "Dashboard Executivo",
-    desc: "KPIs em tempo real para obras, ativos, orcamento e evolucao por status.",
+    desc: "KPIs em tempo real para obras, ativos, orçamento e evolução por status.",
   },
   {
     title: "Multi-tenancy e RBAC",
@@ -19,11 +19,11 @@ const FEATURES = [
   },
   {
     title: "PostGIS Nativo",
-    desc: "Dados espaciais em PostgreSQL + PostGIS para consultas geograficas confiaveis.",
+    desc: "Dados espaciais em PostgreSQL + PostGIS para consultas geográficas confiáveis.",
   },
   {
     title: "Suporte Especializado",
-    desc: "Acompanhamento tecnico durante implantacao e operacao diaria.",
+    desc: "Acompanhamento técnico durante implantação e operação diária.",
   },
 ];
 
@@ -32,7 +32,7 @@ const PLANS = [
     name: "Starter",
     price: "R$ 890",
     period: "/mes",
-    desc: "Ideal para municipios ate 100 mil habitantes.",
+    desc: "Ideal para municípios até 100 mil habitantes.",
     ctaLabel: "Iniciar trial",
     ctaHref: "/login?plan=starter",
   },
@@ -40,7 +40,7 @@ const PLANS = [
     name: "Pro",
     price: "R$ 2.400",
     period: "/mes",
-    desc: "Para operacao com multiplas equipes e maior volume de ativos.",
+    desc: "Para operação com múltiplas equipes e maior volume de ativos.",
     ctaLabel: "Iniciar trial",
     ctaHref: "/login?plan=pro",
     featured: true,
@@ -49,7 +49,7 @@ const PLANS = [
     name: "Enterprise",
     price: "Sob consulta",
     period: "",
-    desc: "Para grandes cidades e operacoes com requisitos avancados.",
+    desc: "Para grandes cidades e operações com requisitos avançados.",
     ctaLabel: "Falar com especialista",
     ctaHref: "mailto:comercial@urbandesk.com.br?subject=Plano%20Enterprise",
   },
@@ -89,12 +89,12 @@ export default function LandingPage() {
       </nav>
 
       <section className="mx-auto max-w-6xl px-6 py-20 text-center">
-        <p className="text-xs uppercase tracking-widest text-brand-400">Gestao municipal inteligente</p>
+        <p className="text-xs uppercase tracking-widest text-brand-400">Gestão municipal inteligente</p>
         <h1 className="mt-4 font-display text-4xl font-extrabold leading-tight md:text-6xl">
-          Infraestrutura urbana com dados confiaveis
+          Infraestrutura urbana com dados confiáveis
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-base text-slate-300 md:text-lg">
-          Planeje, execute e monitore projetos e ativos GIS com equipes conectadas no escritorio e no campo.
+          Planeje, execute e monitore projetos e ativos GIS com equipes conectadas no escritório e no campo.
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -108,7 +108,7 @@ export default function LandingPage() {
             href="mailto:comercial@urbandesk.com.br?subject=Solicitar%20demonstracao"
             className="rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold text-slate-200 hover:border-white/40 hover:text-white transition-colors"
           >
-            Solicitar demonstracao
+            Solicitar demonstração
           </a>
         </div>
       </section>
@@ -116,13 +116,13 @@ export default function LandingPage() {
       <section id="funcionalidades" className="mx-auto max-w-6xl px-6 py-16">
         <div className="mb-10 text-center">
           <h2 className="font-display text-3xl font-bold">Funcionalidades principais</h2>
-          <p className="mt-2 text-sm text-slate-400">Modulos para secretaria, engenharia, campo e administracao.</p>
+          <p className="mt-2 text-sm text-slate-400">Módulos para secretaria, engenharia, campo e administração.</p>
         </div>
 
         {FEATURES.length === 0 ? (
           <EmptyState
-            title="Catalogo de funcionalidades indisponivel"
-            description="Nao foi possivel carregar as funcionalidades no momento. Tente novamente mais tarde."
+            title="Catálogo de funcionalidades indisponível"
+            description="Não foi possível carregar as funcionalidades no momento. Tente novamente mais tarde."
           />
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -139,13 +139,13 @@ export default function LandingPage() {
       <section id="planos" className="mx-auto max-w-6xl px-6 py-16">
         <div className="mb-10 text-center">
           <h2 className="font-display text-3xl font-bold">Planos</h2>
-          <p className="mt-2 text-sm text-slate-400">Preco transparente e onboarding assistido.</p>
+          <p className="mt-2 text-sm text-slate-400">Preço transparente e onboarding assistido.</p>
         </div>
 
         {PLANS.length === 0 ? (
           <EmptyState
-            title="Planos indisponiveis"
-            description="As informacoes comerciais nao estao disponiveis no momento."
+            title="Planos indisponíveis"
+            description="As informações comerciais não estão disponíveis no momento."
           />
         ) : (
           <div className="grid gap-4 md:grid-cols-3">
@@ -184,9 +184,9 @@ export default function LandingPage() {
 
       <section id="contato" className="border-t border-white/10 py-16">
         <div className="mx-auto max-w-3xl px-6 text-center">
-          <h2 className="font-display text-3xl font-bold">Pronto para publicar sua operacao digital?</h2>
+          <h2 className="font-display text-3xl font-bold">Pronto para publicar sua operação digital?</h2>
           <p className="mt-3 text-sm text-slate-300">
-            Fale com nosso time para validar escopo tecnico, implantacao e governanca dos dados.
+            Fale com nosso time para validar escopo técnico, implantação e governança dos dados.
           </p>
           <a
             href="mailto:comercial@urbandesk.com.br?subject=Contato%20comercial"
@@ -199,7 +199,7 @@ export default function LandingPage() {
 
       <footer className="border-t border-white/10 bg-[#070b14] py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 text-xs text-slate-400 md:flex-row">
-          <p>UrbanDesk (c) {new Date().getFullYear()} - plataforma para gestao urbana</p>
+          <p>UrbanDesk (c) {new Date().getFullYear()} - plataforma para gestão urbana</p>
 
           <div className="flex items-center gap-4">
             <Link href="/termos-de-uso" className="hover:text-white">Termos de Uso</Link>
