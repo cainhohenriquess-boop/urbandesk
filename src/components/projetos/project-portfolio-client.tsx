@@ -1,30 +1,40 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  PROJECT_DEADLINE_FILTER_OPTIONS,
+  getProjectPriorityLabel,
+  getProjectStatusLabel,
+  getProjectTypeLabel,
+} from "@/lib/project-portfolio";
+import {
+  buildProjectPortfolioSearchParams,
+  DEFAULT_PROJECT_PORTFOLIO_FILTERS,
+  parseProjectPortfolioUrlState,
+  PROJECT_SORT_BY_OPTIONS,
+  type ProjectPortfolioUrlState,
+} from "@/lib/project-portfolio-query";
 import { ProjectPortfolioFilters } from "@/components/projetos/project-portfolio-filters";
 import { ProjectPortfolioForm } from "@/components/projetos/project-portfolio-form";
 import { ProjectPortfolioList } from "@/components/projetos/project-portfolio-list";
 import { ProjectPortfolioMetrics } from "@/components/projetos/project-portfolio-metrics";
 import type {
-  PortfolioViewMode,
   ProjectPortfolioFiltersState,
   ProjectPortfolioFormState,
   ProjectPortfolioItem,
   ProjectPortfolioResponse,
+  ProjectPortfolioSortState,
   ProjectPortfolioSummary,
 } from "@/components/projetos/project-portfolio-model";
 
-const EMPTY_FILTERS: ProjectPortfolioFiltersState = {
-  search: "",
-  status: "ALL",
-  department: "",
-  projectType: "ALL",
-  neighborhood: "",
-  priority: "ALL",
-  deadline: "ALL",
-  budgetMin: "",
-  budgetMax: "",
-  includeCancelled: false,
+type UrlStatePatch = Partial<Omit<ProjectPortfolioUrlState, "filters">> & {
+  filters?: Partial<ProjectPortfolioFiltersState>;
 };
 
 const EMPTY_SUMMARY: ProjectPortfolioSummary = {
@@ -115,17 +125,26 @@ function toForm(project: ProjectPortfolioItem): ProjectPortfolioFormState {
   };
 }
 
+function buildUrl(pathname: string, state: ProjectPortfolioUrlState) {
+  const params = buildProjectPortfolioSearchParams(state);
+  const queryString = params.toString();
+  return queryString ? `${pathname}?${queryString}` : pathname;
+}
+
 export function ProjectPortfolioClient() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlState = useMemo(() => parseProjectPortfolioUrlState(searchParams), [searchParams]);
+
   const [projects, setProjects] = useState<ProjectPortfolioItem[]>([]);
   const [summary, setSummary] = useState<ProjectPortfolioSummary>(EMPTY_SUMMARY);
   const [options, setOptions] =
     useState<ProjectPortfolioResponse["filterOptions"]>(EMPTY_OPTIONS);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
-  const [viewMode, setViewMode] = useState<PortfolioViewMode>("table");
-  const [filters, setFilters] = useState<ProjectPortfolioFiltersState>(EMPTY_FILTERS);
   const [form, setForm] = useState<ProjectPortfolioFormState>(EMPTY_FORM);
+  const [searchDraft, setSearchDraft] = useState(urlState.filters.search);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -133,26 +152,55 @@ export function ProjectPortfolioClient() {
 
   const isEditing = Boolean(form.id);
 
+  useEffect(() => {
+    setSearchDraft(urlState.filters.search);
+  }, [urlState.filters.search]);
+
+  const replaceUrlState = useCallback(
+    (nextState: ProjectPortfolioUrlState) => {
+      router.replace(buildUrl(pathname, nextState), { scroll: false });
+    },
+    [pathname, router]
+  );
+
+  const patchUrlState = useCallback(
+    (patch: UrlStatePatch) => {
+      const { filters: filterPatch, ...statePatch } = patch;
+      const nextState: ProjectPortfolioUrlState = {
+        ...urlState,
+        ...statePatch,
+        filters: {
+          ...urlState.filters,
+          ...(filterPatch ?? {}),
+        },
+      };
+
+      replaceUrlState(nextState);
+    },
+    [replaceUrlState, urlState]
+  );
+
+  useEffect(() => {
+    const normalizedSearch = searchDraft.trim();
+    if (normalizedSearch === urlState.filters.search) return;
+
+    const timeoutId = window.setTimeout(() => {
+      patchUrlState({
+        filters: { search: normalizedSearch },
+        page: 1,
+      });
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [patchUrlState, searchDraft, urlState.filters.search]);
+
   const loadProjects = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
 
     try {
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: "18",
-        includeCancelled: filters.includeCancelled ? "true" : "false",
-      });
-
-      if (filters.search.trim()) params.set("q", filters.search.trim());
-      if (filters.status !== "ALL") params.set("status", filters.status);
-      if (filters.department) params.set("department", filters.department);
-      if (filters.projectType !== "ALL") params.set("projectType", filters.projectType);
-      if (filters.neighborhood) params.set("neighborhood", filters.neighborhood);
-      if (filters.priority !== "ALL") params.set("priority", filters.priority);
-      if (filters.deadline !== "ALL") params.set("deadline", filters.deadline);
-      if (filters.budgetMin.trim()) params.set("budgetMin", filters.budgetMin.trim());
-      if (filters.budgetMax.trim()) params.set("budgetMax", filters.budgetMax.trim());
+      const params = buildProjectPortfolioSearchParams(urlState);
+      params.set("limit", "18");
 
       const response = await fetch(`/api/projects?${params.toString()}`, {
         cache: "no-store",
@@ -185,7 +233,7 @@ export function ProjectPortfolioClient() {
     } finally {
       setLoading(false);
     }
-  }, [filters, page]);
+  }, [urlState]);
 
   useEffect(() => {
     void loadProjects();
@@ -193,16 +241,21 @@ export function ProjectPortfolioClient() {
 
   const updateFilters = useCallback(
     (patch: Partial<ProjectPortfolioFiltersState>) => {
-      setFilters((current) => ({ ...current, ...patch }));
-      setPage(1);
+      patchUrlState({ filters: patch, page: 1 });
     },
-    []
+    [patchUrlState]
+  );
+
+  const updateSort = useCallback(
+    (patch: Partial<ProjectPortfolioSortState>) => {
+      patchUrlState({ ...patch, page: 1 });
+    },
+    [patchUrlState]
   );
 
   const handleResetFilters = useCallback(() => {
-    setFilters(EMPTY_FILTERS);
-    setPage(1);
-  }, []);
+    patchUrlState({ filters: DEFAULT_PROJECT_PORTFOLIO_FILTERS, page: 1 });
+  }, [patchUrlState]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -247,8 +300,11 @@ export function ProjectPortfolioClient() {
       }
 
       setForm(EMPTY_FORM);
-      setPage(1);
-      await loadProjects();
+      if (urlState.page !== 1) {
+        patchUrlState({ page: 1 });
+      } else {
+        await loadProjects();
+      }
     } catch (error) {
       console.error(error);
       setSubmitError(error instanceof Error ? error.message : "Erro ao salvar projeto.");
@@ -267,28 +323,68 @@ export function ProjectPortfolioClient() {
 
   const activeFilterLabels = useMemo(() => {
     return [
-      filters.search.trim() ? `Busca: ${filters.search.trim()}` : null,
-      filters.status !== "ALL" ? `Status: ${filters.status}` : null,
-      filters.department ? `Secretaria: ${filters.department}` : null,
-      filters.projectType !== "ALL" ? `Tipo: ${filters.projectType}` : null,
-      filters.neighborhood ? `Bairro: ${filters.neighborhood}` : null,
-      filters.priority !== "ALL" ? `Prioridade: ${filters.priority}` : null,
-      filters.deadline !== "ALL" ? `Prazo: ${filters.deadline}` : null,
-      filters.budgetMin.trim() ? `Min: R$ ${filters.budgetMin.trim()}` : null,
-      filters.budgetMax.trim() ? `Máx: R$ ${filters.budgetMax.trim()}` : null,
-      filters.includeCancelled ? "Inclui cancelados" : null,
+      urlState.filters.search.trim() ? `Busca: ${urlState.filters.search.trim()}` : null,
+      urlState.filters.status !== "ALL"
+        ? `Status: ${getProjectStatusLabel(urlState.filters.status)}`
+        : null,
+      urlState.filters.department
+        ? `Secretaria: ${urlState.filters.department}`
+        : null,
+      urlState.filters.projectType !== "ALL"
+        ? `Tipo: ${getProjectTypeLabel(urlState.filters.projectType)}`
+        : null,
+      urlState.filters.neighborhood
+        ? `Bairro: ${urlState.filters.neighborhood}`
+        : null,
+      urlState.filters.priority !== "ALL"
+        ? `Prioridade: ${getProjectPriorityLabel(urlState.filters.priority)}`
+        : null,
+      urlState.filters.deadline !== "ALL"
+        ? `Prazo: ${
+            PROJECT_DEADLINE_FILTER_OPTIONS.find(
+              (option) => option.value === urlState.filters.deadline
+            )?.label ?? urlState.filters.deadline
+          }`
+        : null,
+      urlState.filters.budgetMin.trim()
+        ? `Min: R$ ${urlState.filters.budgetMin.trim()}`
+        : null,
+      urlState.filters.budgetMax.trim()
+        ? `Máx: R$ ${urlState.filters.budgetMax.trim()}`
+        : null,
+      urlState.filters.includeCancelled ? "Inclui cancelados" : null,
+      `Ordenação: ${
+        PROJECT_SORT_BY_OPTIONS.find((option) => option.value === urlState.sortBy)?.label ??
+        urlState.sortBy
+      }`,
     ].filter((item): item is string => Boolean(item));
-  }, [filters]);
+  }, [urlState]);
 
   return (
     <div className="space-y-6">
       <ProjectPortfolioMetrics summary={summary} loading={loading} />
 
       <ProjectPortfolioFilters
-        filters={filters}
+        filters={{ ...urlState.filters, search: searchDraft }}
+        sort={{ sortBy: urlState.sortBy, sortOrder: urlState.sortOrder }}
         options={options}
-        onChange={updateFilters}
-        onReset={handleResetFilters}
+        onChange={(patch) => {
+          if (patch.search !== undefined) {
+            setSearchDraft(patch.search);
+          }
+
+          const nextPatch = { ...patch };
+          delete nextPatch.search;
+
+          if (Object.keys(nextPatch).length > 0) {
+            updateFilters(nextPatch);
+          }
+        }}
+        onSortChange={updateSort}
+        onReset={() => {
+          setSearchDraft("");
+          handleResetFilters();
+        }}
       />
 
       {activeFilterLabels.length > 0 ? (
@@ -318,14 +414,15 @@ export function ProjectPortfolioClient() {
         <ProjectPortfolioList
           projects={projects}
           total={total}
-          page={page}
+          page={urlState.page}
           pages={pages}
-          viewMode={viewMode}
+          viewMode={urlState.viewMode}
+          sort={{ sortBy: urlState.sortBy, sortOrder: urlState.sortOrder }}
           loading={loading}
           error={fetchError}
           onRetry={() => void loadProjects()}
-          onPageChange={setPage}
-          onViewModeChange={setViewMode}
+          onPageChange={(nextPage) => patchUrlState({ page: nextPage })}
+          onViewModeChange={(viewMode) => patchUrlState({ viewMode })}
           onEdit={handleEdit}
         />
       </div>

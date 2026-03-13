@@ -6,22 +6,31 @@ import {
   PROJECT_STATUS_OPTIONS,
   PROJECT_TYPE_OPTIONS,
 } from "@/lib/project-portfolio";
+import {
+  PROJECT_SORT_BY_OPTIONS,
+  PROJECT_SORT_ORDER_OPTIONS,
+} from "@/lib/project-portfolio-query";
 import type {
   ProjectPortfolioFiltersState,
   ProjectPortfolioResponse,
+  ProjectPortfolioSortState,
 } from "@/components/projetos/project-portfolio-model";
 
 type ProjectPortfolioFiltersProps = {
   filters: ProjectPortfolioFiltersState;
+  sort: ProjectPortfolioSortState;
   options: ProjectPortfolioResponse["filterOptions"];
   onChange: (patch: Partial<ProjectPortfolioFiltersState>) => void;
+  onSortChange: (patch: Partial<ProjectPortfolioSortState>) => void;
   onReset: () => void;
 };
 
 export function ProjectPortfolioFilters({
   filters,
+  sort,
   options,
   onChange,
+  onSortChange,
   onReset,
 }: ProjectPortfolioFiltersProps) {
   return (
@@ -222,6 +231,49 @@ export function ProjectPortfolioFilters({
             />
           </label>
         </div>
+
+        <label className="space-y-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Ordenar por
+          </span>
+          <select
+            value={sort.sortBy}
+            onChange={(event) =>
+              onSortChange({
+                sortBy: event.target.value as ProjectPortfolioSortState["sortBy"],
+              })
+            }
+            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+          >
+            {PROJECT_SORT_BY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="space-y-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Direção
+          </span>
+          <select
+            value={sort.sortOrder}
+            onChange={(event) =>
+              onSortChange({
+                sortOrder:
+                  event.target.value as ProjectPortfolioSortState["sortOrder"],
+              })
+            }
+            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+          >
+            {PROJECT_SORT_ORDER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <label className="mt-4 inline-flex items-center gap-2 text-sm text-muted-foreground">

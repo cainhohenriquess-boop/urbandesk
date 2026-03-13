@@ -4,8 +4,12 @@ import type {
   ProjectStatusValue,
   ProjectTypeValue,
 } from "@/lib/project-portfolio";
-
-export type PortfolioViewMode = "table" | "cards";
+import type {
+  PortfolioViewMode,
+  ProjectSortBy,
+  ProjectSortOrder,
+} from "@/lib/project-portfolio-query";
+export type { PortfolioViewMode } from "@/lib/project-portfolio-query";
 
 export interface ProjectPortfolioItem {
   id: string;
@@ -49,6 +53,7 @@ export interface ProjectPortfolioResponse {
   perPage: number;
   pages: number;
   summary: ProjectPortfolioSummary;
+  sort?: ProjectPortfolioSortState;
   filterOptions: {
     departments: string[];
     neighborhoods: string[];
@@ -69,6 +74,11 @@ export interface ProjectPortfolioFiltersState {
   budgetMin: string;
   budgetMax: string;
   includeCancelled: boolean;
+}
+
+export interface ProjectPortfolioSortState {
+  sortBy: ProjectSortBy;
+  sortOrder: ProjectSortOrder;
 }
 
 export interface ProjectPortfolioFormState {

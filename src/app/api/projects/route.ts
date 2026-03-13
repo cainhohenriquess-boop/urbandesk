@@ -16,6 +16,13 @@ import {
   PROJECT_TYPE_OPTIONS,
   PROJECT_TYPE_VALUES,
 } from "@/lib/project-portfolio";
+import {
+  DEFAULT_PROJECT_PORTFOLIO_URL_STATE,
+  PROJECT_SORT_BY_VALUES,
+  PROJECT_SORT_ORDER_VALUES,
+  type ProjectSortBy,
+  type ProjectSortOrder,
+} from "@/lib/project-portfolio-query";
 
 const tenantIdSchema = z.string().cuid();
 const ALLOWED_ROLES = new Set(["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"]);
@@ -110,6 +117,33 @@ function parseOptionalNonNegativeNumber(raw: string | null): number | null | "in
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) return "invalid";
   return parsed;
+}
+
+function buildProjectOrderBy(
+  sortBy: ProjectSortBy,
+  sortOrder: ProjectSortOrder
+): Prisma.ProjectOrderByWithRelationInput[] {
+  switch (sortBy) {
+    case "DEADLINE":
+      return [
+        { plannedEndDate: sortOrder },
+        { endDate: sortOrder },
+        { updatedAt: "desc" },
+      ];
+    case "BUDGET":
+      return [
+        { estimatedBudget: sortOrder },
+        { budget: sortOrder },
+        { updatedAt: "desc" },
+      ];
+    case "PRIORITY":
+      return [{ priority: sortOrder }, { plannedEndDate: "asc" }, { updatedAt: "desc" }];
+    case "STATUS":
+      return [{ status: sortOrder }, { priority: "desc" }, { updatedAt: "desc" }];
+    case "UPDATED_AT":
+    default:
+      return [{ updatedAt: sortOrder }, { createdAt: "desc" }];
+  }
 }
 
 function resolveReferenceEndDate(project: {
@@ -349,6 +383,16 @@ export async function GET(req: NextRequest) {
     const limit = parseBoundedInt(searchParams.get("limit"), 18, 1, 100);
     const budgetMin = parseOptionalNonNegativeNumber(searchParams.get("budgetMin"));
     const budgetMax = parseOptionalNonNegativeNumber(searchParams.get("budgetMax"));
+    const sortByRaw = searchParams.get("sortBy");
+    const sortOrderRaw = searchParams.get("sortOrder");
+    const sortBy = PROJECT_SORT_BY_VALUES.includes(sortByRaw as ProjectSortBy)
+      ? (sortByRaw as ProjectSortBy)
+      : DEFAULT_PROJECT_PORTFOLIO_URL_STATE.sortBy;
+    const sortOrder = PROJECT_SORT_ORDER_VALUES.includes(
+      sortOrderRaw as ProjectSortOrder
+    )
+      ? (sortOrderRaw as ProjectSortOrder)
+      : DEFAULT_PROJECT_PORTFOLIO_URL_STATE.sortOrder;
 
     if (status && !PROJECT_STATUS_VALUES.includes(status as (typeof PROJECT_STATUS_VALUES)[number])) {
       return NextResponse.json({ error: "Parâmetro status inválido." }, { status: 400 });
@@ -469,17 +513,14 @@ export async function GET(req: NextRequest) {
       tenantId,
       ...(filters.length > 0 ? { AND: filters } : {}),
     };
+    const orderBy = buildProjectOrderBy(sortBy, sortOrder);
 
     const [projects, total, summaryRows, filterRows] = await Promise.all([
       prisma.project.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: [
-          { updatedAt: "desc" },
-          { plannedEndDate: "asc" },
-          { createdAt: "desc" },
-        ],
+        orderBy,
         include: { _count: { select: { assets: true } } },
       }),
       prisma.project.count({ where }),
@@ -576,6 +617,10 @@ export async function GET(req: NextRequest) {
       perPage: limit,
       pages: Math.max(1, Math.ceil(total / limit)),
       summary,
+      sort: {
+        sortBy,
+        sortOrder,
+      },
       filterOptions: {
         departments,
         neighborhoods,

@@ -8,10 +8,12 @@ import {
   getProjectStatusTone,
   getProjectTypeLabel,
 } from "@/lib/project-portfolio";
+import { PROJECT_SORT_BY_OPTIONS } from "@/lib/project-portfolio-query";
 import { formatBRL, formatDate, formatNumber } from "@/lib/utils";
 import type {
   PortfolioViewMode,
   ProjectPortfolioItem,
+  ProjectPortfolioSortState,
 } from "@/components/projetos/project-portfolio-model";
 
 type ProjectPortfolioListProps = {
@@ -20,6 +22,7 @@ type ProjectPortfolioListProps = {
   page: number;
   pages: number;
   viewMode: PortfolioViewMode;
+  sort: ProjectPortfolioSortState;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -50,6 +53,7 @@ export function ProjectPortfolioList({
   page,
   pages,
   viewMode,
+  sort,
   loading,
   error,
   onRetry,
@@ -69,6 +73,12 @@ export function ProjectPortfolioList({
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
             {formatNumber(total)} projeto(s) encontrados nesta visão.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Ordenação:{" "}
+            {PROJECT_SORT_BY_OPTIONS.find((option) => option.value === sort.sortBy)
+              ?.label ?? sort.sortBy}{" "}
+            · {sort.sortOrder === "asc" ? "crescente" : "decrescente"}
           </p>
         </div>
 
