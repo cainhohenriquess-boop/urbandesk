@@ -9,13 +9,18 @@ type ProjectShellNavProps = {
 };
 
 const getProjectTabs = (projectId: string) => [
-  { href: `/app/projetos/${projectId}`, label: "Ficha 360º" },
-  { href: `/app/projetos/${projectId}/mapa`, label: "Mapa" },
+  { href: `/app/projetos/${projectId}`, label: "Resumo" },
+  { href: `/app/projetos/${projectId}/planejamento`, label: "Planejamento" },
+  { href: `/app/projetos/${projectId}/financeiro`, label: "Financeiro" },
+  { href: `/app/projetos/${projectId}/mapa`, label: "Mapa/GIS" },
+  { href: `/app/projetos/${projectId}/fiscalizacao`, label: "Fiscalização" },
   { href: `/app/projetos/${projectId}/documentos`, label: "Documentos" },
   { href: `/app/projetos/${projectId}/medicoes`, label: "Medições" },
-  { href: `/app/projetos/${projectId}/fiscalizacao`, label: "Fiscalização" },
-  { href: `/app/projetos/${projectId}/financeiro`, label: "Financeiro" },
-  { href: `/app/projetos/${projectId}/planejamento`, label: "Planejamento" },
+  {
+    href: `/app/projetos/${projectId}/pendencias-riscos`,
+    label: "Pendências/Riscos",
+  },
+  { href: `/app/projetos/${projectId}/historico`, label: "Histórico" },
 ];
 
 export function ProjectShellNav({ projectId }: ProjectShellNavProps) {

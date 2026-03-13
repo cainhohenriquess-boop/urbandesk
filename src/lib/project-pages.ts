@@ -1,9 +1,62 @@
 import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
+import { cache } from "react";
+import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { getAccessBlockReason } from "@/lib/auth-shared";
 import { prisma } from "@/lib/prisma";
+
+const projectShellInclude = {
+  manager: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  inspector: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  contracts: {
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      contractorName: true,
+      contractedAmount: true,
+      measuredAmount: true,
+      paidAmount: true,
+      endDate: true,
+      updatedAt: true,
+    },
+    orderBy: [{ updatedAt: "desc" }],
+    take: 2,
+  },
+  _count: {
+    select: {
+      assets: true,
+      comments: true,
+      contracts: true,
+      documents: true,
+      fundingSources: true,
+      inspections: true,
+      issues: true,
+      measurements: true,
+      milestones: true,
+      phases: true,
+      risks: true,
+    },
+  },
+} satisfies Prisma.ProjectInclude;
+
+export type ProjectShellRecord = Prisma.ProjectGetPayload<{
+  include: typeof projectShellInclude;
+}>;
 
 export async function resolveProjectsTenantId() {
   const session = await getServerSession(authOptions);
@@ -30,19 +83,27 @@ export async function resolveProjectsTenantId() {
   return tenantId;
 }
 
-export async function getProjectShellData(projectId: string) {
+const getProjectShellDataCached = cache(async (projectId: string) => {
   const tenantId = await resolveProjectsTenantId();
 
   if (!tenantId) {
-    return { tenantId: null, project: null };
+    return {
+      tenantId: null,
+      project: null,
+    };
   }
 
   const project = await prisma.project.findFirst({
     where: { id: projectId, tenantId },
-    include: {
-      _count: { select: { assets: true } },
-    },
+    include: projectShellInclude,
   });
 
-  return { tenantId, project };
+  return {
+    tenantId,
+    project,
+  };
+});
+
+export async function getProjectShellData(projectId: string) {
+  return getProjectShellDataCached(projectId);
 }
