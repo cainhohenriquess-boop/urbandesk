@@ -8,12 +8,27 @@ import { AUDIT_ACTIONS, writeAuditLog } from "@/lib/audit";
 import { consumeRateLimit, extractClientIpFromHeaders } from "@/lib/rate-limit";
 
 const nextAuthSecret = process.env.NEXTAUTH_SECRET?.trim() ?? "";
+const nextAuthUrl =
+  process.env.NEXTAUTH_URL?.trim() ||
+  process.env.AUTH_URL?.trim() ||
+  process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim() ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.trim()}` : "");
+
 if (process.env.NODE_ENV === "production") {
   if (!nextAuthSecret || nextAuthSecret.length < 32) {
     throw new Error("NEXTAUTH_SECRET inválido para produção. Use um segredo forte com no mínimo 32 caracteres.");
   }
-  if (!process.env.NEXTAUTH_URL) {
-    throw new Error("NEXTAUTH_URL é obrigatório em produção.");
+
+  // Evita quebrar o build em Vercel quando NEXTAUTH_URL não foi definido
+  // explicitamente, mas a plataforma já expõe a URL de deploy.
+  if (!process.env.NEXTAUTH_URL && nextAuthUrl) {
+    process.env.NEXTAUTH_URL = nextAuthUrl;
+  }
+
+  if (!process.env.NEXTAUTH_URL && !process.env.VERCEL_URL && !process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    console.warn(
+      "[auth] NEXTAUTH_URL não foi definido em produção. Defina a variável para evitar problemas em callbacks e links absolutos."
+    );
   }
 }
 
