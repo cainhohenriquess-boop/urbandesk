@@ -6,6 +6,7 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
+import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit";
 
 const PROJECT_STATUSES = ["PLANEJADO", "EM_ANDAMENTO", "PARALISADO", "CONCLUIDO", "CANCELADO"] as const;
 const ALLOWED_ROLES = new Set(["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"]);
@@ -56,7 +57,13 @@ function serializeProject(project: {
 }
 
 async function resolveTenantContext(req: NextRequest): Promise<
-  | { tenantId: string; role: string }
+  | {
+      tenantId: string;
+      role: string;
+      userId: string | null;
+      userName: string | null;
+      userEmail: string | null;
+    }
   | { response: NextResponse }
 > {
   const session = await getServerSession(authOptions);
@@ -94,7 +101,13 @@ async function resolveTenantContext(req: NextRequest): Promise<
     };
   }
 
-  return { tenantId, role };
+  return {
+    tenantId,
+    role,
+    userId: session.user.id ?? null,
+    userName: session.user.name ?? null,
+    userEmail: session.user.email ?? null,
+  };
 }
 
 function validateProjectDates(startDate: Date | null | undefined, endDate: Date | null | undefined): string | null {
@@ -209,6 +222,25 @@ export async function PATCH(req: NextRequest, context: ProjectRouteContext) {
       include: { _count: { select: { assets: true } } },
     });
 
+    await writeAuditLog({
+      action: AUDIT_ACTIONS.PROJECT_UPDATE,
+      entityType: "project",
+      entityId: updated.id,
+      actor: {
+        userId: tenantContext.userId,
+        userName: tenantContext.userName,
+        userEmail: tenantContext.userEmail,
+        userRole: tenantContext.role,
+        tenantId: tenantContext.tenantId,
+      },
+      requestContext: extractRequestContext(req),
+      metadata: {
+        changedFields: Object.keys(payload),
+        previousStatus: existing.status,
+        nextStatus: updated.status,
+      },
+    });
+
     return NextResponse.json({ data: serializeProject(updated) });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -252,6 +284,26 @@ export async function DELETE(req: NextRequest, context: ProjectRouteContext) {
         include: { _count: { select: { assets: true } } },
       });
 
+      await writeAuditLog({
+        action: AUDIT_ACTIONS.PROJECT_DELETE_SOFT,
+        entityType: "project",
+        entityId: updated.id,
+        actor: {
+          userId: tenantContext.userId,
+          userName: tenantContext.userName,
+          userEmail: tenantContext.userEmail,
+          userRole: tenantContext.role,
+          tenantId: tenantContext.tenantId,
+        },
+        requestContext: extractRequestContext(req),
+        metadata: {
+          previousStatus: existing.status,
+          nextStatus: updated.status,
+          assetsCount: existing._count.assets,
+          mode: mode ?? null,
+        },
+      });
+
       return NextResponse.json({
         mode: "soft",
         reason: existing._count.assets > 0 ? "Projeto possui ativos vinculados." : "Soft delete solicitado.",
@@ -260,6 +312,24 @@ export async function DELETE(req: NextRequest, context: ProjectRouteContext) {
     }
 
     await prisma.project.delete({ where: { id: existing.id } });
+
+    await writeAuditLog({
+      action: AUDIT_ACTIONS.PROJECT_DELETE_HARD,
+      entityType: "project",
+      entityId: existing.id,
+      actor: {
+        userId: tenantContext.userId,
+        userName: tenantContext.userName,
+        userEmail: tenantContext.userEmail,
+        userRole: tenantContext.role,
+        tenantId: tenantContext.tenantId,
+      },
+      requestContext: extractRequestContext(req),
+      metadata: {
+        previousStatus: existing.status,
+        assetsCount: existing._count.assets,
+      },
+    });
 
     return NextResponse.json({ mode: "hard", success: true });
   } catch (error) {

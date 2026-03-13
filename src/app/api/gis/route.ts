@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 import { Prisma } from "@prisma/client";
+import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit";
 
 const ALLOWED_ASSET_TYPES = ["PONTO", "TRECHO", "AREA"] as const;
 type AllowedAssetType = (typeof ALLOWED_ASSET_TYPES)[number];
@@ -43,6 +44,12 @@ function normalizeClientRef(value: unknown): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed.slice(0, 120);
+}
+
+function sanitizeRequiredString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function parseCoordPair(rawPair: string): [number, number] | null {
@@ -336,9 +343,186 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    await writeAuditLog({
+      action: AUDIT_ACTIONS.GIS_ASSET_CREATE,
+      entityType: "asset",
+      entityId: asset.id,
+      actor: {
+        userId: session.user.id ?? null,
+        userName: session.user.name ?? null,
+        userEmail: session.user.email ?? null,
+        userRole: session.user.role ?? null,
+        tenantId: targetTenantId,
+      },
+      requestContext: extractRequestContext(req),
+      metadata: {
+        type: asset.type,
+        projectId: asset.projectId,
+      },
+    });
+
     return NextResponse.json({ data: asset }, { status: 201 });
   } catch (error) {
     console.error("[GIS_POST_ERROR]", error);
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
+  }
+}
+
+// PATCH /api/gis - Update GIS asset
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    const cookieStore = await cookies();
+
+    if (!session) {
+      return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
+    }
+
+    const reason = getAccessBlockReason(session.user);
+    if (reason) {
+      return NextResponse.json(
+        { error: getAccessBlockMessage(reason), code: reason },
+        { status: 403 }
+      );
+    }
+
+    const user = session.user;
+    let targetTenantId = user.tenantId;
+
+    if (user.role === "SUPERADMIN") {
+      const impersonatedId = cookieStore.get("impersonate_tenant")?.value;
+      if (impersonatedId) targetTenantId = impersonatedId;
+    }
+
+    if (!targetTenantId) {
+      return NextResponse.json({ error: "Tenant nao identificado" }, { status: 400 });
+    }
+
+    const body = await req.json();
+    const id = sanitizeRequiredString(body?.id);
+    if (!id) {
+      return NextResponse.json({ error: "ID e obrigatorio" }, { status: 400 });
+    }
+
+    const existing = await prisma.asset.findFirst({
+      where: { id, tenantId: targetTenantId },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Ativo nao encontrado" }, { status: 404 });
+    }
+
+    const updateData: Prisma.AssetUpdateInput = {};
+    const changedFields: string[] = [];
+
+    if (body?.name !== undefined) {
+      const name = sanitizeRequiredString(body.name);
+      if (!name) {
+        return NextResponse.json({ error: "name invalido" }, { status: 400 });
+      }
+      updateData.name = name;
+      changedFields.push("name");
+    }
+
+    if (body?.type !== undefined) {
+      const typeRaw =
+        typeof body.type === "string" ? body.type.toUpperCase().trim() : "";
+      if (!isAllowedAssetType(typeRaw)) {
+        return NextResponse.json(
+          { error: "type invalido. Use PONTO, TRECHO ou AREA." },
+          { status: 400 }
+        );
+      }
+      updateData.type = typeRaw;
+      changedFields.push("type");
+    }
+
+    if (body?.geomWkt !== undefined) {
+      updateData.geomWkt = sanitizeOptionalString(body.geomWkt);
+      changedFields.push("geomWkt");
+    }
+
+    if (body?.description !== undefined) {
+      updateData.description = sanitizeOptionalString(body.description);
+      changedFields.push("description");
+    }
+
+    if (body?.projectId !== undefined) {
+      const projectId = sanitizeOptionalString(body.projectId);
+
+      if (projectId) {
+        const project = await prisma.project.findFirst({
+          where: { id: projectId, tenantId: targetTenantId },
+          select: { id: true, status: true },
+        });
+
+        if (!project) {
+          return NextResponse.json(
+            { error: "Projeto informado nao pertence ao tenant autenticado." },
+            { status: 400 }
+          );
+        }
+
+        if (project.status === "CANCELADO") {
+          return NextResponse.json(
+            { error: "Nao e permitido vincular ativos a projeto cancelado." },
+            { status: 409 }
+          );
+        }
+      }
+
+      updateData.project = projectId ? { connect: { id: projectId } } : { disconnect: true };
+      changedFields.push("projectId");
+    }
+
+    if (body?.attributes !== undefined) {
+      const attrs = toPlainObject(body.attributes);
+      updateData.attributes = attrs as Prisma.InputJsonValue;
+      changedFields.push("attributes");
+    }
+
+    if (body?.photos !== undefined) {
+      const photos = sanitizePhotoArray(body.photos);
+      updateData.photos = photos;
+      changedFields.push("photos");
+    }
+
+    if (changedFields.length === 0) {
+      return NextResponse.json(
+        { error: "Informe ao menos um campo para atualizar." },
+        { status: 400 }
+      );
+    }
+
+    const updated = await prisma.asset.update({
+      where: { id: existing.id },
+      data: updateData,
+    });
+
+    await writeAuditLog({
+      action: AUDIT_ACTIONS.GIS_ASSET_UPDATE,
+      entityType: "asset",
+      entityId: updated.id,
+      actor: {
+        userId: session.user.id ?? null,
+        userName: session.user.name ?? null,
+        userEmail: session.user.email ?? null,
+        userRole: session.user.role ?? null,
+        tenantId: targetTenantId,
+      },
+      requestContext: extractRequestContext(req),
+      metadata: {
+        changedFields,
+        previousType: existing.type,
+        nextType: updated.type,
+        previousProjectId: existing.projectId,
+        nextProjectId: updated.projectId,
+      },
+    });
+
+    return NextResponse.json({ data: updated });
+  } catch (error) {
+    console.error("[GIS_PATCH_ERROR]", error);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
 }

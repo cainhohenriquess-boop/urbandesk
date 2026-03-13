@@ -6,6 +6,7 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
+import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit";
 
 const PROJECT_STATUSES = ["PLANEJADO", "EM_ANDAMENTO", "PARALISADO", "CONCLUIDO", "CANCELADO"] as const;
 
@@ -68,7 +69,13 @@ function parseBoundedInt(
 }
 
 async function resolveTenantContext(req: NextRequest): Promise<
-  | { tenantId: string; role: string }
+  | {
+      tenantId: string;
+      role: string;
+      userId: string | null;
+      userName: string | null;
+      userEmail: string | null;
+    }
   | { response: NextResponse }
 > {
   const session = await getServerSession(authOptions);
@@ -106,7 +113,13 @@ async function resolveTenantContext(req: NextRequest): Promise<
     };
   }
 
-  return { tenantId, role };
+  return {
+    tenantId,
+    role,
+    userId: session.user.id ?? null,
+    userName: session.user.name ?? null,
+    userEmail: session.user.email ?? null,
+  };
 }
 
 function validateProjectDates(startDate: Date | null | undefined, endDate: Date | null | undefined): string | null {
@@ -221,6 +234,24 @@ export async function POST(req: NextRequest) {
         geomWkt: payload.geomWkt ?? null,
       },
       include: { _count: { select: { assets: true } } },
+    });
+
+    await writeAuditLog({
+      action: AUDIT_ACTIONS.PROJECT_CREATE,
+      entityType: "project",
+      entityId: created.id,
+      actor: {
+        userId: context.userId,
+        userName: context.userName,
+        userEmail: context.userEmail,
+        userRole: context.role,
+        tenantId: context.tenantId,
+      },
+      requestContext: extractRequestContext(req),
+      metadata: {
+        name: created.name,
+        status: created.status,
+      },
     });
 
     return NextResponse.json({ data: serializeProject(created) }, { status: 201 });

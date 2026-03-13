@@ -4,6 +4,11 @@ import { cookies } from "next/headers";
 import { authOptions } from "@/lib/auth";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 import { getStorageDriverName, getStorageProvider } from "@/lib/storage";
+import {
+  AUDIT_ACTIONS,
+  extractRequestContextFromHeaders,
+  writeAuditLog,
+} from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -166,6 +171,29 @@ export async function POST(request: Request) {
 
       uploadedFiles.push(stored);
     }
+
+    await writeAuditLog({
+      action: AUDIT_ACTIONS.UPLOAD_SUCCESS,
+      entityType: "upload",
+      actor: {
+        userId: session.user.id ?? null,
+        userName: session.user.name ?? null,
+        userEmail: session.user.email ?? null,
+        userRole: session.user.role ?? null,
+        tenantId,
+      },
+      requestContext: extractRequestContextFromHeaders(request.headers),
+      metadata: {
+        module: moduleName,
+        provider: getStorageDriverName(),
+        filesCount: uploadedFiles.length,
+        files: uploadedFiles.map((file) => ({
+          key: file.key,
+          size: file.size,
+          contentType: file.contentType,
+        })),
+      },
+    });
 
     return NextResponse.json({
       success: true,

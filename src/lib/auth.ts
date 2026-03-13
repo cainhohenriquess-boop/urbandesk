@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import type { AppRole, TenantLifecycleStatus } from "@/lib/auth-shared";
+import { AUDIT_ACTIONS, writeAuditLog } from "@/lib/audit";
 
 // ─────────────────────────────────────────────
 // Tipos estendidos
@@ -142,6 +143,47 @@ export const authOptions: NextAuthOptions = {
         // URL inválida: segue para fallback seguro
       }
       return `${baseUrl}/app`;
+    },
+  },
+
+  events: {
+    async signIn({ user }) {
+      await writeAuditLog({
+        action: AUDIT_ACTIONS.AUTH_LOGIN,
+        entityType: "auth",
+        entityId: user.id,
+        actor: {
+          userId: user.id,
+          userName: user.name,
+          userEmail: user.email,
+          userRole: user.role,
+          tenantId: user.tenantId,
+        },
+        metadata: {
+          provider: "credentials",
+        },
+      });
+    },
+
+    async signOut({ token }) {
+      const userId = typeof token?.sub === "string" ? token.sub : null;
+      const userRole = typeof token?.role === "string" ? token.role : null;
+      const tenantId =
+        typeof token?.tenantId === "string" ? token.tenantId : null;
+      const userEmail =
+        typeof token?.email === "string" ? token.email : null;
+
+      await writeAuditLog({
+        action: AUDIT_ACTIONS.AUTH_LOGOUT,
+        entityType: "auth",
+        entityId: userId,
+        actor: {
+          userId,
+          userEmail,
+          userRole,
+          tenantId,
+        },
+      });
     },
   },
 

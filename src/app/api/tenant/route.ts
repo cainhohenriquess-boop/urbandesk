@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
+import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit";
 
 // ─────────────────────────────────────────────
 // Schemas de Validação (Zod)
@@ -139,11 +140,40 @@ export async function PATCH(req: NextRequest) {
     const parsedData = updateTenantSchema.parse(body);
 
     const { id, ...dataToUpdate } = parsedData;
+    const previous = await prisma.tenant.findUnique({
+      where: { id },
+      select: { id: true, status: true, name: true },
+    });
+
+    if (!previous) {
+      return NextResponse.json({ error: "Tenant nao encontrado." }, { status: 404 });
+    }
 
     const tenant = await prisma.tenant.update({
       where: { id },
       data: dataToUpdate,
     });
+
+    if (parsedData.status && previous.status !== tenant.status) {
+      await writeAuditLog({
+        action: AUDIT_ACTIONS.TENANT_STATUS_CHANGE,
+        entityType: "tenant",
+        entityId: tenant.id,
+        actor: {
+          userId: session.user.id ?? null,
+          userName: session.user.name ?? null,
+          userEmail: session.user.email ?? null,
+          userRole: session.user.role ?? null,
+          tenantId: tenant.id,
+        },
+        requestContext: extractRequestContext(req),
+        metadata: {
+          tenantName: tenant.name,
+          previousStatus: previous.status,
+          nextStatus: tenant.status,
+        },
+      });
+    }
 
     return NextResponse.json({ data: tenant });
   } catch (error) {
