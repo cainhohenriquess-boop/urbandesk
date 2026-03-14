@@ -29,26 +29,26 @@ export type AreaToolsetItemDefinition = TechnicalObjectDefinition & {
 
 export const PROJECT_SHARED_DRAWING_TOOLS: SharedGeometryToolDefinition[] = [
   { id: "line", label: "Trecho livre", helper: "Desenho linear comum" },
-  { id: "polygon", label: "Ãrea livre", helper: "PolÃ­gono comum" },
+  { id: "polygon", label: "Área livre", helper: "Polígono comum" },
 ];
 
 const DEFAULT_GROUP_BY_GEOMETRY: Record<TechnicalGeometryKind, AreaToolsetGroupDefinition> = {
   point: {
     id: "point-assets",
-    title: "LanÃ§amentos pontuais",
-    description: "Objetos tÃ©cnicos pontuais da disciplina.",
+    title: "Lançamentos pontuais",
+    description: "Objetos técnicos pontuais da disciplina.",
     items: [],
   },
   line: {
     id: "linear-assets",
     title: "Trechos e redes",
-    description: "Ferramentas lineares e redes tÃ©cnicas.",
+    description: "Ferramentas lineares e redes técnicas.",
     items: [],
   },
   polygon: {
     id: "polygon-assets",
-    title: "Ãreas tÃ©cnicas",
-    description: "PolÃ­gonos, perÃ­metros e frentes espaciais.",
+    title: "Áreas técnicas",
+    description: "Polígonos, perímetros e frentes espaciais.",
     items: [],
   },
 };
@@ -59,20 +59,20 @@ const PROJECT_AREA_TOOLSET_GROUPS: Partial<
   DRENAGEM: [
     {
       id: "drainage-network",
-      title: "Rede e conduÃ§Ã£o",
+      title: "Rede e condução",
       description: "Trechos lineares e estruturas principais da drenagem.",
       items: ["TRECHO_DRENAGEM", "GALERIA_PLUVIAL", "SARJETA", "CANAL"],
     },
     {
       id: "drainage-nodes",
-      title: "CaptaÃ§Ã£o e inspeÃ§Ã£o",
-      description: "Dispositivos pontuais de coleta, acesso e interligaÃ§Ã£o.",
+      title: "Captação e inspeção",
+      description: "Dispositivos pontuais de coleta, acesso e interligação.",
       items: ["BOCA_LOBO", "POCO_VISITA", "CAIXA_LIGACAO", "DISSIPADOR"],
     },
     {
       id: "drainage-events",
-      title: "Pontos crÃ­ticos e ocorrÃªncias",
-      description: "Alagamentos e registros operacionais de manutenÃ§Ã£o.",
+      title: "Pontos críticos e ocorrências",
+      description: "Alagamentos e registros operacionais de manutenção.",
       items: ["PONTO_ALAGAMENTO", "OCORRENCIA_DRENAGEM"],
     },
   ],
@@ -105,30 +105,30 @@ const PROJECT_AREA_TOOLSET_GROUPS: Partial<
   ILUMINACAO: [
     {
       id: "lighting-assets",
-      title: "Pontos de iluminaÃ§Ã£o",
-      description: "Postes, luminÃ¡rias e apoio operacional.",
+      title: "Pontos de iluminação",
+      description: "Postes, luminárias e apoio operacional.",
       items: ["POSTE_LUZ", "LUMINARIA"],
     },
   ],
   ARBORIZACAO: [
     {
       id: "trees",
-      title: "Elementos arbÃ³reos",
-      description: "Ãrvores e canteiros de arborizaÃ§Ã£o.",
+      title: "Elementos arbóreos",
+      description: "Árvores e canteiros de arborização.",
       items: ["ARVORE", "CANTEIRO_ARBORIZACAO"],
     },
   ],
   SINALIZACAO: [
     {
       id: "signaling-points",
-      title: "SinalizaÃ§Ã£o pontual",
-      description: "SemÃ¡foros, placas e dispositivos fÃ­sicos.",
+      title: "Sinalização pontual",
+      description: "Semáforos, placas e dispositivos físicos.",
       items: ["SEMAFORO", "PLACA_TRANSITO", "LOMBADA"],
     },
     {
       id: "signaling-lines",
-      title: "SinalizaÃ§Ã£o linear",
-      description: "Pintura viÃ¡ria e faixas horizontais.",
+      title: "Sinalização linear",
+      description: "Pintura viária e faixas horizontais.",
       items: ["PINTURA_VIARIA"],
     },
   ],
@@ -136,13 +136,13 @@ const PROJECT_AREA_TOOLSET_GROUPS: Partial<
     {
       id: "inspection-points",
       title: "Pontos de vistoria",
-      description: "Registros pontuais de fiscalizaÃ§Ã£o.",
+      description: "Registros pontuais de fiscalização.",
       items: ["PONTO_FISCALIZACAO"],
     },
     {
       id: "inspection-zones",
       title: "Zonas fiscalizadas",
-      description: "PerÃ­metros de vistoria, interdiÃ§Ã£o ou controle.",
+      description: "Perímetros de vistoria, interdição ou controle.",
       items: ["AREA_FISCALIZADA"],
     },
   ],
@@ -150,14 +150,14 @@ const PROJECT_AREA_TOOLSET_GROUPS: Partial<
     {
       id: "mobility-assets",
       title: "Equipamentos de mobilidade",
-      description: "Pontos de Ã´nibus, radares e apoio operacional.",
+      description: "Pontos de ônibus, radares e apoio operacional.",
       items: ["PONTO_ONIBUS", "RADAR"],
     },
   ],
   SANEAMENTO: [
     {
       id: "sanitation-assets",
-      title: "Ativos hidrÃ¡ulicos",
+      title: "Ativos hidráulicos",
       description: "Pontos de apoio e rede associada.",
       items: ["HIDRANTE"],
     },
@@ -165,8 +165,8 @@ const PROJECT_AREA_TOOLSET_GROUPS: Partial<
   EDIFICACOES: [
     {
       id: "buildings",
-      title: "PerÃ­metros edificados",
-      description: "Ãreas de equipamentos e edificaÃ§Ãµes pÃºblicas.",
+      title: "Perímetros edificados",
+      description: "Áreas de equipamentos e edificações públicas.",
       items: ["EDIFICACAO_PUBLICA"],
     },
   ],
@@ -174,7 +174,7 @@ const PROJECT_AREA_TOOLSET_GROUPS: Partial<
     {
       id: "urban-support",
       title: "Equipamentos urbanos",
-      description: "Elementos de apoio e manutenÃ§Ã£o cotidiana.",
+      description: "Elementos de apoio e manutenção cotidiana.",
       items: ["LIXEIRA"],
     },
   ],
@@ -188,7 +188,7 @@ const PROJECT_AREA_TOOLSET_GROUPS: Partial<
     {
       id: "construction-fronts",
       title: "Frentes executivas",
-      description: "PerÃ­metros e frentes espaciais de execuÃ§Ã£o.",
+      description: "Perímetros e frentes espaciais de execução.",
       items: ["FRENTE_OBRA"],
     },
   ],

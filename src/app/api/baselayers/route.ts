@@ -5,6 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 import { enforceRequestRateLimit } from "@/lib/rate-limit";
+import {
+  getInfrastructureLayerSchemaCompatibility,
+  isInfrastructureLayerSchemaCompatError,
+} from "@/lib/infrastructure-layer-schema-compat";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +60,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
     }
 
-    const [baseLayers, infrastructureLayers] = await Promise.all([
+    const [compatibility, baseLayers] = await Promise.all([
+      getInfrastructureLayerSchemaCompatibility(),
       prisma.baseLayer.findMany({
         where: { tenantId: targetTenantId },
         select: {
@@ -65,27 +70,44 @@ export async function GET(req: NextRequest) {
           type: true,
           geoJsonData: true,
         },
-        orderBy: { createdAt: "asc" }
-      }),
-      prisma.infrastructureLayer.findMany({
-        where: {
-          status: "READY",
-          authorizedTenants: {
-            some: {
-              tenantId: targetTenantId,
-            },
-          },
-        },
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          geoJsonData: true,
-          featureCount: true,
-        },
         orderBy: { createdAt: "asc" },
       }),
     ]);
+
+    let infrastructureLayers: Array<{
+      id: string;
+      code: string;
+      name: string;
+      geoJsonData: unknown;
+      featureCount: number;
+    }> = [];
+
+    if (compatibility.publishedLayersReady) {
+      try {
+        infrastructureLayers = await prisma.infrastructureLayer.findMany({
+          where: {
+            status: "READY",
+            authorizedTenants: {
+              some: {
+                tenantId: targetTenantId,
+              },
+            },
+          },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            geoJsonData: true,
+            featureCount: true,
+          },
+          orderBy: { createdAt: "asc" },
+        });
+      } catch (error) {
+        if (!isInfrastructureLayerSchemaCompatError(error)) {
+          throw error;
+        }
+      }
+    }
 
     const normalizedInfrastructureLayers = infrastructureLayers.map((layer) => ({
       id: `infra:${layer.id}`,
@@ -102,7 +124,13 @@ export async function GET(req: NextRequest) {
       sourceKind: "TENANT_BASE",
     }));
 
-    return NextResponse.json({ data: [...normalizedBaseLayers, ...normalizedInfrastructureLayers] });
+    return NextResponse.json({
+      data: [...normalizedBaseLayers, ...normalizedInfrastructureLayers],
+      compatibility: {
+        publishedLayersReady: compatibility.publishedLayersReady,
+        notice: compatibility.notice,
+      },
+    });
   } catch (error) {
     console.error("[BASELAYERS_GET_ERROR]", error);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
