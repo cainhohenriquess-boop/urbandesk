@@ -501,6 +501,9 @@ export async function POST(request: Request) {
       },
       select: {
         id: true,
+        name: true,
+        state: true,
+        slug: true,
       },
     });
 
@@ -515,6 +518,12 @@ export async function POST(request: Request) {
         { missingTenantIds }
       );
     }
+
+    const ownerTenant = ownerTenantId
+      ? existingTenants.find((tenant) => tenant.id === ownerTenantId) ?? null
+      : tenantIds.length === 1
+        ? existingTenants.find((tenant) => tenant.id === tenantIds[0]) ?? null
+        : null;
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
@@ -588,6 +597,16 @@ export async function POST(request: Request) {
       buffer,
       expectedCode: inspection.code,
       inspection,
+      context: {
+        ownerTenant: ownerTenant
+          ? {
+              id: ownerTenant.id,
+              name: ownerTenant.name,
+              state: ownerTenant.state,
+              slug: ownerTenant.slug,
+            }
+          : null,
+      },
     });
 
     const layerName =

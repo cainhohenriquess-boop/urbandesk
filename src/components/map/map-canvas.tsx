@@ -1136,7 +1136,7 @@ function MapCanvasInner({
                       type="circle"
                       filter={["==", ["geometry-type"], "Point"]}
                       paint={{
-                        "circle-color": "#0f766e",
+                        "circle-color": ["coalesce", ["get", "renderColor"], "#0f766e"],
                         "circle-radius": 5.5,
                         "circle-opacity": 0.9,
                         "circle-stroke-color": "#ecfeff",
@@ -1151,6 +1151,8 @@ function MapCanvasInner({
                       layout={{
                         "text-field": [
                           "coalesce",
+                          ["get", "labelShort"],
+                          ["get", "label"],
                           ["get", "NOME"],
                           ["get", "name"],
                           ["get", "CODIGO"],
@@ -1178,7 +1180,7 @@ function MapCanvasInner({
                       type="circle"
                       filter={["==", ["geometry-type"], "Point"]}
                       paint={{
-                        "circle-color": "#ca8a04",
+                        "circle-color": ["coalesce", ["get", "renderColor"], "#ca8a04"],
                         "circle-radius": 6,
                         "circle-opacity": 0.92,
                         "circle-stroke-color": "#fffbeb",
@@ -1193,6 +1195,8 @@ function MapCanvasInner({
                       layout={{
                         "text-field": [
                           "coalesce",
+                          ["get", "labelShort"],
+                          ["get", "label"],
                           ["get", "NOME"],
                           ["get", "name"],
                           ["get", "CODIGO"],

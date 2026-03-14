@@ -3,8 +3,10 @@ import "server-only";
 import { unzipSync, strFromU8 } from "fflate";
 import {
   INFRASTRUCTURE_LAYER_LABELS,
+  INFRASTRUCTURE_LAYER_SPECS,
   isInfrastructureLayerCode,
   type InfrastructureLayerCodeId,
+  type InfrastructureLayerNormalizedProperties,
 } from "@/lib/infrastructure-layer-config";
 
 type Geometry =
@@ -25,6 +27,33 @@ type FeatureCollectionRecord = {
   type: "FeatureCollection";
   features: FeatureRecord[];
 };
+
+type OwnerTenantContext = {
+  id: string;
+  name: string;
+  state: string;
+  slug: string;
+};
+
+type InfrastructureLayerImportContext = {
+  ownerTenant: OwnerTenantContext | null;
+};
+
+type InfrastructureFeatureCoverageKey =
+  | "identifier"
+  | "label"
+  | "municipalityName"
+  | "streetName"
+  | "neighborhood"
+  | "district"
+  | "region"
+  | "feeder"
+  | "circuit"
+  | "supportType"
+  | "operationalStatus"
+  | "lampType"
+  | "powerWatts"
+  | "reference";
 
 export type InfrastructureLayerImportErrorCode =
   | "INVALID_ARCHIVE"
@@ -71,6 +100,7 @@ export interface InfrastructureLayerArchiveInspection {
 
 export interface InfrastructureLayerImportResult
   extends InfrastructureLayerArchiveInspection {
+  normalizedCrs: "EPSG:4326";
   featureCount: number;
   geometryType: "POINT";
   bbox: [number, number, number, number] | null;
@@ -82,19 +112,27 @@ export interface InfrastructureLayerImportResult
     hasCpg: boolean;
     detectedCode: InfrastructureLayerCodeId | null;
     archiveFiles: InfrastructureLayerArchiveFile[];
+    normalizedCrs: "EPSG:4326";
+    ownerTenantId: string | null;
+    ownerTenantName: string | null;
+    ownerTenantState: string | null;
+    labelReadyCount: number;
+    sourcePropertyKeys: string[];
+    normalizedPropertyKeys: string[];
+    attributeCoverage: Record<InfrastructureFeatureCoverageKey, number>;
   };
 }
 
 const REQUIRED_EXTENSIONS = ["shp", "shx", "dbf", "prj"] as const;
 const OPTIONAL_EXTENSIONS = ["cpg"] as const;
+const NORMALIZED_CRS = "EPSG:4326";
+const COORDINATE_PRECISION = 6;
 
 type RequiredExtension = (typeof REQUIRED_EXTENSIONS)[number];
 type OptionalExtension = (typeof OPTIONAL_EXTENSIONS)[number];
 type RecognizedExtension = RequiredExtension | OptionalExtension;
 
 type DatasetFiles = Partial<Record<RecognizedExtension, string>>;
-
-type ArchiveEntryMap = Record<string, Uint8Array>;
 
 function createImportError(
   code: InfrastructureLayerImportErrorCode,
@@ -118,6 +156,97 @@ function getEntryBaseName(filePath: string) {
     baseName: fileName.slice(0, lastDot),
     extension: fileName.slice(lastDot + 1).toLowerCase(),
   };
+}
+
+function normalizePropertyKey(key: string) {
+  return key
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "")
+    .toUpperCase();
+}
+
+function normalizeWhitespace(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeFreeText(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = normalizeWhitespace(value);
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeIdentifier(value: string | null) {
+  if (!value) return null;
+  const normalized = normalizeWhitespace(value).replace(/\s+/g, "-");
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeMunicipalityCode(value: string | null) {
+  if (!value) return null;
+  const digits = value.replace(/\D+/g, "");
+  return digits.length > 0 ? digits : null;
+}
+
+function normalizeStatusValue(value: string | null) {
+  if (!value) return null;
+  const normalized = normalizeWhitespace(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+  if (normalized.length === 0) return null;
+  return normalized;
+}
+
+function normalizeNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+
+  const normalized = value.trim();
+  if (!normalized) return null;
+
+  const digitsOnly = normalized.replace(/\./g, "").replace(",", ".");
+  const parsed = Number(digitsOnly);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function roundCoordinate(value: number) {
+  return Number(value.toFixed(COORDINATE_PRECISION));
+}
+
+function buildNormalizedPropertyMap(properties: FeatureProperties) {
+  const entries = Object.entries(properties ?? {});
+  return new Map(
+    entries.map(([key, value]) => [normalizePropertyKey(key), value])
+  );
+}
+
+function pickPropertyValue(
+  properties: FeatureProperties,
+  aliases: string[]
+) {
+  const normalizedMap = buildNormalizedPropertyMap(properties);
+  for (const alias of aliases) {
+    const value = normalizedMap.get(normalizePropertyKey(alias));
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function pickPropertyString(
+  properties: FeatureProperties,
+  aliases: string[]
+) {
+  return normalizeFreeText(pickPropertyValue(properties, aliases));
+}
+
+function pickPropertyNumber(
+  properties: FeatureProperties,
+  aliases: string[]
+) {
+  return normalizeNumber(pickPropertyValue(properties, aliases));
 }
 
 function listDatasetFiles(entries: string[]) {
@@ -243,9 +372,7 @@ function readArchiveEntries(buffer: Buffer) {
     console.error("[INFRASTRUCTURE_LAYER_ARCHIVE_ERROR]", error);
     throw createImportError(
       "INVALID_ARCHIVE",
-      "O arquivo ZIP está corrompido ou não pôde ser aberto.",
-      undefined,
-      400
+      "O arquivo ZIP está corrompido ou não pôde ser aberto."
     );
   }
 }
@@ -408,6 +535,244 @@ function computeBbox(
   return [minLng, minLat, maxLng, maxLat];
 }
 
+function buildLabel(
+  code: InfrastructureLayerCodeId,
+  rawLabel: string | null,
+  identifier: string | null,
+  index: number
+) {
+  const spec = INFRASTRUCTURE_LAYER_SPECS[code];
+  if (rawLabel) return rawLabel;
+  if (identifier) return `${spec.defaultLabelPrefix} ${identifier}`;
+  return `${spec.defaultLabelPrefix} ${String(index).padStart(4, "0")}`;
+}
+
+function buildIdentifier(
+  code: InfrastructureLayerCodeId,
+  rawIdentifier: string | null,
+  index: number
+) {
+  const spec = INFRASTRUCTURE_LAYER_SPECS[code];
+  if (rawIdentifier) return rawIdentifier;
+  return `${spec.defaultIdentifierPrefix}-${String(index).padStart(4, "0")}`;
+}
+
+function buildSearchText(values: Array<string | number | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .flatMap((value) => (value === null || value === undefined ? [] : [String(value)]))
+        .map((value) => normalizeWhitespace(value))
+        .filter((value) => value.length > 0)
+    )
+  ).join(" | ");
+}
+
+function buildFeatureId(
+  code: InfrastructureLayerCodeId,
+  identifier: string | null,
+  index: number,
+  usedIds: Set<string>
+) {
+  const base = normalizeIdentifier(identifier) ?? `${code}-${String(index).padStart(4, "0")}`;
+  let candidate = `${code}:${base}`;
+  let suffix = 2;
+
+  while (usedIds.has(candidate)) {
+    candidate = `${code}:${base}-${suffix}`;
+    suffix += 1;
+  }
+
+  usedIds.add(candidate);
+  return candidate;
+}
+
+function normalizeInfrastructureFeatureProperties(input: {
+  code: InfrastructureLayerCodeId;
+  properties: FeatureProperties;
+  index: number;
+  ownerTenant: OwnerTenantContext | null;
+}) {
+  const spec = INFRASTRUCTURE_LAYER_SPECS[input.code];
+  const rawLabel = pickPropertyString(input.properties, spec.fields.label);
+  const rawIdentifier = normalizeIdentifier(
+    pickPropertyString(input.properties, spec.fields.identifier)
+  );
+  const identifier = buildIdentifier(input.code, rawIdentifier, input.index);
+  const label = buildLabel(input.code, rawLabel, identifier, input.index);
+  const municipalityName =
+    pickPropertyString(input.properties, spec.fields.municipalityName) ??
+    input.ownerTenant?.name ??
+    null;
+  const municipalityCode = normalizeMunicipalityCode(
+    pickPropertyString(input.properties, spec.fields.municipalityCode)
+  );
+  const streetName = pickPropertyString(input.properties, spec.fields.streetName);
+  const neighborhood = pickPropertyString(input.properties, spec.fields.neighborhood);
+  const district = pickPropertyString(input.properties, spec.fields.district);
+  const region = pickPropertyString(input.properties, spec.fields.region);
+  const feeder = pickPropertyString(input.properties, spec.fields.feeder);
+  const circuit = pickPropertyString(input.properties, spec.fields.circuit);
+  const supportType = pickPropertyString(input.properties, spec.fields.supportType);
+  const operationalStatus = normalizeStatusValue(
+    pickPropertyString(input.properties, spec.fields.operationalStatus)
+  );
+  const lampType = pickPropertyString(input.properties, spec.fields.lampType);
+  const powerWatts = pickPropertyNumber(input.properties, spec.fields.powerWatts);
+  const reference = pickPropertyString(input.properties, spec.fields.reference);
+  const labelShort = identifier ?? label;
+
+  const normalized = {
+    layerCode: input.code,
+    layerLabel: spec.label,
+    layerShortLabel: spec.shortLabel,
+    featureKind: spec.featureKind,
+    label,
+    labelShort,
+    name: label,
+    NOME: label,
+    identifier,
+    code: identifier,
+    codigo: identifier,
+    CODIGO: identifier,
+    ownerTenantId: input.ownerTenant?.id ?? null,
+    municipalityName,
+    municipalityCode,
+    municipalityState: input.ownerTenant?.state ?? null,
+    streetName,
+    neighborhood,
+    district,
+    region,
+    feeder,
+    circuit,
+    supportType,
+    operationalStatus,
+    lampType,
+    powerWatts,
+    reference,
+    renderColor: spec.renderColor,
+    renderIcon: spec.renderIcon,
+    searchText: buildSearchText([
+      spec.label,
+      label,
+      labelShort,
+      municipalityName,
+      municipalityCode,
+      streetName,
+      neighborhood,
+      district,
+      region,
+      feeder,
+      circuit,
+      supportType,
+      operationalStatus,
+      lampType,
+      powerWatts,
+      reference,
+    ]),
+  } satisfies InfrastructureLayerNormalizedProperties;
+
+  return normalized;
+}
+
+function normalizeFeatureCollection(input: {
+  code: InfrastructureLayerCodeId;
+  featureCollection: FeatureCollectionRecord;
+  ownerTenant: OwnerTenantContext | null;
+}) {
+  const usedIds = new Set<string>();
+  const sourcePropertyKeys = new Set<string>();
+  const normalizedPropertyKeys = new Set<string>();
+  const attributeCoverage: Record<InfrastructureFeatureCoverageKey, number> = {
+    identifier: 0,
+    label: 0,
+    municipalityName: 0,
+    streetName: 0,
+    neighborhood: 0,
+    district: 0,
+    region: 0,
+    feeder: 0,
+    circuit: 0,
+    supportType: 0,
+    operationalStatus: 0,
+    lampType: 0,
+    powerWatts: 0,
+    reference: 0,
+  };
+
+  let labelReadyCount = 0;
+
+  const features = input.featureCollection.features.map((feature, index) => {
+    const coordinates = feature.geometry?.coordinates;
+    if (!isFiniteLngLat(coordinates)) {
+      throw createImportError(
+        "INVALID_GEOMETRY",
+        "O shapefile contém ponto com coordenadas inválidas."
+      );
+    }
+
+    Object.keys(feature.properties ?? {}).forEach((key) => sourcePropertyKeys.add(key));
+
+    const normalizedProperties = normalizeInfrastructureFeatureProperties({
+      code: input.code,
+      properties: feature.properties,
+      index: index + 1,
+      ownerTenant: input.ownerTenant,
+    });
+
+    Object.keys(normalizedProperties).forEach((key) => normalizedPropertyKeys.add(key));
+
+    if (normalizedProperties.identifier) attributeCoverage.identifier += 1;
+    if (normalizedProperties.label) attributeCoverage.label += 1;
+    if (normalizedProperties.municipalityName) attributeCoverage.municipalityName += 1;
+    if (normalizedProperties.streetName) attributeCoverage.streetName += 1;
+    if (normalizedProperties.neighborhood) attributeCoverage.neighborhood += 1;
+    if (normalizedProperties.district) attributeCoverage.district += 1;
+    if (normalizedProperties.region) attributeCoverage.region += 1;
+    if (normalizedProperties.feeder) attributeCoverage.feeder += 1;
+    if (normalizedProperties.circuit) attributeCoverage.circuit += 1;
+    if (normalizedProperties.supportType) attributeCoverage.supportType += 1;
+    if (normalizedProperties.operationalStatus) attributeCoverage.operationalStatus += 1;
+    if (normalizedProperties.lampType) attributeCoverage.lampType += 1;
+    if (normalizedProperties.powerWatts !== null) attributeCoverage.powerWatts += 1;
+    if (normalizedProperties.reference) attributeCoverage.reference += 1;
+    if (normalizedProperties.label) labelReadyCount += 1;
+
+    return {
+      type: "Feature",
+      id: buildFeatureId(
+        input.code,
+        normalizedProperties.identifier,
+        index + 1,
+        usedIds
+      ),
+      geometry: {
+        type: "Point",
+        coordinates: [
+          roundCoordinate(coordinates[0]),
+          roundCoordinate(coordinates[1]),
+        ],
+      },
+      properties: normalizedProperties,
+    } satisfies FeatureRecord;
+  });
+
+  return {
+    featureCollection: {
+      type: "FeatureCollection",
+      features,
+    } satisfies FeatureCollectionRecord,
+    labelReadyCount,
+    sourcePropertyKeys: Array.from(sourcePropertyKeys).sort((a, b) =>
+      a.localeCompare(b, "pt-BR")
+    ),
+    normalizedPropertyKeys: Array.from(normalizedPropertyKeys).sort((a, b) =>
+      a.localeCompare(b, "pt-BR")
+    ),
+    attributeCoverage,
+  };
+}
+
 export function inspectInfrastructureLayerArchive(input: {
   buffer: Buffer;
   expectedCode?: InfrastructureLayerCodeId | null;
@@ -472,6 +837,7 @@ export async function importInfrastructureLayerFromZip(input: {
   buffer: Buffer;
   expectedCode?: InfrastructureLayerCodeId | null;
   inspection?: InfrastructureLayerArchiveInspection;
+  context?: Partial<InfrastructureLayerImportContext>;
 }) {
   const inspection =
     input.inspection ??
@@ -480,7 +846,7 @@ export async function importInfrastructureLayerFromZip(input: {
       expectedCode: input.expectedCode,
     });
 
-  let shpjs: (input: ArrayBuffer) => Promise<unknown>;
+  let shpjs: (archive: ArrayBuffer) => Promise<unknown>;
   try {
     shpjs = (await import("shpjs")).default;
   } catch {
@@ -507,9 +873,9 @@ export async function importInfrastructureLayerFromZip(input: {
     );
   }
 
-  const featureCollection = explodeMultiPointFeatures(toFeatureCollection(parsed));
+  const exploded = explodeMultiPointFeatures(toFeatureCollection(parsed));
 
-  if (detectOutOfBoundsCoordinates(featureCollection)) {
+  if (detectOutOfBoundsCoordinates(exploded)) {
     throw createImportError(
       "OUT_OF_BOUNDS_CRS",
       "As coordenadas publicadas ficaram fora de EPSG:4326. Revise o arquivo .prj e reprojete o shapefile antes do upload.",
@@ -520,12 +886,19 @@ export async function importInfrastructureLayerFromZip(input: {
     );
   }
 
+  const normalized = normalizeFeatureCollection({
+    code: inspection.code,
+    featureCollection: exploded,
+    ownerTenant: input.context?.ownerTenant ?? null,
+  });
+
   return {
     ...inspection,
-    featureCount: featureCollection.features.length,
+    normalizedCrs: NORMALIZED_CRS,
+    featureCount: normalized.featureCollection.features.length,
     geometryType: "POINT" as const,
-    bbox: computeBbox(featureCollection),
-    geoJsonData: featureCollection,
+    bbox: computeBbox(normalized.featureCollection),
+    geoJsonData: normalized.featureCollection,
     metadata: {
       requiredFiles: inspection.requiredFiles,
       optionalFiles: inspection.optionalFiles,
@@ -533,6 +906,14 @@ export async function importInfrastructureLayerFromZip(input: {
       hasCpg: inspection.hasCpg,
       detectedCode: inspection.detectedCode,
       archiveFiles: inspection.archiveFiles,
+      normalizedCrs: NORMALIZED_CRS,
+      ownerTenantId: input.context?.ownerTenant?.id ?? null,
+      ownerTenantName: input.context?.ownerTenant?.name ?? null,
+      ownerTenantState: input.context?.ownerTenant?.state ?? null,
+      labelReadyCount: normalized.labelReadyCount,
+      sourcePropertyKeys: normalized.sourcePropertyKeys,
+      normalizedPropertyKeys: normalized.normalizedPropertyKeys,
+      attributeCoverage: normalized.attributeCoverage,
     },
   } satisfies InfrastructureLayerImportResult;
 }
