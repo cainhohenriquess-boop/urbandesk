@@ -6,12 +6,19 @@ import type {
   ProjectTechnicalArea,
 } from "@prisma/client";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapCanvas } from "@/components/map/map-canvas";
 import {
   ProjectBadge,
   ProjectEmptyBlock,
 } from "@/components/projetos/project-detail-components";
+import { ProjectMapGlobalToolbar } from "@/components/projetos/project-map-global-toolbar";
+import {
+  importGeoJsonFeatures,
+  joinLineFeatures,
+  measureArea,
+  measureDistance,
+} from "@/lib/map-workspace-tools";
 import {
   getProjectOperationalStatusLabel,
   getProjectTechnicalAreaLabel,
@@ -481,6 +488,29 @@ function geometrySummary(feature: DrawnFeature) {
   return feature.coords[0] ? formatCoords(feature.coords[0].lat, feature.coords[0].lng) : "Sem coordenadas";
 }
 
+function workspaceToolLabel(tool: string) {
+  switch (tool) {
+    case "SELECT":
+      return "seleção";
+    case "EDIT_GEOMETRY":
+      return "edição de geometria";
+    case "MOVE":
+      return "mover";
+    case "MEASURE_DISTANCE":
+      return "medir distância";
+    case "MEASURE_AREA":
+      return "medir área";
+    case "SPLIT_TRECHO":
+      return "dividir trecho";
+    case "JOIN_TRECHOS":
+      return "unir trechos";
+    case "SPATIAL_SEARCH":
+      return "busca espacial";
+    default:
+      return tool;
+  }
+}
+
 function isPendingFeature(feature: DrawnFeature) {
   return !feature.persistedId;
 }
@@ -527,24 +557,37 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
   const {
     features,
     unsavedCount,
+    deletedPersistedIds,
     drawMode,
     setDrawMode,
+    workspaceTool,
+    setWorkspaceTool,
+    snapEnabled,
+    setSnapEnabled,
     syncAll,
     setBaseLayersData,
     flyToCity,
     replaceFeatures,
+    appendFeatures,
     setActiveProjectId,
     selectedId,
     setSelectedId,
+    selectionIds,
+    clearSelectionIds,
     pendingFeature,
     cancelPendingFeature,
     confirmPendingFeature,
     updateFeature,
+    removeFeature,
     mapStyle,
     setMapStyle,
     layers,
     toggleLayer,
     setLayerAll,
+    clearMeasurement,
+    measurementPoints,
+    spatialSearch,
+    setSpatialSearchRadius,
     viewState,
     baseLayersData,
   } = useMapStore();
@@ -561,6 +604,11 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
   const [selectedDetail, setSelectedDetail] = useState<AssetDetailRecord | null>(null);
   const [inspectorForm, setInspectorForm] = useState<InspectorFormState>(EMPTY_FORM);
   const [isSavingInspector, setIsSavingInspector] = useState(false);
+  const [detailRefreshTick, setDetailRefreshTick] = useState(0);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [commentFiles, setCommentFiles] = useState<File[]>([]);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const syncDisabled = unsavedCount === 0 || isSyncing;
 
@@ -683,7 +731,7 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
 
     void fetchDetail();
     return () => controller.abort();
-  }, [project.id, refreshTick, selectedFeature?.persistedId]);
+  }, [detailRefreshTick, project.id, refreshTick, selectedFeature?.persistedId]);
 
   useEffect(() => {
     if (pendingFeature) {
@@ -699,10 +747,19 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
     }
 
     if (selectedFeature) {
-      const attributes = (selectedDetail?.attributes ?? selectedFeature.attributes ?? {}) as Record<string, unknown>;
+      const preferLocalValues = !selectedFeature.synced || !selectedFeature.persistedId;
+      const attributes = (selectedFeature.attributes ?? selectedDetail?.attributes ?? {}) as Record<string, unknown>;
       setInspectorForm({
-        name: selectedDetail?.name ?? selectedFeature.label ?? "",
-        description: selectedDetail?.description ?? selectedFeature.description ?? readStringAttribute(attributes, ["description", "obs", "notes"]),
+        name: preferLocalValues
+          ? selectedFeature.label ?? selectedDetail?.name ?? ""
+          : selectedDetail?.name ?? selectedFeature.label ?? "",
+        description: preferLocalValues
+          ? selectedFeature.description ??
+            selectedDetail?.description ??
+            readStringAttribute(attributes, ["description", "obs", "notes"])
+          : selectedDetail?.description ??
+            selectedFeature.description ??
+            readStringAttribute(attributes, ["description", "obs", "notes"]),
         status: readStringAttribute(attributes, ["status"]),
         front: readStringAttribute(attributes, ["frente", "area", "fase"]),
         responsible: readStringAttribute(attributes, ["responsavel", "responsible"]),
@@ -713,6 +770,11 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
 
     setInspectorForm(EMPTY_FORM);
   }, [pendingFeature, selectedDetail, selectedFeature]);
+
+  useEffect(() => {
+    setCommentDraft("");
+    setCommentFiles([]);
+  }, [selectedFeature?.id]);
 
   const filteredFeatures = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -782,12 +844,27 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
     },
     [buildPayload]
   );
+
+  const deletePersistedFeature = useCallback(async (id: string) => {
+    const response = await fetch("/api/gis", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.error || `Falha ao remover item (${response.status})`);
+    }
+  }, []);
+
   const handleSync = async () => {
     const visibleUnsaved = features.filter((feature) => !feature.synced);
-    if (visibleUnsaved.length === 0) return;
+    if (visibleUnsaved.length === 0 && deletedPersistedIds.length === 0) return;
 
     setIsSyncing(true);
     try {
+      await Promise.all(deletedPersistedIds.map((id) => deletePersistedFeature(id)));
       await Promise.all(visibleUnsaved.map((feature) => persistFeature(feature)));
       syncAll();
       setRefreshTick((tick) => tick + 1);
@@ -798,6 +875,31 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
       );
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleImportGeoJson = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const importedFeatures = importGeoJsonFeatures(await file.text(), project.id);
+      if (importedFeatures.length === 0) {
+        throw new Error("O arquivo não possui geometrias válidas para importação.");
+      }
+
+      appendFeatures(importedFeatures);
+      setDrawMode("SELECT");
+      setWorkspaceTool("SELECT");
+      setSelectedId(importedFeatures[0]?.id ?? null);
+      clearSelectionIds();
+    } catch (error) {
+      console.error("Erro ao importar GeoJSON", error);
+      window.alert(
+        error instanceof Error ? error.message : "Falha ao importar o arquivo GeoJSON."
+      );
+    } finally {
+      event.target.value = "";
     }
   };
 
@@ -843,6 +945,32 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
     anchor.click();
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
+  };
+
+  const handleToolbarToolChange = (tool: Parameters<typeof setWorkspaceTool>[0]) => {
+    clearSelectionIds();
+    setDrawMode("SELECT");
+    setWorkspaceTool(tool);
+  };
+
+  const handleJoinSelected = () => {
+    const selectedLines = selectionIds
+      .map((id) => features.find((feature) => feature.id === id) ?? null)
+      .filter((feature): feature is DrawnFeature => feature !== null && feature.type === "line");
+
+    if (selectedLines.length !== 2) return;
+
+    const mergedCoords = joinLineFeatures(selectedLines[0], selectedLines[1]);
+    if (!mergedCoords) {
+      window.alert("Os trechos selecionados não compartilham extremidades compatíveis para união.");
+      return;
+    }
+
+    updateFeature(selectedLines[0].id, { coords: mergedCoords, synced: false });
+    removeFeature(selectedLines[1].id);
+    clearSelectionIds();
+    setSelectedId(selectedLines[0].id);
+    setWorkspaceTool("SELECT");
   };
 
   const handleFocusFeature = (feature: DrawnFeature) => {
@@ -915,11 +1043,101 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
     }
   };
 
+  const handleCreateComment = async () => {
+    if (!selectedFeature?.persistedId) return;
+
+    const trimmedNote = commentDraft.trim();
+    if (!trimmedNote && commentFiles.length === 0) {
+      window.alert("Adicione um comentário ou ao menos um anexo antes de publicar.");
+      return;
+    }
+
+    setIsSubmittingComment(true);
+    try {
+      let uploadedPhotos: string[] = [];
+
+      if (commentFiles.length > 0) {
+        const formData = new FormData();
+        formData.append("module", "gis");
+        commentFiles.forEach((file) => formData.append("files", file));
+
+        const uploadResponse = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          const body = await uploadResponse.json().catch(() => null);
+          throw new Error(body?.error || `Falha ao enviar anexos (${uploadResponse.status})`);
+        }
+
+        const uploadPayload = await uploadResponse.json().catch(() => null);
+        uploadedPhotos = Array.isArray(uploadPayload?.urls)
+          ? uploadPayload.urls.filter((value: unknown): value is string => typeof value === "string")
+          : [];
+      }
+
+      const anchor = selectedFeature.coords[0] ?? null;
+      const response = await fetch(`/api/gis/${selectedFeature.persistedId}/logs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          note: trimmedNote || "Anexo adicionado ao item.",
+          photos: uploadedPhotos,
+          lat: anchor?.lat ?? null,
+          lng: anchor?.lng ?? null,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || `Falha ao registrar comentário (${response.status})`);
+      }
+
+      setCommentDraft("");
+      setCommentFiles([]);
+      setDetailRefreshTick((tick) => tick + 1);
+    } catch (error) {
+      console.error("Erro ao publicar comentário do item", error);
+      window.alert(
+        error instanceof Error ? error.message : "Falha ao registrar comentário no item."
+      );
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
   const selectedPhotos = useMemo(() => {
-    if (selectedDetail?.photos?.length) return selectedDetail.photos;
-    if (selectedFeature?.photos?.length) return selectedFeature.photos;
-    return normalizePhotoList(selectedFeature?.attributes?.photos);
+    const photoSet = new Set<string>();
+    selectedDetail?.photos?.forEach((photo) => photoSet.add(photo));
+    selectedFeature?.photos?.forEach((photo) => photoSet.add(photo));
+    normalizePhotoList(selectedFeature?.attributes?.photos).forEach((photo) => photoSet.add(photo));
+    selectedDetail?.logs?.forEach((log) => {
+      log.photos.forEach((photo) => photoSet.add(photo));
+    });
+    return Array.from(photoSet);
   }, [selectedDetail, selectedFeature]);
+
+  const measurementLabel = useMemo(() => {
+    if (workspaceTool === "MEASURE_DISTANCE" && measurementPoints.length >= 2) {
+      return `Distância ${formatDistance(measureDistance(measurementPoints))}`;
+    }
+
+    if (workspaceTool === "MEASURE_AREA" && measurementPoints.length >= 3) {
+      return `Área ${formatArea(measureArea(measurementPoints))}`;
+    }
+
+    return null;
+  }, [measurementPoints, workspaceTool]);
+
+  const canJoinSelected = useMemo(() => {
+    const selectedLines = selectionIds
+      .map((id) => features.find((feature) => feature.id === id) ?? null)
+      .filter((feature): feature is DrawnFeature => feature !== null && feature.type === "line");
+
+    if (selectedLines.length !== 2) return false;
+    return Boolean(joinLineFeatures(selectedLines[0], selectedLines[1]));
+  }, [features, selectionIds]);
 
   const statusBarMetric = useMemo(() => {
     if (!selectedFeature) return null;
@@ -936,6 +1154,14 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
 
   return (
     <div className="overflow-hidden rounded-[30px] border border-border bg-slate-50 shadow-card">
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".geojson,.json,application/geo+json,application/json"
+        className="hidden"
+        onChange={handleImportGeoJson}
+      />
+
       <header className="border-b border-border bg-white/95 px-5 py-4 backdrop-blur">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -1008,6 +1234,21 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
           ))}
         </div>
       </header>
+
+      <ProjectMapGlobalToolbar
+        activeTool={workspaceTool}
+        onToolChange={handleToolbarToolChange}
+        snapEnabled={snapEnabled}
+        onSnapChange={setSnapEnabled}
+        measurementLabel={measurementLabel}
+        onClearMeasurement={clearMeasurement}
+        spatialSearchRadius={spatialSearch.radiusMeters}
+        onSpatialSearchRadiusChange={setSpatialSearchRadius}
+        onImportClick={() => importInputRef.current?.click()}
+        onExportClick={handleExportGeoJson}
+        onJoinSelected={handleJoinSelected}
+        canJoinSelected={canJoinSelected}
+      />
 
       <div className="grid h-[calc(100vh-15.5rem)] min-h-[820px] grid-cols-[320px_minmax(0,1fr)_360px]">
         <aside className="border-r border-border bg-white">
@@ -1134,7 +1375,12 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
                       {group.items.map((tool) => (
                         <button
                           key={tool.id}
-                          onClick={() => setDrawMode(tool.id)}
+                          onClick={() => {
+                            clearSelectionIds();
+                            clearMeasurement();
+                            setWorkspaceTool("SELECT");
+                            setDrawMode(tool.id);
+                          }}
                           className={cn(
                             "rounded-xl border px-3 py-3 text-left transition-colors",
                             drawMode === tool.id
@@ -1174,7 +1420,11 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
                         "w-full rounded-xl border px-3 py-3 text-left transition-colors",
                         selectedId === feature.id
                           ? "border-brand-500 bg-brand-50"
-                          : "border-border bg-background hover:bg-muted"
+                          : selectionIds.includes(feature.id)
+                            ? "border-emerald-500 bg-emerald-50"
+                            : spatialSearch.resultIds.includes(feature.id)
+                              ? "border-sky-500 bg-sky-50"
+                              : "border-border bg-background hover:bg-muted"
                       )}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -1187,8 +1437,28 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
                           </p>
                         </div>
                         <ProjectBadge
-                          label={isPendingFeature(feature) ? "Local" : feature.synced ? "Base" : "Editar"}
-                          tone={isPendingFeature(feature) ? "warning" : feature.synced ? "success" : "brand"}
+                          label={
+                            selectionIds.includes(feature.id)
+                              ? "Seleção"
+                              : spatialSearch.resultIds.includes(feature.id)
+                                ? "Raio"
+                                : isPendingFeature(feature)
+                                  ? "Local"
+                                  : feature.synced
+                                    ? "Base"
+                                    : "Editar"
+                          }
+                          tone={
+                            selectionIds.includes(feature.id)
+                              ? "success"
+                              : spatialSearch.resultIds.includes(feature.id)
+                                ? "brand"
+                                : isPendingFeature(feature)
+                                  ? "warning"
+                                  : feature.synced
+                                    ? "success"
+                                    : "brand"
+                          }
                         />
                       </div>
                     </button>
@@ -1285,6 +1555,49 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
                   </div>
 
                   <div className="rounded-xl border border-border bg-background px-4 py-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Anexos e comentários</p>
+                    {selectedFeature.persistedId ? (
+                      <div className="mt-3 space-y-3">
+                        <textarea
+                          value={commentDraft}
+                          onChange={(event) => setCommentDraft(event.target.value)}
+                          placeholder="Registrar observação, evidência de campo ou atualização do item..."
+                          rows={4}
+                          className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+                        />
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                          multiple
+                          onChange={(event) =>
+                            setCommentFiles(Array.from(event.target.files ?? []))
+                          }
+                          className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:font-semibold file:text-foreground"
+                        />
+                        {commentFiles.length > 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            {formatNumber(commentFiles.length)} arquivo(s) pronto(s) para upload.
+                          </p>
+                        ) : null}
+                        <button
+                          onClick={handleCreateComment}
+                          disabled={isSubmittingComment}
+                          className={cn(
+                            "w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white",
+                            isSubmittingComment ? "bg-slate-400" : "bg-brand-600 hover:bg-brand-500"
+                          )}
+                        >
+                          {isSubmittingComment ? "Publicando..." : "Publicar comentário"}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        Comentários, anexos e histórico detalhado ficam disponíveis após salvar o item na base.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-background px-4 py-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Anexos</p>
                     {selectedPhotos.length > 0 ? (
                       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -1319,6 +1632,25 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
                           <div key={log.id} className="rounded-xl border border-border px-3 py-3">
                             <p className="text-sm font-medium text-foreground">{log.note}</p>
                             <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(log.createdAt)} · {log.user?.name || log.user?.email || "Usuário"}</p>
+                            {log.photos.length > 0 ? (
+                              <div className="mt-3 grid grid-cols-2 gap-2">
+                                {log.photos.slice(0, 4).map((photo) => (
+                                  <a
+                                    key={photo}
+                                    href={photo}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="overflow-hidden rounded-lg border border-border bg-slate-100"
+                                  >
+                                    <div
+                                      aria-label="Anexo do histórico"
+                                      className="h-20 w-full bg-cover bg-center"
+                                      style={{ backgroundImage: `url(${photo})` }}
+                                    />
+                                  </a>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -1344,7 +1676,15 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
             <span>{formatNumber(features.length)} item(ns) carregados</span>
           </div>
           <div className="flex flex-wrap items-center gap-4 text-slate-300">
-            <span>Modo {drawMode === "SELECT" ? "seleção" : featureTypeLabel(drawMode as DrawnFeature["type"])}</span>
+            <span>
+              Modo{" "}
+              {drawMode === "SELECT"
+                ? workspaceToolLabel(workspaceTool)
+                : `desenho · ${featureTypeLabel(drawMode as DrawnFeature["type"])}`}
+            </span>
+            {spatialSearch.resultIds.length > 0 ? (
+              <span>{formatNumber(spatialSearch.resultIds.length)} resultado(s) no raio</span>
+            ) : null}
             {statusBarMetric ? <span>{statusBarMetric.label}: {statusBarMetric.value}</span> : null}
             {pendingCount > 0 ? <span>{pendingCount} alteração(ões) pendente(s)</span> : <span>Sem pendências locais</span>}
           </div>

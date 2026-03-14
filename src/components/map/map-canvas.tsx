@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import Map, {
@@ -10,6 +10,13 @@ import Map, {
   Source,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
+import {
+  featureAnchor,
+  findSpatialMatches,
+  snapToNearestVertex,
+  splitLineFeature,
+  translateFeature,
+} from "@/lib/map-workspace-tools";
 import { cn } from "@/lib/utils";
 import { useMapStore } from "@/store/useMapStore";
 
@@ -34,12 +41,16 @@ const SATELLITE_STYLE = {
   sources: {
     satellite: {
       type: "raster",
-      tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      ],
       tileSize: 256,
       attribution: "Tiles © Esri",
     },
   },
-  layers: [{ id: "satellite-layer", type: "raster", source: "satellite", minzoom: 0, maxzoom: 19 }],
+  layers: [
+    { id: "satellite-layer", type: "raster", source: "satellite", minzoom: 0, maxzoom: 19 },
+  ],
 };
 
 const TOPO_STYLE = {
@@ -57,19 +68,91 @@ const TOPO_STYLE = {
 };
 
 const ASSET_STYLES = {
-  BOCA_LOBO: { color: "bg-blue-500", hex: "#3b82f6", ring: "ring-blue-500/50", icon: "💧", label: "Boca de Lobo" },
-  POCO_VISITA: { color: "bg-slate-600", hex: "#475569", ring: "ring-slate-600/50", icon: "🕳️", label: "Poço de Visita" },
-  HIDRANTE: { color: "bg-red-500", hex: "#ef4444", ring: "ring-red-500/50", icon: "🚒", label: "Hidrante" },
-  SEMAFORO: { color: "bg-amber-500", hex: "#f59e0b", ring: "ring-amber-500/50", icon: "🚦", label: "Semáforo" },
-  PLACA_TRANSITO: { color: "bg-red-600", hex: "#dc2626", ring: "ring-red-600/50", icon: "🛑", label: "Placa" },
-  LOMBADA: { color: "bg-orange-500", hex: "#f97316", ring: "ring-orange-500/50", icon: "〰️", label: "Lombada" },
-  PONTO_ONIBUS: { color: "bg-cyan-500", hex: "#06b6d4", ring: "ring-cyan-500/50", icon: "🚏", label: "Ponto de Ônibus" },
-  RADAR: { color: "bg-slate-700", hex: "#334155", ring: "ring-slate-700/50", icon: "📸", label: "Radar" },
-  POSTE_LUZ: { color: "bg-yellow-400", hex: "#facc15", ring: "ring-yellow-400/50", icon: "💡", label: "Poste" },
-  ARVORE: { color: "bg-emerald-500", hex: "#10b981", ring: "ring-emerald-500/50", icon: "🌳", label: "Árvore" },
-  LIXEIRA: { color: "bg-zinc-500", hex: "#71717a", ring: "ring-zinc-500/50", icon: "🗑️", label: "Lixeira" },
-  BURACO: { color: "bg-amber-600", hex: "#d97706", ring: "ring-amber-600/50", icon: "🚧", label: "Buraco" },
-};
+  BOCA_LOBO: {
+    color: "bg-blue-500",
+    hex: "#3b82f6",
+    ring: "ring-blue-500/50",
+    icon: "💧",
+    label: "Boca de Lobo",
+  },
+  POCO_VISITA: {
+    color: "bg-slate-600",
+    hex: "#475569",
+    ring: "ring-slate-600/50",
+    icon: "🕳️",
+    label: "Poço de Visita",
+  },
+  HIDRANTE: {
+    color: "bg-red-500",
+    hex: "#ef4444",
+    ring: "ring-red-500/50",
+    icon: "🚒",
+    label: "Hidrante",
+  },
+  SEMAFORO: {
+    color: "bg-amber-500",
+    hex: "#f59e0b",
+    ring: "ring-amber-500/50",
+    icon: "🚦",
+    label: "Semáforo",
+  },
+  PLACA_TRANSITO: {
+    color: "bg-red-600",
+    hex: "#dc2626",
+    ring: "ring-red-600/50",
+    icon: "🛑",
+    label: "Placa",
+  },
+  LOMBADA: {
+    color: "bg-orange-500",
+    hex: "#f97316",
+    ring: "ring-orange-500/50",
+    icon: "〰️",
+    label: "Lombada",
+  },
+  PONTO_ONIBUS: {
+    color: "bg-cyan-500",
+    hex: "#06b6d4",
+    ring: "ring-cyan-500/50",
+    icon: "🚏",
+    label: "Ponto de Ônibus",
+  },
+  RADAR: {
+    color: "bg-slate-700",
+    hex: "#334155",
+    ring: "ring-slate-700/50",
+    icon: "📸",
+    label: "Radar",
+  },
+  POSTE_LUZ: {
+    color: "bg-yellow-400",
+    hex: "#facc15",
+    ring: "ring-yellow-400/50",
+    icon: "💡",
+    label: "Poste",
+  },
+  ARVORE: {
+    color: "bg-emerald-500",
+    hex: "#10b981",
+    ring: "ring-emerald-500/50",
+    icon: "🌳",
+    label: "Árvore",
+  },
+  LIXEIRA: {
+    color: "bg-zinc-500",
+    hex: "#71717a",
+    ring: "ring-zinc-500/50",
+    icon: "🗑️",
+    label: "Lixeira",
+  },
+  BURACO: {
+    color: "bg-amber-600",
+    hex: "#d97706",
+    ring: "ring-amber-600/50",
+    icon: "🚧",
+    label: "Buraco",
+  },
+} as const;
 
 function hasValidPoint(coords: { lng: number; lat: number }[] | undefined): boolean {
   if (!coords || coords.length === 0) return false;
@@ -81,7 +164,11 @@ function parseBaseLayerGeoJson(raw: unknown): GeoJsonFeatureCollection {
     let parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
     if (Array.isArray(parsed)) parsed = parsed[0];
 
-    if (parsed && typeof parsed === "object" && (parsed as { type?: string }).type === "FeatureCollection") {
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      (parsed as { type?: string }).type === "FeatureCollection"
+    ) {
       const features = Array.isArray((parsed as { features?: unknown }).features)
         ? ((parsed as { features: unknown[] }).features as Array<Record<string, unknown>>)
         : [];
@@ -121,6 +208,26 @@ function detectPotentialUtm(collections: GeoJsonFeatureCollection[]): boolean {
   return false;
 }
 
+function createCirclePolygon(center: { lng: number; lat: number }, radiusMeters: number) {
+  const earthRadiusMeters = 6378137;
+  const latRadians = (center.lat * Math.PI) / 180;
+  const latDelta = (radiusMeters / earthRadiusMeters) * (180 / Math.PI);
+  const lngDelta =
+    ((radiusMeters / earthRadiusMeters) * (180 / Math.PI)) /
+    Math.max(Math.cos(latRadians), 0.2);
+  const coordinates: number[][] = [];
+
+  for (let step = 0; step <= 48; step += 1) {
+    const angle = (step / 48) * Math.PI * 2;
+    coordinates.push([
+      center.lng + lngDelta * Math.cos(angle),
+      center.lat + latDelta * Math.sin(angle),
+    ]);
+  }
+
+  return coordinates;
+}
+
 function EngineeringPanel() {
   const { pendingFeature, cancelPendingFeature, confirmPendingFeature } = useMapStore();
   const [formData, setFormData] = useState({
@@ -154,30 +261,38 @@ function EngineeringPanel() {
   };
 
   return (
-    <div className="absolute top-0 right-0 bottom-0 w-80 bg-card/95 backdrop-blur-md border-l border-border shadow-2xl z-50 flex flex-col animate-slide-left">
-      <div className="p-4 border-b border-border bg-muted/30">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-brand-500 bg-brand-500/10 px-2 py-0.5 rounded">Modo Projeto</span>
-          <button onClick={cancelPendingFeature} className="text-muted-foreground hover:text-danger-500">×</button>
+    <div className="animate-slide-left absolute bottom-0 right-0 top-0 z-50 flex w-80 flex-col border-l border-border bg-card/95 shadow-2xl backdrop-blur-md">
+      <div className="border-b border-border bg-muted/30 p-4">
+        <div className="mb-1 flex items-center justify-between">
+          <span className="rounded bg-brand-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-brand-500">
+            Modo Projeto
+          </span>
+          <button onClick={cancelPendingFeature} className="text-muted-foreground hover:text-danger-500">
+            ×
+          </button>
         </div>
         <h2 className="font-display text-lg font-bold text-foreground">{title}</h2>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
+      <form onSubmit={handleSubmit} className="flex-1 space-y-4 overflow-y-auto p-4">
         <div>
-          <label className="text-xs font-semibold text-muted-foreground uppercase">Nome</label>
+          <label className="text-xs font-semibold uppercase text-muted-foreground">Nome</label>
           <input
             type="text"
             required
             value={formData.nome}
             onChange={(e) => setFormData((s) => ({ ...s, nome: e.target.value }))}
-            className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 outline-none focus:border-brand-500"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand-500"
           />
         </div>
 
-        <div className="pt-4 flex gap-2">
-          <button type="button" onClick={cancelPendingFeature} className="flex-1 py-2 rounded-md bg-muted font-medium">Cancelar</button>
-          <button type="submit" className="flex-1 py-2 rounded-md bg-brand-600 text-white font-bold">Salvar Projeto</button>
+        <div className="flex gap-2 pt-4">
+          <button type="button" onClick={cancelPendingFeature} className="flex-1 rounded-md bg-muted py-2 font-medium">
+            Cancelar
+          </button>
+          <button type="submit" className="flex-1 rounded-md bg-brand-600 py-2 font-bold text-white">
+            Salvar Projeto
+          </button>
         </div>
       </form>
     </div>
@@ -206,6 +321,13 @@ function MapCanvasInner({
   const {
     features,
     drawMode,
+    workspaceTool,
+    snapEnabled,
+    measurementPoints,
+    addMeasurementPoint,
+    clearMeasurement,
+    spatialSearch,
+    setSpatialSearchResult,
     viewState,
     setViewState,
     addDraftPoint,
@@ -218,8 +340,13 @@ function MapCanvasInner({
     baseLayersData,
     selectedId,
     setSelectedId,
+    selectionIds,
+    setSelectionIds,
+    clearSelectionIds,
+    toggleSelectionId,
     updateFeature,
     removeFeature,
+    appendFeatures,
   } = useMapStore();
 
   const [utmWarning, setUtmWarning] = useState(false);
@@ -254,6 +381,11 @@ function MapCanvasInner({
       ? selectedFeature
       : null;
 
+  const selectedAnchor = useMemo(() => {
+    if (!selectedFeature) return null;
+    return featureAnchor(selectedFeature);
+  }, [selectedFeature]);
+
   const assetFeatures = useMemo(
     () => features.filter((feature) => feature.type !== "line" && feature.type !== "polygon"),
     [features]
@@ -265,36 +397,187 @@ function MapCanvasInner({
   const activeMapStyle =
     mapStyle === "topography" ? TOPO_STYLE : mapStyle === "satellite" ? SATELLITE_STYLE : BLANK_STYLE;
 
-  const handleMapClick = (event: MapLayerMouseEvent) => {
-    if (drawMode === "SELECT") {
-      const clicked = event.features?.find((feature) => {
-        const id = (feature.properties as { id?: unknown } | undefined)?.id;
-        return typeof id === "string";
-      });
+  const measurementGeoJson = useMemo<GeoJsonFeatureCollection | null>(() => {
+    if (measurementPoints.length === 0) return null;
 
-      const selected = (clicked?.properties as { id?: string } | undefined)?.id ?? null;
-      setSelectedId(selected);
+    const featureCollection: Array<Record<string, unknown>> = measurementPoints.map((point, index) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [point.lng, point.lat] },
+      properties: { id: `measurement-point-${index}` },
+    }));
+
+    if (measurementPoints.length > 1) {
+      const coordinates = measurementPoints.map((point) => [point.lng, point.lat]);
+      if (workspaceTool === "MEASURE_AREA" && measurementPoints.length > 2) {
+        featureCollection.push({
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: [[...coordinates, coordinates[0]]] },
+          properties: { id: "measurement-area" },
+        });
+      } else {
+        featureCollection.push({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates },
+          properties: { id: "measurement-line" },
+        });
+      }
+    }
+
+    return { type: "FeatureCollection", features: featureCollection };
+  }, [measurementPoints, workspaceTool]);
+
+  const spatialSearchGeoJson = useMemo<GeoJsonFeatureCollection | null>(() => {
+    if (!spatialSearch.center) return null;
+
+    return {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [spatialSearch.center.lng, spatialSearch.center.lat] },
+          properties: { id: "spatial-search-center" },
+        },
+        {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [createCirclePolygon(spatialSearch.center, spatialSearch.radiusMeters)],
+          },
+          properties: { id: "spatial-search-radius" },
+        },
+      ],
+    };
+  }, [spatialSearch.center, spatialSearch.radiusMeters]);
+
+  const handleMapClick = (event: MapLayerMouseEvent) => {
+    const clickedId = event.features?.find((feature) => {
+      const id = (feature.properties as { id?: unknown } | undefined)?.id;
+      return typeof id === "string";
+    })?.properties?.id;
+
+    const clickedFeature =
+      typeof clickedId === "string"
+        ? features.find((feature) => feature.id === clickedId) ?? null
+        : null;
+
+    const rawPoint = { lng: event.lngLat.lng, lat: event.lngLat.lat };
+    const snappingPool = clickedFeature
+      ? features.filter((feature) => feature.id !== clickedFeature.id)
+      : features;
+    const snappedPoint = snapToNearestVertex(rawPoint, snappingPool, snapEnabled);
+
+    if (drawMode !== "SELECT") {
+      addDraftPoint(snappedPoint);
       return;
     }
 
-    addDraftPoint({ lng: event.lngLat.lng, lat: event.lngLat.lat });
+    if (workspaceTool === "MEASURE_DISTANCE" || workspaceTool === "MEASURE_AREA") {
+      addMeasurementPoint(snappedPoint);
+      return;
+    }
+
+    if (workspaceTool === "SPATIAL_SEARCH") {
+      const resultIds = findSpatialMatches(features, snappedPoint, spatialSearch.radiusMeters);
+      setSpatialSearchResult(snappedPoint, resultIds);
+      setSelectionIds(resultIds);
+      setSelectedId(resultIds[0] ?? null);
+      return;
+    }
+
+    if (workspaceTool === "SPLIT_TRECHO") {
+      const target =
+        clickedFeature?.type === "line"
+          ? clickedFeature
+          : selectedFeature?.type === "line"
+            ? selectedFeature
+            : null;
+
+      if (!target) return;
+
+      const splitResult = splitLineFeature(target, snappedPoint);
+      if (!splitResult) return;
+
+      updateFeature(target.id, { coords: splitResult.first, synced: false });
+      appendFeatures([
+        {
+          ...target,
+          id: `feat-${crypto.randomUUID()}`,
+          persistedId: null,
+          coords: splitResult.second,
+          label: `${target.label || "Trecho"} (ramo)`,
+          synced: false,
+          createdAt: Date.now(),
+          updatedAt: undefined,
+          createdAtIso: undefined,
+        },
+      ]);
+      clearSelectionIds();
+      setSelectedId(target.id);
+      return;
+    }
+
+    if (workspaceTool === "JOIN_TRECHOS") {
+      if (clickedFeature?.type !== "line") return;
+      toggleSelectionId(clickedFeature.id);
+      setSelectedId(clickedFeature.id);
+      return;
+    }
+
+    setSelectedId(clickedFeature?.id ?? null);
+    clearSelectionIds();
   };
 
   const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     if (drawMode === "line" || drawMode === "polygon") {
       finishDraft();
+      return;
+    }
+
+    if (workspaceTool === "MEASURE_DISTANCE" || workspaceTool === "MEASURE_AREA") {
+      clearMeasurement();
     }
   };
 
   const handleVertexDrag = (vertexIndex: number) => (event: MarkerDragEvent) => {
-    if (!selectedGeometry) return;
+    if (!selectedGeometry || workspaceTool !== "EDIT_GEOMETRY") return;
+
+    const nextPoint = snapToNearestVertex(
+      { lng: event.lngLat.lng, lat: event.lngLat.lat },
+      features.filter((feature) => feature.id !== selectedGeometry.id),
+      snapEnabled
+    );
 
     const nextCoords = selectedGeometry.coords.map((coord, idx) =>
-      idx === vertexIndex ? { lng: event.lngLat.lng, lat: event.lngLat.lat } : coord
+      idx === vertexIndex ? nextPoint : coord
     );
 
     updateFeature(selectedGeometry.id, { coords: nextCoords, synced: false });
+  };
+
+  const handleMoveDragEnd = (event: MarkerDragEvent) => {
+    if (!selectedFeature || workspaceTool !== "MOVE") return;
+
+    const currentAnchor = featureAnchor(selectedFeature);
+    if (!currentAnchor) return;
+
+    const nextPoint = snapToNearestVertex(
+      { lng: event.lngLat.lng, lat: event.lngLat.lat },
+      features.filter((feature) => feature.id !== selectedFeature.id),
+      snapEnabled
+    );
+
+    if (selectedFeature.type === "line" || selectedFeature.type === "polygon") {
+      const deltaLat = nextPoint.lat - currentAnchor.lat;
+      const deltaLng = nextPoint.lng - currentAnchor.lng;
+      updateFeature(selectedFeature.id, {
+        coords: translateFeature(selectedFeature, deltaLat, deltaLng),
+        synced: false,
+      });
+      return;
+    }
+
+    updateFeature(selectedFeature.id, { coords: [nextPoint], synced: false });
   };
 
   const geometriesGeoJson = useMemo<GeoJsonFeatureCollection>(() => {
@@ -307,6 +590,15 @@ function MapCanvasInner({
           coords.push([feature.coords[0].lng, feature.coords[0].lat]);
         }
 
+        const selectionState =
+          feature.id === selectedId
+            ? "selected"
+            : selectionIds.includes(feature.id)
+              ? "grouped"
+              : spatialSearch.resultIds.includes(feature.id)
+                ? "search"
+                : "default";
+
         return {
           type: "Feature",
           geometry: {
@@ -316,36 +608,12 @@ function MapCanvasInner({
           properties: {
             id: feature.id,
             color: feature.color || "#3b82f6",
-            selected: feature.id === selectedId,
+            selectionState,
           },
         };
       }),
     };
-  }, [geometryFeatures, selectedId]);
-
-  const selectedGeometryGeoJson = useMemo<GeoJsonFeatureCollection | null>(() => {
-    if (!selectedGeometry) return null;
-
-    const coords = selectedGeometry.coords.map((coord) => [coord.lng, coord.lat]);
-
-    if (selectedGeometry.type === "polygon" && coords.length > 2) {
-      coords.push([selectedGeometry.coords[0].lng, selectedGeometry.coords[0].lat]);
-    }
-
-    return {
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature",
-          geometry: {
-            type: selectedGeometry.type === "line" ? "LineString" : "Polygon",
-            coordinates: selectedGeometry.type === "line" ? coords : [coords],
-          },
-          properties: { id: selectedGeometry.id },
-        },
-      ],
-    };
-  }, [selectedGeometry]);
+  }, [geometryFeatures, selectedId, selectionIds, spatialSearch.resultIds]);
 
   const draftGeoJson = useMemo<GeoJsonFeatureCollection | null>(() => {
     if (draftPoints.length === 0 || (drawMode !== "line" && drawMode !== "polygon")) return null;
@@ -381,6 +649,14 @@ function MapCanvasInner({
         .filter((feature) => hasValidPoint(feature.coords))
         .map((feature) => {
           const style = ASSET_STYLES[feature.type as keyof typeof ASSET_STYLES];
+          const selectionState =
+            feature.id === selectedId
+              ? "selected"
+              : selectionIds.includes(feature.id)
+                ? "grouped"
+                : spatialSearch.resultIds.includes(feature.id)
+                  ? "search"
+                  : "default";
 
           return {
             type: "Feature",
@@ -393,11 +669,49 @@ function MapCanvasInner({
               type: feature.type,
               icon: style?.icon || "📍",
               color: style?.hex || "#ffffff",
+              selectionState,
             },
           };
         }),
     };
-  }, [syncedAssets]);
+  }, [selectedId, selectionIds, spatialSearch.resultIds, syncedAssets]);
+
+  const drawHint = useMemo(() => {
+    if (drawMode === "line") {
+      return "Clique para adicionar vértices. Botão direito finaliza o trecho.";
+    }
+    if (drawMode === "polygon") {
+      return "Clique para adicionar vértices. Botão direito fecha a área.";
+    }
+    if (drawMode !== "SELECT") {
+      return `Clique no mapa para lançar ${
+        ASSET_STYLES[drawMode as keyof typeof ASSET_STYLES]?.label || drawMode
+      }.`;
+    }
+
+    switch (workspaceTool) {
+      case "EDIT_GEOMETRY":
+        return selectedGeometry
+          ? "Arraste os vértices em vermelho para editar a geometria selecionada."
+          : "Selecione um trecho ou área para editar a geometria.";
+      case "MOVE":
+        return selectedFeature
+          ? "Arraste a alça vermelha para mover o objeto selecionado."
+          : "Selecione um objeto para mover.";
+      case "MEASURE_DISTANCE":
+        return "Clique no mapa para medir distância. Botão direito limpa a medição.";
+      case "MEASURE_AREA":
+        return "Clique no mapa para medir área. Botão direito limpa a medição.";
+      case "SPLIT_TRECHO":
+        return "Selecione ou clique em um trecho para dividi-lo no ponto indicado.";
+      case "JOIN_TRECHOS":
+        return "Clique em dois trechos para selecionar e use a toolbar para unir.";
+      case "SPATIAL_SEARCH":
+        return "Clique no mapa para buscar itens dentro do raio configurado.";
+      default:
+        return null;
+    }
+  }, [drawMode, selectedFeature, selectedGeometry, workspaceTool]);
 
   return (
     <div
@@ -407,16 +721,22 @@ function MapCanvasInner({
       {showEngineeringPanel ? <EngineeringPanel /> : null}
 
       {utmWarning && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-danger-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+        <div className="absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-danger-600 px-6 py-3 text-white shadow-2xl">
           <p className="text-sm font-bold">Coordenadas possivelmente em UTM. Recomenda-se EPSG:4326.</p>
         </div>
       )}
 
       {showSelectionOverlay && selectedFeature && (
-        <div className="absolute top-4 left-4 z-50 rounded-xl border border-border bg-card/95 backdrop-blur-md px-4 py-3 shadow-xl w-72">
-          <p className="text-xs font-bold text-foreground">Selecionado: {selectedFeature.label || selectedFeature.type}</p>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            {selectedGeometry ? "Arraste os vértices para editar geometria." : "Ativo de ponto selecionado."}
+        <div className="absolute left-4 top-4 z-50 w-72 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-xl backdrop-blur-md">
+          <p className="text-xs font-bold text-foreground">
+            Selecionado: {selectedFeature.label || selectedFeature.type}
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {workspaceTool === "EDIT_GEOMETRY" && selectedGeometry
+              ? "Arraste os vértices para editar geometria."
+              : workspaceTool === "MOVE"
+                ? "Arraste a alça vermelha para mover o item."
+                : "Ativo selecionado para inspeção técnica."}
           </p>
           <div className="mt-3 flex gap-2">
             <button
@@ -429,6 +749,7 @@ function MapCanvasInner({
               onClick={() => {
                 removeFeature(selectedFeature.id);
                 setSelectedId(null);
+                clearSelectionIds();
               }}
               className="flex-1 rounded-md bg-danger-600 px-2 py-1.5 text-xs font-bold text-white hover:bg-danger-700"
             >
@@ -441,7 +762,7 @@ function MapCanvasInner({
       {showFullscreenButton ? (
         <button
           onClick={toggleFullscreen}
-          className="absolute top-4 right-14 z-40 rounded-lg border border-border bg-card/90 p-2 text-foreground shadow-md backdrop-blur-md transition-colors hover:bg-muted"
+          className="absolute right-14 top-4 z-40 rounded-lg border border-border bg-card/90 p-2 text-foreground shadow-md backdrop-blur-md transition-colors hover:bg-muted"
         >
           {isFullscreen ? "⤢" : "⤢"}
         </button>
@@ -450,10 +771,21 @@ function MapCanvasInner({
       <Map
         {...viewState}
         onMove={(evt) => setViewState(evt.viewState)}
-        mapStyle={activeMapStyle as any}
+        mapStyle={activeMapStyle as never}
         onClick={handleMapClick}
-        interactiveLayerIds={["geom-lines", "geom-polygons-fill", "assets-circle"]}
-        cursor={drawMode !== "SELECT" ? "crosshair" : "grab"}
+        interactiveLayerIds={["geom-lines", "geom-polygons-fill", "geom-polygons-stroke", "assets-circle"]}
+        cursor={
+          drawMode !== "SELECT"
+            ? "crosshair"
+            : workspaceTool === "MOVE"
+              ? "move"
+              : workspaceTool === "MEASURE_DISTANCE" ||
+                  workspaceTool === "MEASURE_AREA" ||
+                  workspaceTool === "SPLIT_TRECHO" ||
+                  workspaceTool === "SPATIAL_SEARCH"
+                ? "crosshair"
+                : "grab"
+        }
       >
         <NavigationControl position="bottom-right" />
 
@@ -463,7 +795,7 @@ function MapCanvasInner({
 
             return (
               <React.Fragment key={layer.id}>
-                <Source id={sourceId} type="geojson" data={layer.data as any} />
+                <Source id={sourceId} type="geojson" data={layer.data as never} />
 
                 {layer.type === "BOUNDARY" && (
                   <>
@@ -529,40 +861,230 @@ function MapCanvasInner({
                       "text-size": 12,
                       "symbol-placement": "line-center",
                     }}
-                    paint={{ "text-color": "#1e293b", "text-halo-color": "#ffffff", "text-halo-width": 1.8 }}
+                    paint={{
+                      "text-color": "#1e293b",
+                      "text-halo-color": "#ffffff",
+                      "text-halo-width": 1.8,
+                    }}
                   />
                 )}
               </React.Fragment>
             );
           })}
 
+        {spatialSearchGeoJson && (
+          <Source id="spatial-search-source" type="geojson" data={spatialSearchGeoJson as never}>
+            <Layer
+              id="spatial-search-fill"
+              type="fill"
+              filter={["==", ["geometry-type"], "Polygon"]}
+              paint={{ "fill-color": "#0ea5e9", "fill-opacity": 0.08 }}
+            />
+            <Layer
+              id="spatial-search-line"
+              type="line"
+              filter={["==", ["geometry-type"], "Polygon"]}
+              paint={{ "line-color": "#0ea5e9", "line-width": 2, "line-dasharray": [2, 2] }}
+            />
+            <Layer
+              id="spatial-search-point"
+              type="circle"
+              filter={["==", ["geometry-type"], "Point"]}
+              paint={{
+                "circle-color": "#0ea5e9",
+                "circle-radius": 6,
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 2,
+              }}
+            />
+          </Source>
+        )}
+
+        {measurementGeoJson && (
+          <Source id="measurement-source" type="geojson" data={measurementGeoJson as never}>
+            <Layer
+              id="measurement-fill"
+              type="fill"
+              filter={["==", ["geometry-type"], "Polygon"]}
+              paint={{ "fill-color": "#f97316", "fill-opacity": 0.12 }}
+            />
+            <Layer
+              id="measurement-line"
+              type="line"
+              filter={["in", ["geometry-type"], ["literal", ["LineString", "Polygon"]]]}
+              paint={{ "line-color": "#f97316", "line-width": 3, "line-dasharray": [2, 2] }}
+            />
+            <Layer
+              id="measurement-point"
+              type="circle"
+              filter={["==", ["geometry-type"], "Point"]}
+              paint={{
+                "circle-color": "#ffffff",
+                "circle-radius": 5,
+                "circle-stroke-width": 2,
+                "circle-stroke-color": "#f97316",
+              }}
+            />
+          </Source>
+        )}
+
         {draftGeoJson && (
-          <Source id="draft-source" type="geojson" data={draftGeoJson as any}>
-            <Layer id="draft-polygon-fill" type="fill" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "fill-color": "#10b981", "fill-opacity": 0.28 }} />
-            <Layer id="draft-line" type="line" filter={["in", ["geometry-type"], ["literal", ["LineString", "Polygon"]]]} paint={{ "line-color": "#10b981", "line-width": 3, "line-dasharray": [2, 2] }} />
-            <Layer id="draft-points" type="circle" filter={["==", ["geometry-type"], "Point"]} paint={{ "circle-color": "#ffffff", "circle-radius": 5, "circle-stroke-width": 2, "circle-stroke-color": "#10b981" }} />
+          <Source id="draft-source" type="geojson" data={draftGeoJson as never}>
+            <Layer
+              id="draft-polygon-fill"
+              type="fill"
+              filter={["==", ["geometry-type"], "Polygon"]}
+              paint={{ "fill-color": "#10b981", "fill-opacity": 0.28 }}
+            />
+            <Layer
+              id="draft-line"
+              type="line"
+              filter={["in", ["geometry-type"], ["literal", ["LineString", "Polygon"]]]}
+              paint={{ "line-color": "#10b981", "line-width": 3, "line-dasharray": [2, 2] }}
+            />
+            <Layer
+              id="draft-points"
+              type="circle"
+              filter={["==", ["geometry-type"], "Point"]}
+              paint={{
+                "circle-color": "#ffffff",
+                "circle-radius": 5,
+                "circle-stroke-width": 2,
+                "circle-stroke-color": "#10b981",
+              }}
+            />
           </Source>
         )}
 
         {layers.obras && (
-          <Source id="geometries" type="geojson" data={geometriesGeoJson as any}>
-            <Layer id="geom-lines" type="line" filter={["==", ["geometry-type"], "LineString"]} paint={{ "line-color": ["get", "color"], "line-width": 4 }} />
-            <Layer id="geom-polygons-fill" type="fill" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "fill-color": ["get", "color"], "fill-opacity": 0.26 }} />
-            <Layer id="geom-polygons-stroke" type="line" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "line-color": ["get", "color"], "line-width": 2 }} />
-          </Source>
-        )}
-
-        {selectedGeometryGeoJson && (
-          <Source id="selected-geometry" type="geojson" data={selectedGeometryGeoJson as any}>
-            <Layer id="selected-geometry-line" type="line" paint={{ "line-color": "#f43f5e", "line-width": 5 }} />
-            <Layer id="selected-geometry-fill" type="fill" paint={{ "fill-color": "#f43f5e", "fill-opacity": 0.12 }} />
+          <Source id="geometries" type="geojson" data={geometriesGeoJson as never}>
+            <Layer
+              id="geom-lines"
+              type="line"
+              filter={["==", ["geometry-type"], "LineString"]}
+              paint={{
+                "line-color": [
+                  "match",
+                  ["get", "selectionState"],
+                  "selected",
+                  "#f43f5e",
+                  "grouped",
+                  "#10b981",
+                  "search",
+                  "#0ea5e9",
+                  ["get", "color"],
+                ],
+                "line-width": [
+                  "match",
+                  ["get", "selectionState"],
+                  "selected",
+                  6,
+                  "grouped",
+                  5,
+                  "search",
+                  5,
+                  4,
+                ],
+              }}
+            />
+            <Layer
+              id="geom-polygons-fill"
+              type="fill"
+              filter={["==", ["geometry-type"], "Polygon"]}
+              paint={{
+                "fill-color": [
+                  "match",
+                  ["get", "selectionState"],
+                  "selected",
+                  "#f43f5e",
+                  "grouped",
+                  "#10b981",
+                  "search",
+                  "#0ea5e9",
+                  ["get", "color"],
+                ],
+                "fill-opacity": [
+                  "match",
+                  ["get", "selectionState"],
+                  "selected",
+                  0.2,
+                  "grouped",
+                  0.18,
+                  "search",
+                  0.16,
+                  0.26,
+                ],
+              }}
+            />
+            <Layer
+              id="geom-polygons-stroke"
+              type="line"
+              filter={["==", ["geometry-type"], "Polygon"]}
+              paint={{
+                "line-color": [
+                  "match",
+                  ["get", "selectionState"],
+                  "selected",
+                  "#f43f5e",
+                  "grouped",
+                  "#10b981",
+                  "search",
+                  "#0ea5e9",
+                  ["get", "color"],
+                ],
+                "line-width": [
+                  "match",
+                  ["get", "selectionState"],
+                  "selected",
+                  3,
+                  "grouped",
+                  3,
+                  "search",
+                  3,
+                  2,
+                ],
+              }}
+            />
           </Source>
         )}
 
         {layers.ativos && (
-          <Source id="synced-assets" type="geojson" data={syncedAssetsGeoJson as any}>
-            <Layer id="assets-circle" type="circle" paint={{ "circle-color": ["get", "color"], "circle-radius": 13, "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" }} />
-            <Layer id="assets-symbol" type="symbol" layout={{ "text-field": ["get", "icon"], "text-size": 14, "text-allow-overlap": true }} />
+          <Source id="synced-assets" type="geojson" data={syncedAssetsGeoJson as never}>
+            <Layer
+              id="assets-circle"
+              type="circle"
+              paint={{
+                "circle-color": [
+                  "match",
+                  ["get", "selectionState"],
+                  "selected",
+                  "#f43f5e",
+                  "grouped",
+                  "#10b981",
+                  "search",
+                  "#0ea5e9",
+                  ["get", "color"],
+                ],
+                "circle-radius": [
+                  "match",
+                  ["get", "selectionState"],
+                  "selected",
+                  15,
+                  "grouped",
+                  15,
+                  "search",
+                  14,
+                  13,
+                ],
+                "circle-stroke-width": 2,
+                "circle-stroke-color": "#ffffff",
+              }}
+            />
+            <Layer
+              id="assets-symbol"
+              type="symbol"
+              layout={{ "text-field": ["get", "icon"], "text-size": 14, "text-allow-overlap": true }}
+            />
           </Source>
         )}
 
@@ -571,48 +1093,85 @@ function MapCanvasInner({
             const style = ASSET_STYLES[feature.type as keyof typeof ASSET_STYLES];
             if (!style || !hasValidPoint(feature.coords)) return null;
 
+            const isSelected = selectedId === feature.id;
+            const isGrouped = selectionIds.includes(feature.id);
+            const isSpatialHit = spatialSearch.resultIds.includes(feature.id);
+
             return (
               <Marker key={feature.id} longitude={feature.coords[0].lng} latitude={feature.coords[0].lat} anchor="bottom">
                 <button
-                  onClick={() => setSelectedId(feature.id)}
-                  className="relative group flex flex-col items-center cursor-pointer"
+                  onClick={() => {
+                    setSelectedId(feature.id);
+                    if (workspaceTool === "JOIN_TRECHOS") {
+                      toggleSelectionId(feature.id);
+                    } else {
+                      clearSelectionIds();
+                    }
+                  }}
+                  className="group relative flex cursor-pointer flex-col items-center"
                 >
-                  <div className="absolute -top-12 hidden group-hover:flex items-center whitespace-nowrap rounded-lg bg-card px-2.5 py-1.5 text-[11px] font-bold text-foreground shadow-xl border border-border flex-col z-50">
+                  <div className="absolute -top-12 z-50 hidden flex-col items-center whitespace-nowrap rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-bold text-foreground shadow-xl group-hover:flex">
                     <span>{feature.label || style.label}</span>
-                    <span className="text-warning-500 text-[9px] mt-0.5">Pendente no BD</span>
+                    <span className="mt-0.5 text-[9px] text-warning-500">Pendente no BD</span>
                   </div>
 
                   <div className="relative flex h-8 w-8 items-center justify-center">
                     <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", style.color)} />
-                    <div className={cn("relative z-10 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[13px] shadow-[0_4px_12px_rgba(0,0,0,0.45)] transition-transform group-hover:scale-125 ring-4", style.color, style.ring)}>{style.icon}</div>
+                    <div
+                      className={cn(
+                        "relative z-10 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[13px] shadow-[0_4px_12px_rgba(0,0,0,0.45)] transition-transform group-hover:scale-125 ring-4",
+                        isSelected
+                          ? "bg-danger-500 ring-danger-500/50"
+                          : isGrouped
+                            ? "bg-emerald-500 ring-emerald-500/50"
+                            : isSpatialHit
+                              ? "bg-sky-500 ring-sky-500/50"
+                              : `${style.color} ${style.ring}`
+                      )}
+                    >
+                      {style.icon}
+                    </div>
                   </div>
-                  <div className="h-3 w-[2px] bg-white/90 shadow-sm rounded-b-full" />
+                  <div className="h-3 w-[2px] rounded-b-full bg-white/90 shadow-sm" />
                 </button>
               </Marker>
             );
           })}
 
-        {selectedGeometry?.coords.map((point, index) => (
+        {workspaceTool === "EDIT_GEOMETRY" &&
+          selectedGeometry?.coords.map((point, index) => (
+            <Marker
+              key={`${selectedGeometry.id}-vertex-${index}`}
+              longitude={point.lng}
+              latitude={point.lat}
+              draggable
+              onDragEnd={handleVertexDrag(index)}
+              anchor="center"
+            >
+              <div className="h-3.5 w-3.5 rounded-full border-2 border-white bg-danger-500 shadow-lg" />
+            </Marker>
+          ))}
+
+        {workspaceTool === "MOVE" && selectedAnchor ? (
           <Marker
-            key={`${selectedGeometry.id}-vertex-${index}`}
-            longitude={point.lng}
-            latitude={point.lat}
+            longitude={selectedAnchor.lng}
+            latitude={selectedAnchor.lat}
             draggable
-            onDragEnd={handleVertexDrag(index)}
+            onDragEnd={handleMoveDragEnd}
             anchor="center"
           >
-            <div className="h-3.5 w-3.5 rounded-full border-2 border-white bg-danger-500 shadow-lg" />
+            <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-danger-500 text-xs font-bold text-white shadow-lg">
+              +
+            </div>
           </Marker>
-        ))}
+        ) : null}
       </Map>
 
-      {showDrawHint && drawMode !== "SELECT" && (
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full border border-brand-400 bg-brand-600/90 backdrop-blur-md px-6 py-2.5 text-sm font-bold text-white shadow-2xl flex items-center gap-2 pointer-events-none z-40">
-          {drawMode === "line" || drawMode === "polygon"
-            ? "Clique para adicionar vértices. Botão direito finaliza."
-            : `Clique no mapa para projetar: ${ASSET_STYLES[drawMode as keyof typeof ASSET_STYLES]?.label}`}
+      {showDrawHint && drawHint ? (
+        <div className="pointer-events-none absolute bottom-8 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-brand-400 bg-brand-600/90 px-6 py-2.5 text-sm font-bold text-white shadow-2xl backdrop-blur-md">
+          {drawHint}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

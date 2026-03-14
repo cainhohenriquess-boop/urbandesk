@@ -1,13 +1,31 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
-export type AssetCategory = 
-  | "BOCA_LOBO" | "POCO_VISITA" | "HIDRANTE" 
-  | "SEMAFORO" | "PLACA_TRANSITO" | "LOMBADA" | "PONTO_ONIBUS" | "RADAR"
-  | "POSTE_LUZ" | "ARVORE" | "LIXEIRA" | "BURACO";
+export type AssetCategory =
+  | "BOCA_LOBO"
+  | "POCO_VISITA"
+  | "HIDRANTE"
+  | "SEMAFORO"
+  | "PLACA_TRANSITO"
+  | "LOMBADA"
+  | "PONTO_ONIBUS"
+  | "RADAR"
+  | "POSTE_LUZ"
+  | "ARVORE"
+  | "LIXEIRA"
+  | "BURACO";
 
 export type DrawMode = "SELECT" | "line" | "polygon" | AssetCategory;
 export type MapStyle = "gis" | "satellite" | "topography" | "dark";
+export type WorkspaceTool =
+  | "SELECT"
+  | "EDIT_GEOMETRY"
+  | "MOVE"
+  | "MEASURE_DISTANCE"
+  | "MEASURE_AREA"
+  | "SPLIT_TRECHO"
+  | "JOIN_TRECHOS"
+  | "SPATIAL_SEARCH";
 
 export interface GeoPoint {
   lat: number;
@@ -15,23 +33,22 @@ export interface GeoPoint {
 }
 
 export interface DrawnFeature {
-  id:         string;
+  id: string;
   persistedId?: string | null;
-  type:       "line" | "polygon" | AssetCategory;
-  coords:     GeoPoint[];
-  label?:     string;
+  type: "line" | "polygon" | AssetCategory;
+  coords: GeoPoint[];
+  label?: string;
   projectId?: string;
-  color?:     string;
+  color?: string;
   description?: string | null;
   photos?: string[];
   updatedAt?: string;
   createdAtIso?: string;
-  synced:     boolean; 
-  createdAt:  number;
-  attributes?: Record<string, any>; 
+  synced: boolean;
+  createdAt: number;
+  attributes?: Record<string, any>;
 }
 
-// 🚀 OBRIGATÓRIO: Tipagem dos Shapefiles
 export interface BaseLayerData {
   id: string;
   name: string;
@@ -41,27 +58,40 @@ export interface BaseLayerData {
 
 export interface MapViewState {
   longitude: number;
-  latitude:  number;
-  zoom:      number;
-  bearing?:  number;
-  pitch?:    number;
+  latitude: number;
+  zoom: number;
+  bearing?: number;
+  pitch?: number;
+  transitionDuration?: number;
 }
 
 export interface LayerVisibility {
-  basegis:    boolean; // 🚀 NOVO: Controle dos Shapefiles
-  ativos:     boolean;
-  obras:      boolean;
-  alertas:    boolean;
-  viario:     boolean;
+  basegis: boolean;
+  ativos: boolean;
+  obras: boolean;
+  alertas: boolean;
+  viario: boolean;
   topografia: boolean;
+}
+
+export interface SpatialSearchState {
+  center: GeoPoint | null;
+  radiusMeters: number;
+  resultIds: string[];
 }
 
 interface MapStore {
   isFullscreen: boolean;
   toggleFullscreen: () => void;
 
-  drawMode:    DrawMode;
+  workspaceTool: WorkspaceTool;
+  setWorkspaceTool: (tool: WorkspaceTool) => void;
+
+  drawMode: DrawMode;
   setDrawMode: (mode: DrawMode) => void;
+
+  snapEnabled: boolean;
+  setSnapEnabled: (enabled: boolean) => void;
 
   pendingFeature: Omit<DrawnFeature, "id" | "createdAt" | "synced"> | null;
   cancelPendingFeature: () => void;
@@ -71,38 +101,65 @@ interface MapStore {
   incrementUnsaved: () => void;
   resetUnsaved: () => void;
 
-  features:      DrawnFeature[];
+  features: DrawnFeature[];
+  appendFeatures: (features: DrawnFeature[]) => void;
   replaceFeatures: (features: DrawnFeature[]) => void;
   updateFeature: (id: string, data: Partial<DrawnFeature>) => void;
   removeFeature: (id: string) => void;
   clearFeatures: () => void;
-  syncAll:       () => void; 
+  syncAll: () => void;
+  deletedPersistedIds: string[];
+  clearDeletedPersistedIds: () => void;
 
-  // 🚀 OBRIGATÓRIO: Estado para guardar os Shapefiles do BD
   baseLayersData: BaseLayerData[];
   setBaseLayersData: (layers: BaseLayerData[]) => void;
 
-  selectedId:    string | null;
+  selectedId: string | null;
   setSelectedId: (id: string | null) => void;
+  selectionIds: string[];
+  setSelectionIds: (ids: string[]) => void;
+  toggleSelectionId: (id: string) => void;
+  clearSelectionIds: () => void;
 
-  draftPoints:      GeoPoint[];
-  addDraftPoint:    (point: GeoPoint) => void;
+  draftPoints: GeoPoint[];
+  addDraftPoint: (point: GeoPoint) => void;
   clearDraftPoints: () => void;
-  finishDraft:      () => void; 
+  finishDraft: () => void;
 
-  viewState:    MapViewState;
+  measurementPoints: GeoPoint[];
+  addMeasurementPoint: (point: GeoPoint) => void;
+  clearMeasurement: () => void;
+
+  spatialSearch: SpatialSearchState;
+  setSpatialSearchRadius: (radiusMeters: number) => void;
+  setSpatialSearchResult: (center: GeoPoint | null, resultIds: string[]) => void;
+  clearSpatialSearch: () => void;
+
+  viewState: MapViewState;
   setViewState: (vs: MapViewState) => void;
-  flyToCity:    (lng: number, lat: number, zoom?: number) => void;
+  flyToCity: (lng: number, lat: number, zoom?: number) => void;
 
-  layers:      LayerVisibility;
+  layers: LayerVisibility;
   toggleLayer: (key: keyof LayerVisibility) => void;
   setLayerAll: (visible: boolean) => void;
 
-  mapStyle:    MapStyle;
+  mapStyle: MapStyle;
   setMapStyle: (style: MapStyle) => void;
 
-  activeProjectId:    string | null;
+  activeProjectId: string | null;
   setActiveProjectId: (id: string | null) => void;
+}
+
+function deriveDescription(attributes: Record<string, any>) {
+  if (typeof attributes.description === "string") return attributes.description;
+  if (typeof attributes.obs === "string") return attributes.obs;
+  if (typeof attributes.notes === "string") return attributes.notes;
+  return null;
+}
+
+function derivePhotos(attributes: Record<string, any>) {
+  if (!Array.isArray(attributes.photos)) return [];
+  return attributes.photos.filter((item: unknown): item is string => typeof item === "string");
 }
 
 export const useMapStore = create<MapStore>()(
@@ -116,94 +173,155 @@ export const useMapStore = create<MapStore>()(
 
         if (!isFull) docEl.requestFullscreen?.();
         else doc.exitFullscreen?.();
-        
+
         set({ isFullscreen: !isFull });
       },
+
+      workspaceTool: "SELECT",
+      setWorkspaceTool: (tool) =>
+        set((state) => ({
+          workspaceTool: tool,
+          measurementPoints:
+            tool === "MEASURE_DISTANCE" || tool === "MEASURE_AREA"
+              ? state.measurementPoints
+              : [],
+          selectionIds: tool === "JOIN_TRECHOS" ? state.selectionIds : [],
+          spatialSearch:
+            tool === "SPATIAL_SEARCH"
+              ? state.spatialSearch
+              : {
+                  ...state.spatialSearch,
+                  center: null,
+                  resultIds: [],
+                },
+        })),
 
       drawMode: "SELECT",
       setDrawMode: (mode) => set({ drawMode: mode, draftPoints: [] }),
 
+      snapEnabled: true,
+      setSnapEnabled: (enabled) => set({ snapEnabled: enabled }),
+
       pendingFeature: null,
       cancelPendingFeature: () => set({ pendingFeature: null, drawMode: "SELECT" }),
-      
+
       confirmPendingFeature: (attributes, label) => {
         const { pendingFeature, features, unsavedCount } = get();
         if (!pendingFeature) return;
 
-        const description =
-          typeof attributes.description === "string"
-            ? attributes.description
-            : typeof attributes.obs === "string"
-              ? attributes.obs
-              : typeof attributes.notes === "string"
-                ? attributes.notes
-                : null;
-        const photos = Array.isArray(attributes.photos)
-          ? attributes.photos.filter((item): item is string => typeof item === "string")
-          : [];
-
         const newFeature: DrawnFeature = {
           ...pendingFeature,
           label: label || pendingFeature.label,
-          description,
-          photos,
+          description: deriveDescription(attributes),
+          photos: derivePhotos(attributes),
           attributes,
           synced: false,
           id: `feat-${crypto.randomUUID()}`,
           createdAt: Date.now(),
         };
 
-        set({ 
-          features: [...features, newFeature], 
+        set({
+          features: [...features, newFeature],
           unsavedCount: unsavedCount + 1,
           pendingFeature: null,
-          drawMode: "SELECT"
+          drawMode: "SELECT",
         });
       },
 
       unsavedCount: 0,
-      incrementUnsaved: () => set((s) => ({ unsavedCount: s.unsavedCount + 1 })),
+      incrementUnsaved: () => set((state) => ({ unsavedCount: state.unsavedCount + 1 })),
       resetUnsaved: () => set({ unsavedCount: 0 }),
 
       features: [],
+      appendFeatures: (features) =>
+        set((state) => ({
+          features: [...state.features, ...features],
+          unsavedCount:
+            state.unsavedCount +
+            features.filter((feature) => !feature.synced || !feature.persistedId).length,
+        })),
       replaceFeatures: (features) =>
-        set({
+        set((state) => ({
           features,
           unsavedCount: 0,
+          deletedPersistedIds: [],
           selectedId: null,
+          selectionIds: [],
           draftPoints: [],
+          measurementPoints: [],
           pendingFeature: null,
-        }),
-
+          spatialSearch: {
+            ...state.spatialSearch,
+            center: null,
+            resultIds: [],
+          },
+        })),
       updateFeature: (id, data) =>
-        set((s) => ({
-          features: s.features.map((f) => (f.id === id ? { ...f, ...data } : f)),
-          unsavedCount: s.unsavedCount + 1
+        set((state) => ({
+          features: state.features.map((feature) =>
+            feature.id === id ? { ...feature, ...data } : feature
+          ),
+          unsavedCount: state.unsavedCount + 1,
         })),
-
       removeFeature: (id) =>
-        set((s) => ({
-          features: s.features.filter((f) => f.id !== id),
-          selectedId: s.selectedId === id ? null : s.selectedId,
-          unsavedCount: s.unsavedCount + 1
+        set((state) => {
+          const removed = state.features.find((feature) => feature.id === id) ?? null;
+          return {
+            features: state.features.filter((feature) => feature.id !== id),
+            selectedId: state.selectedId === id ? null : state.selectedId,
+            selectionIds: state.selectionIds.filter((entry) => entry !== id),
+            spatialSearch: {
+              ...state.spatialSearch,
+              resultIds: state.spatialSearch.resultIds.filter((entry) => entry !== id),
+            },
+            unsavedCount: state.unsavedCount + 1,
+            deletedPersistedIds:
+              removed?.persistedId && !state.deletedPersistedIds.includes(removed.persistedId)
+                ? [...state.deletedPersistedIds, removed.persistedId]
+                : state.deletedPersistedIds,
+          };
+        }),
+      clearFeatures: () =>
+        set((state) => ({
+          deletedPersistedIds: [
+            ...state.deletedPersistedIds,
+            ...state.features
+              .map((feature) => feature.persistedId)
+              .filter((value): value is string => Boolean(value))
+              .filter((value) => !state.deletedPersistedIds.includes(value)),
+          ],
+          features: [],
+          selectedId: null,
+          selectionIds: [],
+          draftPoints: [],
+          measurementPoints: [],
+          pendingFeature: null,
         })),
+      syncAll: () =>
+        set((state) => ({
+          features: state.features.map((feature) => ({ ...feature, synced: true })),
+          unsavedCount: 0,
+          deletedPersistedIds: [],
+        })),
+      deletedPersistedIds: [],
+      clearDeletedPersistedIds: () => set({ deletedPersistedIds: [] }),
 
-      clearFeatures: () => set({ features: [], selectedId: null, draftPoints: [], pendingFeature: null }),
-      
-      syncAll: () => set((s) => ({
-        features: s.features.map(f => ({ ...f, synced: true })),
-        unsavedCount: 0
-      })),
-
-      // 🚀 OBRIGATÓRIO: Funções do Shapefile
       baseLayersData: [],
       setBaseLayersData: (layers) => set({ baseLayersData: layers }),
 
       selectedId: null,
       setSelectedId: (id) => set({ selectedId: id }),
+      selectionIds: [],
+      setSelectionIds: (ids) => set({ selectionIds: Array.from(new Set(ids)) }),
+      toggleSelectionId: (id) =>
+        set((state) => ({
+          selectionIds: state.selectionIds.includes(id)
+            ? state.selectionIds.filter((entry) => entry !== id)
+            : [...state.selectionIds, id],
+        })),
+      clearSelectionIds: () => set({ selectionIds: [] }),
 
       draftPoints: [],
-
       addDraftPoint: (point) => {
         const { drawMode, draftPoints } = get();
         if (drawMode !== "SELECT" && drawMode !== "line" && drawMode !== "polygon") {
@@ -212,51 +330,95 @@ export const useMapStore = create<MapStore>()(
         }
         set({ draftPoints: [...draftPoints, point] });
       },
-
       finishDraft: () => {
         const { drawMode, draftPoints } = get();
         const minPoints = drawMode === "polygon" ? 3 : 2;
         if (draftPoints.length >= minPoints && (drawMode === "line" || drawMode === "polygon")) {
-          set({ 
+          set({
             pendingFeature: { type: drawMode, coords: draftPoints, color: "#3b82f6" },
-            draftPoints: [] 
+            draftPoints: [],
           });
         } else {
           set({ draftPoints: [], drawMode: "SELECT" });
         }
       },
-
       clearDraftPoints: () => set({ draftPoints: [] }),
+
+      measurementPoints: [],
+      addMeasurementPoint: (point) =>
+        set((state) => ({ measurementPoints: [...state.measurementPoints, point] })),
+      clearMeasurement: () => set({ measurementPoints: [] }),
+
+      spatialSearch: {
+        center: null,
+        radiusMeters: 30,
+        resultIds: [],
+      },
+      setSpatialSearchRadius: (radiusMeters) =>
+        set((state) => ({
+          spatialSearch: {
+            ...state.spatialSearch,
+            radiusMeters,
+          },
+        })),
+      setSpatialSearchResult: (center, resultIds) =>
+        set((state) => ({
+          spatialSearch: {
+            ...state.spatialSearch,
+            center,
+            resultIds,
+          },
+        })),
+      clearSpatialSearch: () =>
+        set((state) => ({
+          spatialSearch: {
+            ...state.spatialSearch,
+            center: null,
+            resultIds: [],
+          },
+        })),
 
       viewState: {
         longitude: -38.5267,
-        latitude:  -3.7319,
-        zoom:      12,
-        bearing:   0,
-        pitch:     0,
+        latitude: -3.7319,
+        zoom: 12,
+        bearing: 0,
+        pitch: 0,
       },
       setViewState: (vs) => set({ viewState: vs }),
-      flyToCity: (lng, lat, zoom = 14) => set((s) => ({
-        viewState: { ...s.viewState, longitude: lng, latitude: lat, zoom, transitionDuration: 2000 }
-      })),
+      flyToCity: (lng, lat, zoom = 14) =>
+        set((state) => ({
+          viewState: {
+            ...state.viewState,
+            longitude: lng,
+            latitude: lat,
+            zoom,
+            transitionDuration: 2000,
+          },
+        })),
 
-      // 🚀 INICIA A BASE GIS LIGADA POR PADRÃO
       layers: {
-        basegis: true, ativos: true, obras: true, alertas: true, viario: true, topografia: false,
+        basegis: true,
+        ativos: true,
+        obras: true,
+        alertas: true,
+        viario: true,
+        topografia: false,
       },
-      toggleLayer: (key) => set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
-      setLayerAll: (visible) => set(() => ({
-        layers: {
-          basegis: visible,
-          ativos: visible,
-          obras: visible,
-          alertas: visible,
-          viario: visible,
-          topografia: visible,
-        },
-      })),
+      toggleLayer: (key) =>
+        set((state) => ({ layers: { ...state.layers, [key]: !state.layers[key] } })),
+      setLayerAll: (visible) =>
+        set({
+          layers: {
+            basegis: visible,
+            ativos: visible,
+            obras: visible,
+            alertas: visible,
+            viario: visible,
+            topografia: visible,
+          },
+        }),
 
-      // 🚀 MAPA INICIA NO MODO GIS (Fundo Branco)
       mapStyle: "gis",
       setMapStyle: (style) => set({ mapStyle: style }),
 
@@ -267,10 +429,10 @@ export const useMapStore = create<MapStore>()(
   )
 );
 
-export const selectDrawMode   = (s: MapStore) => s.drawMode;
-export const selectFeatures   = (s: MapStore) => s.features;
-export const selectLayers     = (s: MapStore) => s.layers;
-export const selectViewState  = (s: MapStore) => s.viewState;
-export const selectDraftPoints= (s: MapStore) => s.draftPoints;
-export const selectUnsavedCount = (s: MapStore) => s.unsavedCount;
-export const selectPendingFeature = (s: MapStore) => s.pendingFeature;
+export const selectDrawMode = (state: MapStore) => state.drawMode;
+export const selectFeatures = (state: MapStore) => state.features;
+export const selectLayers = (state: MapStore) => state.layers;
+export const selectViewState = (state: MapStore) => state.viewState;
+export const selectDraftPoints = (state: MapStore) => state.draftPoints;
+export const selectUnsavedCount = (state: MapStore) => state.unsavedCount;
+export const selectPendingFeature = (state: MapStore) => state.pendingFeature;
