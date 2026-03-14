@@ -9,6 +9,7 @@ import {
   getInfrastructureLayerSchemaCompatibility,
   isInfrastructureLayerSchemaCompatError,
 } from "@/lib/infrastructure-layer-schema-compat";
+import { buildInfrastructureLayerTenantWhere } from "@/lib/infrastructure-layer-access";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -85,14 +86,7 @@ export async function GET(req: NextRequest) {
     if (compatibility.publishedLayersReady) {
       try {
         infrastructureLayers = await prisma.infrastructureLayer.findMany({
-          where: {
-            status: "READY",
-            authorizedTenants: {
-              some: {
-                tenantId: targetTenantId,
-              },
-            },
-          },
+          where: buildInfrastructureLayerTenantWhere(targetTenantId),
           select: {
             id: true,
             code: true,

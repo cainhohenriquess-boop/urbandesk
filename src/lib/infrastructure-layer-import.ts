@@ -1,5 +1,3 @@
-import "server-only";
-
 import { unzipSync, strFromU8 } from "fflate";
 import {
   INFRASTRUCTURE_LAYER_LABELS,
@@ -615,7 +613,7 @@ function buildFeatureId(
   return candidate;
 }
 
-function normalizePonnotProperties(input: {
+export function normalizePonnotProperties(input: {
   properties: FeatureProperties;
   index: number;
   ownerTenant: OwnerTenantContext | null;
@@ -750,7 +748,7 @@ function normalizePonnotProperties(input: {
   } satisfies InfrastructureLayerNormalizedProperties;
 }
 
-function normalizePontIlumProperties(input: {
+export function normalizePontIlumProperties(input: {
   properties: FeatureProperties;
   index: number;
   ownerTenant: OwnerTenantContext | null;

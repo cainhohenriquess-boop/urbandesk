@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
-import { getAccessBlockMessage, getAccessBlockReason } from "@/lib/auth-shared";
 import { extractRequestContextFromHeaders, writeAuditLog } from "@/lib/audit";
 import {
   InfrastructureLayerImportError,
@@ -24,6 +23,10 @@ import {
   getStorageProvider,
   type StoredUploadFile,
 } from "@/lib/storage";
+import {
+  evaluateInfrastructureUploadAccess,
+  type InfrastructureLayerSessionLike,
+} from "@/lib/infrastructure-layer-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,19 +101,6 @@ const uploadListInclude = {
   },
 } satisfies Prisma.InfrastructureLayerUploadInclude;
 
-type SessionLike = {
-  user: {
-    id: string;
-    role?: string | null;
-    name?: string | null;
-    email?: string | null;
-    isActive?: boolean | null;
-    tenantId?: string | null;
-    tenantStatus?: string | null;
-    trialEndsAt?: string | Date | null;
-  };
-} | null;
-
 class InfrastructureLayerUploadRequestError extends Error {
   constructor(
     message: string,
@@ -132,27 +122,10 @@ function requestError(
   return new InfrastructureLayerUploadRequestError(message, code, details, status);
 }
 
-function ensureSuperadmin(session: SessionLike) {
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-  }
-
-  const reason = getAccessBlockReason(session.user);
-  if (reason) {
-    return NextResponse.json(
-      { error: getAccessBlockMessage(reason), code: reason },
-      { status: 403 }
-    );
-  }
-
-  if (session.user.role !== "SUPERADMIN") {
-    return NextResponse.json(
-      { error: "Somente superadmin pode publicar camadas elétricas." },
-      { status: 403 }
-    );
-  }
-
-  return null;
+function ensureSuperadmin(session: InfrastructureLayerSessionLike) {
+  const result = evaluateInfrastructureUploadAccess(session);
+  if (result.allowed) return null;
+  return NextResponse.json(result.payload, { status: result.status });
 }
 
 function normalizeTenantIds(formData: FormData) {
