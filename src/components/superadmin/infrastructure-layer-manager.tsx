@@ -77,6 +77,13 @@ type InfrastructureLayerListResponse = {
   };
 };
 
+type InfrastructureLayerUploadResponse = {
+  success: boolean;
+  data?: InfrastructureLayerRecord;
+  upload?: InfrastructureLayerUploadRecord;
+  warning?: string | null;
+};
+
 type UploadMetadata = {
   originalFileName: string | null;
   archiveSizeBytes: number | null;
@@ -223,11 +230,7 @@ async function uploadInfrastructureLayer(
   onUploadProgress: (progress: number) => void,
   onProcessingStart: () => void
 ) {
-  return new Promise<{
-    success: boolean;
-    data?: InfrastructureLayerRecord;
-    upload?: InfrastructureLayerUploadRecord;
-  }>((resolve, reject) => {
+  return new Promise<InfrastructureLayerUploadResponse>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/admin/infrastructure-layers");
     xhr.responseType = "json";
@@ -330,6 +333,7 @@ export function InfrastructureLayerManager({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const filteredTenants = useMemo(() => {
@@ -423,6 +427,7 @@ export function InfrastructureLayerManager({
     setUploadPhase("uploading");
     setUploadProgress(0);
     setError(null);
+    setWarning(null);
     setSuccess(null);
 
     try {
@@ -459,6 +464,7 @@ export function InfrastructureLayerManager({
         ]);
       }
 
+      setWarning(payload.warning ?? null);
       setSuccess(
         payload.data
           ? `Camada ${payload.data.name} processada e publicada com sucesso.`
@@ -696,6 +702,12 @@ export function InfrastructureLayerManager({
           {error ? (
             <div className="rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">
               {error}
+            </div>
+          ) : null}
+
+          {warning ? (
+            <div className="rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900">
+              {warning}
             </div>
           ) : null}
 

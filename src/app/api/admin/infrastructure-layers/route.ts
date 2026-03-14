@@ -23,6 +23,7 @@ import {
   getStorageProvider,
   type StoredUploadFile,
 } from "@/lib/storage";
+import { storeInfrastructureArchive } from "@/lib/infrastructure-layer-storage";
 import {
   evaluateInfrastructureUploadAccess,
   type InfrastructureLayerSessionLike,
@@ -240,6 +241,8 @@ function serializeUploadMetadata(input: {
   tenantIds: string[];
   inspection?: InfrastructureLayerArchiveInspection | null;
   storedArchive?: StoredUploadFile | null;
+  archivePersisted?: boolean;
+  storageWarning?: string | null;
 }) {
   return toInputJsonValue({
     originalFileName: input.file.name,
@@ -262,9 +265,11 @@ function serializeUploadMetadata(input: {
       ? {
           provider: input.storedArchive.provider,
           key: input.storedArchive.key,
-          url: input.storedArchive.url,
-          secureUrl: input.storedArchive.secureUrl,
+          url: input.storedArchive.url || null,
+          secureUrl: input.storedArchive.secureUrl || null,
           secureUrlExpiresAt: input.storedArchive.secureUrlExpiresAt,
+          archivePersisted: input.archivePersisted ?? true,
+          warning: input.storageWarning ?? null,
         }
       : null,
   });
@@ -277,6 +282,8 @@ function serializeProcessingResult(input: {
   geometryType?: string | null;
   bbox?: unknown;
   storedArchive?: StoredUploadFile | null;
+  archivePersisted?: boolean;
+  storageWarning?: string | null;
   status: "PROCESSED" | "FAILED";
   error?: {
     code: string;
@@ -295,8 +302,16 @@ function serializeProcessingResult(input: {
     archiveEntries: input.inspection?.entryNames ?? [],
     storageProvider: input.storedArchive?.provider ?? null,
     archiveKey: input.storedArchive?.key ?? null,
+    archivePersisted: input.archivePersisted ?? true,
+    storageWarning: input.storageWarning ?? null,
     error: input.error ?? null,
   });
+}
+
+function normalizeOptionalText(value: string | null | undefined) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
 }
 
 function buildUploadFileRecords(input: {
@@ -316,8 +331,8 @@ function buildUploadFileRecords(input: {
       originalName: input.file.name,
       archiveEntryName: null,
       storageKey: input.storedArchive.key,
-      storageUrl: input.storedArchive.url,
-      secureUrl: input.storedArchive.secureUrl,
+      storageUrl: normalizeOptionalText(input.storedArchive.url),
+      secureUrl: normalizeOptionalText(input.storedArchive.secureUrl),
       secureUrlExpiresAt: archiveExpiresAt,
       contentType: input.storedArchive.contentType,
       fileSize: input.storedArchive.size,
@@ -332,8 +347,8 @@ function buildUploadFileRecords(input: {
       originalName: archiveFile.originalName,
       archiveEntryName: archiveFile.archiveEntryName,
       storageKey: input.storedArchive.key,
-      storageUrl: input.storedArchive.url,
-      secureUrl: input.storedArchive.secureUrl,
+      storageUrl: normalizeOptionalText(input.storedArchive.url),
+      secureUrl: normalizeOptionalText(input.storedArchive.secureUrl),
       secureUrlExpiresAt: archiveExpiresAt,
       contentType: input.storedArchive.contentType,
       fileSize: null,
@@ -485,6 +500,8 @@ export async function POST(request: Request) {
   let resolvedCode: InfrastructureLayerCodeId | null = null;
   let inspection: InfrastructureLayerArchiveInspection | null = null;
   let storedArchive: StoredUploadFile | null = null;
+  let archivePersisted = false;
+  let storageWarning: string | null = null;
 
   try {
     const rateLimitResponse = enforceRequestRateLimit(request, {
@@ -602,16 +619,24 @@ export async function POST(request: Request) {
       uploadId = provisionalUpload.id;
     }
 
+    const storageDriverName = getStorageDriverName();
     const storage = getStorageProvider();
-    storedArchive = await storage.upload({
-      buffer,
-      contentLength: file.size,
-      contentType: inferZipMimeType(file),
-      extension: "zip",
-      moduleName: `infra-${inspection.code.toLowerCase()}`,
-      originalName: file.name,
-      tenantId: ownerTenantId ?? "shared",
+    const archiveStorage = await storeInfrastructureArchive({
+      driverName: storageDriverName,
+      provider: storage,
+      upload: {
+        buffer,
+        contentLength: file.size,
+        contentType: inferZipMimeType(file),
+        extension: "zip",
+        moduleName: `infra-${inspection.code.toLowerCase()}`,
+        originalName: file.name,
+        tenantId: ownerTenantId ?? "shared",
+      },
     });
+    storedArchive = archiveStorage.storedArchive;
+    archivePersisted = archiveStorage.archivePersisted;
+    storageWarning = archiveStorage.warning;
 
     await prisma.infrastructureLayerUpload.update({
       where: { id: uploadId },
@@ -624,6 +649,8 @@ export async function POST(request: Request) {
           tenantIds,
           inspection,
           storedArchive,
+          archivePersisted,
+          storageWarning,
         }),
       },
     });
@@ -672,8 +699,8 @@ export async function POST(request: Request) {
           ownerTenantId,
           sourceArchiveName: file.name,
           sourceArchiveKey: storedArchive!.key,
-          sourceArchiveUrl: storedArchive!.url,
-          sourceArchiveSecureUrl: storedArchive!.secureUrl,
+          sourceArchiveUrl: normalizeOptionalText(storedArchive!.url),
+          sourceArchiveSecureUrl: normalizeOptionalText(storedArchive!.secureUrl),
           sourceArchiveExpiresAt: storedArchive!.secureUrlExpiresAt
             ? new Date(storedArchive!.secureUrlExpiresAt)
             : null,
@@ -688,7 +715,9 @@ export async function POST(request: Request) {
             ...imported.metadata,
             uploadId,
             storageProvider: storedArchive!.provider,
-            archiveUrl: storedArchive!.url,
+            archiveUrl: normalizeOptionalText(storedArchive!.url),
+            archivePersisted,
+            storageWarning,
             ownerTenantId,
           }),
           uploadedById: sessionUser.id,
@@ -714,6 +743,8 @@ export async function POST(request: Request) {
             geometryType: imported.geometryType,
             bbox: imported.bbox,
             storedArchive,
+            archivePersisted,
+            storageWarning,
             status: "PROCESSED",
           }),
         },
@@ -745,7 +776,9 @@ export async function POST(request: Request) {
         featureCount: created.featureCount,
         geometryType: created.geometryType,
         authorizedTenantIds: tenantIds,
-        storageProvider: getStorageDriverName(),
+        storageProvider: storageDriverName,
+        archivePersisted,
+        storageWarning,
       },
     });
 
@@ -758,6 +791,7 @@ export async function POST(request: Request) {
       success: true,
       data: created,
       upload,
+      warning: storageWarning,
     });
   } catch (error) {
     console.error("[INFRASTRUCTURE_LAYER_UPLOAD_ERROR]", error);
@@ -776,6 +810,8 @@ export async function POST(request: Request) {
               inspection,
               code: resolvedCode,
               storedArchive,
+              archivePersisted,
+              storageWarning,
               status: "FAILED",
               error: {
                 code: errorResponse.payload.code,
