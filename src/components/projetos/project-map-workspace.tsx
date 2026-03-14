@@ -12,7 +12,9 @@ import {
   ProjectBadge,
   ProjectEmptyBlock,
 } from "@/components/projetos/project-detail-components";
+import { ProjectMapDisciplineToolset } from "@/components/projetos/project-map-discipline-toolset";
 import { ProjectMapGlobalToolbar } from "@/components/projetos/project-map-global-toolbar";
+import { ProjectMapTechnicalForm } from "@/components/projetos/project-map-technical-form";
 import {
   importGeoJsonFeatures,
   joinLineFeatures,
@@ -21,9 +23,7 @@ import {
 } from "@/lib/map-workspace-tools";
 import {
   buildTechnicalDataPayload,
-  getDisciplineObjectTypes,
   getEnabledProjectDisciplines,
-  getProjectDisciplineDefinition,
   getProjectDisciplineLabel,
   getTechnicalFieldsForContext,
   getTechnicalObjectDefinition,
@@ -35,7 +35,6 @@ import {
   resolveTechnicalObjectType,
   validateTechnicalFieldValues,
   type ProjectDisciplineId,
-  type TechnicalFieldDefinition,
   type TechnicalObjectTypeId,
 } from "@/lib/project-disciplines";
 import { getProjectOperationalStatusLabel } from "@/lib/project-labels";
@@ -49,13 +48,7 @@ import {
   formatDistance,
   formatNumber,
 } from "@/lib/utils";
-import {
-  type BaseLayerData,
-  type DrawnFeature,
-  type LayerVisibility,
-  type MapStyle,
-  useMapStore,
-} from "@/store/useMapStore";
+import { type BaseLayerData, type DrawnFeature, type LayerVisibility, type MapStyle, useMapStore } from "@/store/useMapStore";
 
 type AssetTypeFilter = "ALL" | "PONTO" | "TRECHO" | "AREA";
 
@@ -134,15 +127,6 @@ const EMPTY_FORM: InspectorFormState = {
   responsible: "",
   notes: "",
 };
-
-const COMMON_GEOMETRY_TOOLS: Array<{
-  id: "line" | "polygon";
-  label: string;
-  helper: string;
-}> = [
-  { id: "line", label: "Trecho livre", helper: "Desenho linear comum" },
-  { id: "polygon", label: "?rea livre", helper: "Pol?gono comum" },
-];
 
 const MAP_STYLES: Array<{ id: MapStyle; label: string; helper: string }> = [
   { id: "gis", label: "Base GIS", helper: "Limites e ruas" },
@@ -525,62 +509,6 @@ function PanelSection({
     </section>
   );
 }
-
-function TechnicalFieldControl({
-  field,
-  value,
-  onChange,
-}: {
-  field: TechnicalFieldDefinition;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const commonClassName =
-    "w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500";
-
-  if (field.kind === "textarea") {
-    return (
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={field.placeholder}
-        rows={4}
-        className={commonClassName}
-      />
-    );
-  }
-
-  if (field.kind === "select") {
-    return (
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={commonClassName}
-      >
-        <option value="">Selecione...</option>
-        {(field.options ?? []).map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    );
-  }
-
-  return (
-    <input
-      type={field.kind === "number" ? "number" : field.kind === "date" ? "date" : "text"}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={field.placeholder}
-      min={field.kind === "number" ? field.min : undefined}
-      max={field.kind === "number" ? field.max : undefined}
-      step={field.kind === "number" ? "any" : undefined}
-      className={commonClassName}
-    />
-  );
-}
-
 export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
   const {
     features,
@@ -652,8 +580,6 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
 
   const effectiveTechnicalArea =
     activeTechnicalArea ?? availableDisciplines[0] ?? "OBRAS";
-  const activeDisciplineDefinition = getProjectDisciplineDefinition(effectiveTechnicalArea);
-  const activeDisciplineObjectTypes = getDisciplineObjectTypes(effectiveTechnicalArea);
   const activeTechnicalFields = getTechnicalFieldsForContext(
     effectiveTechnicalArea,
     activeTechnicalObjectType
@@ -1453,42 +1379,17 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
       <div className="grid h-[calc(100vh-15.5rem)] min-h-[820px] grid-cols-[320px_minmax(0,1fr)_360px]">
         <aside className="border-r border-border bg-white">
           <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
-            <PanelSection title="Disciplinas do projeto" eyebrow="Contexto técnico">
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  A disciplina ativa define os objetos técnicos disponíveis, os campos do
-                  inspector e o contexto aplicado aos novos itens.
-                </p>
-                <div className="grid gap-2">
-                  {availableDisciplines.map((discipline) => (
-                    <button
-                      key={discipline}
-                      onClick={() => handleDisciplineChange(discipline)}
-                      className={cn(
-                        "rounded-xl border px-3 py-3 text-left transition-colors",
-                        effectiveTechnicalArea === discipline
-                          ? "border-brand-500 bg-brand-50 text-brand-700"
-                          : "border-border bg-background text-foreground hover:bg-muted"
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold">
-                            {getProjectDisciplineLabel(discipline)}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {getProjectDisciplineDefinition(discipline).description}
-                          </p>
-                        </div>
-                        <ProjectBadge
-                          label={`${formatNumber(disciplineCounts[discipline] ?? 0)} item(ns)`}
-                          tone={effectiveTechnicalArea === discipline ? "brand" : "neutral"}
-                        />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <PanelSection title="Toolsets por área" eyebrow="Contexto técnico">
+              <ProjectMapDisciplineToolset
+                availableDisciplines={availableDisciplines}
+                activeDiscipline={effectiveTechnicalArea}
+                disciplineCounts={disciplineCounts}
+                drawMode={drawMode}
+                activeTechnicalObjectType={activeTechnicalObjectType}
+                onDisciplineChange={handleDisciplineChange}
+                onCommonToolSelect={handleCommonGeometryModeChange}
+                onAreaToolSelect={handleTechnicalObjectSelection}
+              />
             </PanelSection>
 
             <PanelSection title="Camadas e filtros" eyebrow="Controle visual">
@@ -1599,85 +1500,6 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
                     className="h-4 w-4 rounded border-border text-brand-600 focus:ring-brand-500"
                   />
                 </label>
-              </div>
-            </PanelSection>
-
-            <PanelSection title="Ferramentas" eyebrow="Comuns e específicas">
-              <div className="space-y-5">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    Ferramentas comuns
-                  </p>
-                  <div className="mt-2 grid gap-2">
-                    {COMMON_GEOMETRY_TOOLS.map((tool) => (
-                      <button
-                        key={tool.id}
-                        onClick={() => handleCommonGeometryModeChange(tool.id)}
-                        className={cn(
-                          "rounded-xl border px-3 py-3 text-left transition-colors",
-                          drawMode === tool.id && !activeTechnicalObjectType
-                            ? "border-brand-500 bg-brand-50 text-brand-700"
-                            : "border-border bg-background text-foreground hover:bg-muted"
-                        )}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-sm font-semibold">{tool.label}</span>
-                          {drawMode === tool.id && !activeTechnicalObjectType ? (
-                            <ProjectBadge label="Ativo" tone="brand" />
-                          ) : null}
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">{tool.helper}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                        Objetos de {getProjectDisciplineLabel(effectiveTechnicalArea)}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {activeDisciplineDefinition.description}
-                      </p>
-                    </div>
-                    <ProjectBadge
-                      label={`${formatNumber(activeDisciplineObjectTypes.length)} tipo(s)`}
-                      tone="neutral"
-                    />
-                  </div>
-                  <div className="mt-2 grid gap-2">
-                    {activeDisciplineObjectTypes.map((objectType) => {
-                      const isActive = activeTechnicalObjectType === objectType.id;
-                      return (
-                        <button
-                          key={objectType.id}
-                          onClick={() => handleTechnicalObjectSelection(objectType.id)}
-                          className={cn(
-                            "rounded-xl border px-3 py-3 text-left transition-colors",
-                            isActive
-                              ? "border-brand-500 bg-brand-50 text-brand-700"
-                              : "border-border bg-background text-foreground hover:bg-muted"
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-sm font-semibold">{objectType.label}</span>
-                            {isActive ? <ProjectBadge label="Ativo" tone="brand" /> : null}
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {objectType.helper} ·{" "}
-                            {objectType.geometry === "point"
-                              ? "Ponto"
-                              : objectType.geometry === "line"
-                                ? "Linha"
-                                : "Polígono"}
-                          </p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
             </PanelSection>
 
@@ -1818,36 +1640,16 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
                     <input value={inspectorForm.responsible} onChange={(event) => setInspectorForm((current) => ({ ...current, responsible: event.target.value }))} placeholder="Responsável técnico" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
                     <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações operacionais" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
                   </div>
-                  {activeTechnicalFields.length > 0 ? (
-                    <div className="rounded-xl border border-border bg-background px-4 py-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                        Formulário da disciplina
-                      </p>
-                      <div className="mt-3 grid gap-3">
-                        {activeTechnicalFields.map((field) => (
-                          <label key={field.key} className="grid gap-1.5">
-                            <span className="text-xs font-semibold text-foreground">
-                              {field.label}
-                              {field.required ? " *" : ""}
-                            </span>
-                            <TechnicalFieldControl
-                              field={field}
-                              value={technicalFieldValues[field.key] ?? ""}
-                              onChange={(value) =>
-                                setTechnicalFieldValues((current) => ({
-                                  ...current,
-                                  [field.key]: value,
-                                }))
-                              }
-                            />
-                            {field.helper ? (
-                              <span className="text-xs text-muted-foreground">{field.helper}</span>
-                            ) : null}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
+                  <ProjectMapTechnicalForm
+                    fields={activeTechnicalFields}
+                    values={technicalFieldValues}
+                    onChange={(key, value) =>
+                      setTechnicalFieldValues((current) => ({
+                        ...current,
+                        [key]: value,
+                      }))
+                    }
+                  />
                   <div className="flex gap-2">
                     <button onClick={cancelPendingFeature} className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-muted">Cancelar</button>
                     <button onClick={handleInspectorSave} className="flex-1 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-500">Adicionar ao workspace</button>
@@ -1881,36 +1683,16 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
                     <input value={inspectorForm.responsible} onChange={(event) => setInspectorForm((current) => ({ ...current, responsible: event.target.value }))} placeholder="Responsável técnico" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
                     <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações operacionais" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
                   </div>
-                  {activeTechnicalFields.length > 0 ? (
-                    <div className="rounded-xl border border-border bg-background px-4 py-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                        Formulário da disciplina
-                      </p>
-                      <div className="mt-3 grid gap-3">
-                        {activeTechnicalFields.map((field) => (
-                          <label key={field.key} className="grid gap-1.5">
-                            <span className="text-xs font-semibold text-foreground">
-                              {field.label}
-                              {field.required ? " *" : ""}
-                            </span>
-                            <TechnicalFieldControl
-                              field={field}
-                              value={technicalFieldValues[field.key] ?? ""}
-                              onChange={(value) =>
-                                setTechnicalFieldValues((current) => ({
-                                  ...current,
-                                  [field.key]: value,
-                                }))
-                              }
-                            />
-                            {field.helper ? (
-                              <span className="text-xs text-muted-foreground">{field.helper}</span>
-                            ) : null}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
+                  <ProjectMapTechnicalForm
+                    fields={activeTechnicalFields}
+                    values={technicalFieldValues}
+                    onChange={(key, value) =>
+                      setTechnicalFieldValues((current) => ({
+                        ...current,
+                        [key]: value,
+                      }))
+                    }
+                  />
 
                   <div className="flex gap-2">
                     <button onClick={() => setSelectedId(null)} className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-muted">Fechar</button>
