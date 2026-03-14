@@ -10,8 +10,11 @@ export type InfrastructureLayerSchemaCompatibility = {
 
 type InfrastructureLayerSchemaCheckRow = {
   hasInfrastructureLayers: boolean;
+  hasInfrastructureLayersOwnerTenantId: boolean;
   hasInfrastructureLayerTenantAccess: boolean;
   hasInfrastructureLayerUploads: boolean;
+  hasInfrastructureLayerUploadsOwnerTenantId: boolean;
+  hasInfrastructureLayerUploadsFinalLayerId: boolean;
   hasInfrastructureLayerUploadFiles: boolean;
   hasInfrastructureLayerUploadTenantAccess: boolean;
 };
@@ -35,6 +38,13 @@ export async function getInfrastructureLayerSchemaCompatibility(): Promise<Infra
       ) AS "hasInfrastructureLayers",
       EXISTS (
         SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'infrastructure_layers'
+          AND column_name = 'ownerTenantId'
+      ) AS "hasInfrastructureLayersOwnerTenantId",
+      EXISTS (
+        SELECT 1
         FROM information_schema.tables
         WHERE table_schema = 'public'
           AND table_name = 'infrastructure_layer_tenant_access'
@@ -45,6 +55,20 @@ export async function getInfrastructureLayerSchemaCompatibility(): Promise<Infra
         WHERE table_schema = 'public'
           AND table_name = 'infrastructure_layer_uploads'
       ) AS "hasInfrastructureLayerUploads",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'infrastructure_layer_uploads'
+          AND column_name = 'ownerTenantId'
+      ) AS "hasInfrastructureLayerUploadsOwnerTenantId",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'infrastructure_layer_uploads'
+          AND column_name = 'finalLayerId'
+      ) AS "hasInfrastructureLayerUploadsFinalLayerId",
       EXISTS (
         SELECT 1
         FROM information_schema.tables
@@ -61,16 +85,23 @@ export async function getInfrastructureLayerSchemaCompatibility(): Promise<Infra
 
   const row = rows[0] ?? {
     hasInfrastructureLayers: false,
+    hasInfrastructureLayersOwnerTenantId: false,
     hasInfrastructureLayerTenantAccess: false,
     hasInfrastructureLayerUploads: false,
+    hasInfrastructureLayerUploadsOwnerTenantId: false,
+    hasInfrastructureLayerUploadsFinalLayerId: false,
     hasInfrastructureLayerUploadFiles: false,
     hasInfrastructureLayerUploadTenantAccess: false,
   };
 
   const publishedLayersReady =
-    row.hasInfrastructureLayers && row.hasInfrastructureLayerTenantAccess;
+    row.hasInfrastructureLayers &&
+    row.hasInfrastructureLayersOwnerTenantId &&
+    row.hasInfrastructureLayerTenantAccess;
   const uploadPipelineReady =
     row.hasInfrastructureLayerUploads &&
+    row.hasInfrastructureLayerUploadsOwnerTenantId &&
+    row.hasInfrastructureLayerUploadsFinalLayerId &&
     row.hasInfrastructureLayerUploadFiles &&
     row.hasInfrastructureLayerUploadTenantAccess;
   const managementReady = publishedLayersReady && uploadPipelineReady;

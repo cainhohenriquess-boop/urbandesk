@@ -15,6 +15,7 @@ import {
   isInfrastructureLayerCode,
   type InfrastructureLayerCodeId,
 } from "@/lib/infrastructure-layer-config";
+import { ensureInfrastructureLayerSchema } from "@/lib/infrastructure-layer-schema-bootstrap";
 import { getInfrastructureLayerSchemaCompatibility } from "@/lib/infrastructure-layer-schema-compat";
 import { prisma } from "@/lib/prisma";
 import { enforceRequestRateLimit } from "@/lib/rate-limit";
@@ -390,7 +391,10 @@ function serializeErrorPayload(error: unknown) {
       payload: {
         error: "Falha ao persistir o upload de infraestrutura elétrica.",
         code: "DATABASE_ERROR",
-        details: { prismaCode: error.code },
+        details: {
+          prismaCode: error.code,
+          prismaMeta: error.meta ?? null,
+        },
       },
     };
   }
@@ -445,6 +449,21 @@ async function createProcessingUpload(input: {
   });
 }
 
+async function resolveInfrastructureManagementCompatibility() {
+  let compatibility = await getInfrastructureLayerSchemaCompatibility();
+
+  if (!compatibility.managementReady) {
+    try {
+      await ensureInfrastructureLayerSchema();
+      compatibility = await getInfrastructureLayerSchemaCompatibility();
+    } catch (error) {
+      console.error("[INFRASTRUCTURE_SCHEMA_ENSURE_ERROR]", error);
+    }
+  }
+
+  return compatibility;
+}
+
 export async function GET(request: Request) {
   try {
     const rateLimitResponse = enforceRequestRateLimit(request, {
@@ -458,7 +477,7 @@ export async function GET(request: Request) {
     const guardResponse = ensureSuperadmin(session);
     if (guardResponse) return guardResponse;
 
-    const compatibility = await getInfrastructureLayerSchemaCompatibility();
+    const compatibility = await resolveInfrastructureManagementCompatibility();
     if (!compatibility.managementReady) {
       return NextResponse.json(
         {
@@ -516,7 +535,7 @@ export async function POST(request: Request) {
     if (guardResponse) return guardResponse;
     const sessionUser = session!.user;
 
-    const compatibility = await getInfrastructureLayerSchemaCompatibility();
+    const compatibility = await resolveInfrastructureManagementCompatibility();
     if (!compatibility.managementReady) {
       return NextResponse.json(
         {

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { InfrastructureLayerManager } from "@/components/superadmin/infrastructure-layer-manager";
+import { ensureInfrastructureLayerSchema } from "@/lib/infrastructure-layer-schema-bootstrap";
 import {
   getInfrastructureLayerSchemaCompatibility,
   isInfrastructureLayerSchemaCompatError,
@@ -26,7 +27,16 @@ export default async function SuperAdminInfrastructureLayersPage({
       ? resolvedSearchParams.tenantId
       : null;
 
-  const compatibility = await getInfrastructureLayerSchemaCompatibility();
+  let compatibility = await getInfrastructureLayerSchemaCompatibility();
+
+  if (!compatibility.managementReady) {
+    try {
+      await ensureInfrastructureLayerSchema();
+      compatibility = await getInfrastructureLayerSchemaCompatibility();
+    } catch (error) {
+      console.error("[SUPERADMIN_INFRASTRUCTURE_SCHEMA_ENSURE_ERROR]", error);
+    }
+  }
 
   const [tenants, layers, uploads] = await Promise.all([
     prisma.tenant.findMany({
