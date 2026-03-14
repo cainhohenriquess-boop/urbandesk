@@ -13,6 +13,7 @@ import {
   ProjectEmptyBlock,
 } from "@/components/projetos/project-detail-components";
 import { ProjectDrainageSegmentForm } from "@/components/projetos/project-drainage-segment-form";
+import { ProjectDrainageTechnicalPanel } from "@/components/projetos/project-drainage-technical-panel";
 import { ProjectMapDisciplineToolset } from "@/components/projetos/project-map-discipline-toolset";
 import { ProjectMapGlobalToolbar } from "@/components/projetos/project-map-global-toolbar";
 import { ProjectMapTechnicalForm } from "@/components/projetos/project-map-technical-form";
@@ -50,6 +51,7 @@ import {
   type TechnicalObjectTypeId,
 } from "@/lib/project-disciplines";
 import { getProjectOperationalStatusLabel } from "@/lib/project-labels";
+import { getDrainageTechnicalPanelStats } from "@/lib/drainage-technical-panel";
 import { getProjectStatusLabel } from "@/lib/project-portfolio";
 import { areaPoligonoM2, comprimentoTrechoM } from "@/lib/turf";
 import {
@@ -678,8 +680,6 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           projectId: project.id,
         });
 
-        if (assetTypeFilter !== "ALL") params.set("type", assetTypeFilter);
-
         const [gisRes, baseRes] = await Promise.all([
           fetch(`/api/gis?${params.toString()}`, { signal }),
           fetch("/api/baselayers", { signal }),
@@ -732,7 +732,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         setIsLoading(false);
       }
     },
-    [assetTypeFilter, flyToCity, project.id, replaceFeatures, setBaseLayersData]
+    [flyToCity, project.id, replaceFeatures, setBaseLayersData]
   );
 
   useEffect(() => {
@@ -987,6 +987,18 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       if (pendingOnly && feature.synced) return false;
       const context = getFeatureTechnicalContext(feature, effectiveTechnicalArea);
 
+      if (assetTypeFilter === "PONTO" && (feature.type === "line" || feature.type === "polygon")) {
+        return false;
+      }
+
+      if (assetTypeFilter === "TRECHO" && feature.type !== "line") {
+        return false;
+      }
+
+      if (assetTypeFilter === "AREA" && feature.type !== "polygon") {
+        return false;
+      }
+
       if (effectiveTechnicalArea === "DRENAGEM") {
         const matchesDrainageFilters = (Object.keys(drainageFilters) as DrainageFilterKey[]).every((key) => {
           const expectedValue = drainageFilters[key];
@@ -1014,7 +1026,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
 
       return haystack.includes(normalizedSearch);
     });
-  }, [drainageFilters, effectiveTechnicalArea, features, pendingOnly, searchQuery]);
+  }, [assetTypeFilter, drainageFilters, effectiveTechnicalArea, features, pendingOnly, searchQuery]);
 
   const disciplineCounts = useMemo(() => {
     return availableDisciplines.reduce<Record<ProjectDisciplineId, number>>((acc, discipline) => {
@@ -1029,6 +1041,10 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const visibleFeatureIds = useMemo(
     () => filteredFeatures.map((feature) => feature.id),
     [filteredFeatures]
+  );
+  const drainagePanelStats = useMemo(
+    () => getDrainageTechnicalPanelStats(features),
+    [features]
   );
 
   const persistedCount = useMemo(() => features.filter((feature) => feature.persistedId).length, [features]);
@@ -1652,6 +1668,21 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                 onAreaToolSelect={handleTechnicalObjectSelection}
               />
             </PanelSection>
+
+            {effectiveTechnicalArea === "DRENAGEM" ? (
+              <PanelSection title="Painel técnico" eyebrow="Drenagem">
+                <ProjectDrainageTechnicalPanel
+                  stats={drainagePanelStats}
+                  activeOperationalStatus={drainageFilters.operationalStatus}
+                  onOperationalStatusChange={(value) =>
+                    setDrainageFilters((current) => ({
+                      ...current,
+                      operationalStatus: value,
+                    }))
+                  }
+                />
+              </PanelSection>
+            ) : null}
 
             <PanelSection title="Camadas e filtros" eyebrow="Controle visual">
               <div className="space-y-4">
