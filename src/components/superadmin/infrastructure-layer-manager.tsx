@@ -99,6 +99,7 @@ type ProcessingResult = {
   error: {
     code: string | null;
     message: string | null;
+    details: Record<string, unknown> | null;
   } | null;
 };
 
@@ -170,6 +171,7 @@ function getProcessingResult(upload: InfrastructureLayerUploadRecord): Processin
       ? {
           code: typeof error.code === "string" ? error.code : null,
           message: typeof error.message === "string" ? error.message : null,
+          details: error,
         }
       : null,
   };
@@ -946,6 +948,11 @@ export function InfrastructureLayerManager({
                         {result.error?.code ? (
                           <p className="mt-2 text-xs uppercase tracking-[0.12em] text-danger-700">
                             Código: {result.error.code}
+                          </p>
+                        ) : null}
+                        {typeof result.error?.details?.prismaCode === "string" ? (
+                          <p className="mt-1 text-xs text-danger-700">
+                            Prisma: {result.error.details.prismaCode}
                           </p>
                         ) : null}
                       </div>

@@ -521,6 +521,8 @@ export async function POST(request: Request) {
   let storedArchive: StoredUploadFile | null = null;
   let archivePersisted = false;
   let storageWarning: string | null = null;
+  let createdLayerId: string | null = null;
+  let uploadLinkedToLayer = false;
 
   try {
     const rateLimitResponse = enforceRequestRateLimit(request, {
@@ -708,71 +710,74 @@ export async function POST(request: Request) {
         ? rawDescription.trim()
         : null;
 
-    const created = await prisma.$transaction(async (tx) => {
-      const layer = await tx.infrastructureLayer.create({
-        data: {
-          code: inspection!.code,
-          name: layerName,
-          description,
-          status: "READY",
+    const layer = await prisma.infrastructureLayer.create({
+      data: {
+        code: inspection!.code,
+        name: layerName,
+        description,
+        status: "READY",
+        ownerTenantId,
+        sourceArchiveName: file.name,
+        sourceArchiveKey: storedArchive!.key,
+        sourceArchiveUrl: normalizeOptionalText(storedArchive!.url),
+        sourceArchiveSecureUrl: normalizeOptionalText(storedArchive!.secureUrl),
+        sourceArchiveExpiresAt: storedArchive!.secureUrlExpiresAt
+          ? new Date(storedArchive!.secureUrlExpiresAt)
+          : null,
+        sourceArchiveContentType: storedArchive!.contentType,
+        sourceDatasetName: imported.datasetName,
+        originalCrs: imported.originalCrs,
+        geometryType: imported.geometryType,
+        featureCount: imported.featureCount,
+        bbox: (imported.bbox ?? undefined) as Prisma.InputJsonValue | undefined,
+        geoJsonData: imported.geoJsonData as Prisma.InputJsonValue,
+        metadata: toInputJsonValue({
+          ...imported.metadata,
+          uploadId,
+          storageProvider: storedArchive!.provider,
+          archiveUrl: normalizeOptionalText(storedArchive!.url),
+          archivePersisted,
+          storageWarning,
           ownerTenantId,
-          sourceArchiveName: file.name,
-          sourceArchiveKey: storedArchive!.key,
-          sourceArchiveUrl: normalizeOptionalText(storedArchive!.url),
-          sourceArchiveSecureUrl: normalizeOptionalText(storedArchive!.secureUrl),
-          sourceArchiveExpiresAt: storedArchive!.secureUrlExpiresAt
-            ? new Date(storedArchive!.secureUrlExpiresAt)
-            : null,
-          sourceArchiveContentType: storedArchive!.contentType,
-          sourceDatasetName: imported.datasetName,
-          originalCrs: imported.originalCrs,
-          geometryType: imported.geometryType,
+        }),
+        uploadedById: sessionUser.id,
+      },
+    });
+    createdLayerId = layer.id;
+
+    await prisma.infrastructureLayerTenantAccess.createMany({
+      data: tenantIds.map((tenantId) => ({
+        infrastructureLayerId: layer.id,
+        tenantId,
+      })),
+      skipDuplicates: true,
+    });
+
+    await prisma.infrastructureLayerUpload.update({
+      where: { id: uploadId! },
+      data: {
+        status: "PROCESSED",
+        processedAt: new Date(),
+        finalLayerId: layer.id,
+        processingError: null,
+        processingResult: serializeProcessingResult({
+          inspection,
+          code: inspection!.code,
           featureCount: imported.featureCount,
-          bbox: (imported.bbox ?? undefined) as Prisma.InputJsonValue | undefined,
-          geoJsonData: imported.geoJsonData as Prisma.InputJsonValue,
-          metadata: toInputJsonValue({
-            ...imported.metadata,
-            uploadId,
-            storageProvider: storedArchive!.provider,
-            archiveUrl: normalizeOptionalText(storedArchive!.url),
-            archivePersisted,
-            storageWarning,
-            ownerTenantId,
-          }),
-          uploadedById: sessionUser.id,
-          authorizedTenants: {
-            createMany: {
-              data: tenantIds.map((tenantId) => ({ tenantId })),
-            },
-          },
-        },
-      });
-
-      await tx.infrastructureLayerUpload.update({
-        where: { id: uploadId! },
-        data: {
+          geometryType: imported.geometryType,
+          bbox: imported.bbox,
+          storedArchive,
+          archivePersisted,
+          storageWarning,
           status: "PROCESSED",
-          processedAt: new Date(),
-          finalLayerId: layer.id,
-          processingError: null,
-          processingResult: serializeProcessingResult({
-            inspection,
-            code: inspection!.code,
-            featureCount: imported.featureCount,
-            geometryType: imported.geometryType,
-            bbox: imported.bbox,
-            storedArchive,
-            archivePersisted,
-            storageWarning,
-            status: "PROCESSED",
-          }),
-        },
-      });
+        }),
+      },
+    });
+    uploadLinkedToLayer = true;
 
-      return tx.infrastructureLayer.findUniqueOrThrow({
-        where: { id: layer.id },
-        include: layerListInclude,
-      });
+    const created = await prisma.infrastructureLayer.findUniqueOrThrow({
+      where: { id: layer.id },
+      include: layerListInclude,
     });
 
     await writeAuditLog({
@@ -816,6 +821,16 @@ export async function POST(request: Request) {
     console.error("[INFRASTRUCTURE_LAYER_UPLOAD_ERROR]", error);
 
     const errorResponse = serializeErrorPayload(error);
+
+    if (createdLayerId && !uploadLinkedToLayer) {
+      try {
+        await prisma.infrastructureLayer.delete({
+          where: { id: createdLayerId },
+        });
+      } catch (cleanupError) {
+        console.error("[INFRASTRUCTURE_LAYER_UPLOAD_CLEANUP_ERROR]", cleanupError);
+      }
+    }
 
     if (uploadId) {
       try {
