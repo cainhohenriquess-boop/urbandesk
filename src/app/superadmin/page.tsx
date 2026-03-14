@@ -384,9 +384,9 @@ export default async function SuperAdminPage({
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </Link>
 
-                        <Link href={`?modal=upload&tenantId=${tenant.id}`} className="text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-md flex items-center gap-1 transition-colors">
+                        <Link href={`/superadmin/camadas?tenantId=${tenant.id}`} className="text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-md flex items-center gap-1 transition-colors">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                          Subir Mapa
+                          Camadas
                         </Link>
                         <Link href={`/api/auth/impersonate?tenantId=${tenant.id}`} className="text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors flex items-center gap-1">
                           Acessar <span className="text-lg leading-none">→</span>
@@ -453,37 +453,22 @@ export default async function SuperAdminPage({
               </div>
               <h3 className="font-display text-xl font-bold text-foreground">Importar Base GIS</h3>
             </div>
-            <p className="text-sm text-muted-foreground mb-6">Envie o arquivo ZIP contendo as extensões (.shp, .dbf, .shx) para compilar a cartografia.</p>
-            
-            <form action={uploadShapefileAction} className="space-y-5">
-              <input type="hidden" name="tenantId" value={targetTenantId} />
-              
-              <div>
-                <label className="block text-xs font-bold uppercase text-muted-foreground mb-1.5">Nome da Camada</label>
-                <input name="name" type="text" required placeholder="Ex: Malha Viária Centro" className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500 transition-all" />
-              </div>
+            <p className="text-sm text-muted-foreground mb-6">
+              O upload de infraestrutura elétrica agora usa uma tela dedicada,
+              com validação estrutural do shapefile e autorização por prefeitura.
+            </p>
 
-              <div>
-                <label className="block text-xs font-bold uppercase text-muted-foreground mb-1.5">Tipo de Geografia</label>
-                <select name="type" className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500 transition-all">
-                  <option value="BOUNDARY">Limites do Município / Setores (Polígonos)</option>
-                  <option value="STREETS">Formato das Ruas / Buffers (Polígonos)</option>
-                  <option value="STREET_NAMES">Nomes das Ruas (Linhas com coluna &apos;name&apos;)</option>
-                </select>
-              </div>
+            <div className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-4 text-sm text-brand-900">
+              Para publicar `PONNOT` e `PONT_ILUM`, use a nova área de camadas e
+              selecione as prefeituras autorizadas no mesmo fluxo.
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase text-brand-600 mb-1.5">Arquivo Shapefile (.zip) *</label>
-                <input name="file" type="file" accept=".zip" required className="w-full text-sm text-muted-foreground file:mr-4 file:py-2.5 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 file:cursor-pointer cursor-pointer border border-dashed border-border p-2 rounded-lg" />
-              </div>
-
-              <div className="flex gap-3 pt-4 border-t border-border mt-6">
-                <Link href="/superadmin" className="flex-1 rounded-lg py-2.5 text-center text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">Cancelar</Link>
-                <button type="submit" className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-bold text-white hover:bg-brand-700 shadow-md transition-colors">
-                  Processar Mapa
-                </button>
-              </div>
-            </form>
+            <div className="flex gap-3 pt-4 border-t border-border mt-6">
+              <Link href="/superadmin" className="flex-1 rounded-lg py-2.5 text-center text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">Cancelar</Link>
+              <Link href={`/superadmin/camadas?tenantId=${targetTenantId}`} className="flex-1 rounded-lg bg-brand-600 py-2.5 text-center text-sm font-bold text-white hover:bg-brand-700 shadow-md transition-colors">
+                Abrir publicação
+              </Link>
+            </div>
           </div>
         </div>
       )}

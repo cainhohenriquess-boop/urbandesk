@@ -56,18 +56,53 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Tenant não identificado" }, { status: 400 });
     }
 
-    const baseLayers = await prisma.baseLayer.findMany({
-      where: { tenantId: targetTenantId },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        geoJsonData: true,
-      },
-      orderBy: { createdAt: "asc" }
-    });
+    const [baseLayers, infrastructureLayers] = await Promise.all([
+      prisma.baseLayer.findMany({
+        where: { tenantId: targetTenantId },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          geoJsonData: true,
+        },
+        orderBy: { createdAt: "asc" }
+      }),
+      prisma.infrastructureLayer.findMany({
+        where: {
+          status: "READY",
+          authorizedTenants: {
+            some: {
+              tenantId: targetTenantId,
+            },
+          },
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          geoJsonData: true,
+          featureCount: true,
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
 
-    return NextResponse.json({ data: baseLayers });
+    const normalizedInfrastructureLayers = infrastructureLayers.map((layer) => ({
+      id: `infra:${layer.id}`,
+      name: layer.name,
+      type: layer.code,
+      geoJsonData: layer.geoJsonData,
+      sourceKind: "INFRASTRUCTURE",
+      featureCount: layer.featureCount,
+      infrastructureLayerId: layer.id,
+    }));
+
+    const normalizedBaseLayers = baseLayers.map((layer) => ({
+      ...layer,
+      sourceKind: "TENANT_BASE",
+    }));
+
+    return NextResponse.json({ data: [...normalizedBaseLayers, ...normalizedInfrastructureLayers] });
   } catch (error) {
     console.error("[BASELAYERS_GET_ERROR]", error);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });

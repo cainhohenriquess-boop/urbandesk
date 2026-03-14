@@ -45,8 +45,11 @@ export interface DrawnFeature {
 export interface BaseLayerData {
   id: string;
   name: string;
-  type: "BOUNDARY" | "STREETS" | "STREET_NAMES";
+  type: "BOUNDARY" | "STREETS" | "STREET_NAMES" | "PONNOT" | "PONT_ILUM";
   geoJsonData: any;
+  sourceKind?: "TENANT_BASE" | "INFRASTRUCTURE";
+  featureCount?: number;
+  infrastructureLayerId?: string | null;
 }
 
 export interface MapViewState {
@@ -112,6 +115,10 @@ interface MapStore {
 
   baseLayersData: BaseLayerData[];
   setBaseLayersData: (layers: BaseLayerData[]) => void;
+  visibleBaseLayerIds: string[];
+  toggleBaseLayerVisibility: (id: string) => void;
+  setBaseLayerVisibility: (ids: string[], visible: boolean) => void;
+  setAllBaseLayerVisibility: (visible: boolean) => void;
 
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
@@ -367,7 +374,59 @@ export const useMapStore = create<MapStore>()(
       clearDeletedPersistedIds: () => set({ deletedPersistedIds: [] }),
 
       baseLayersData: [],
-      setBaseLayersData: (layers) => set({ baseLayersData: layers }),
+      visibleBaseLayerIds: [],
+      setBaseLayersData: (layers) =>
+        set((state) => {
+          const nextIds = layers.map((layer) => layer.id);
+          if (state.baseLayersData.length === 0 && state.visibleBaseLayerIds.length === 0) {
+            return {
+              baseLayersData: layers,
+              visibleBaseLayerIds: nextIds,
+            };
+          }
+
+          const previousIds = new Set(state.baseLayersData.map((layer) => layer.id));
+          const preservedVisibleIds = state.visibleBaseLayerIds.filter((id) =>
+            nextIds.includes(id)
+          );
+          const newVisibleIds = nextIds.filter((id) => !previousIds.has(id));
+
+          return {
+            baseLayersData: layers,
+            visibleBaseLayerIds: Array.from(
+              new Set([...preservedVisibleIds, ...newVisibleIds])
+            ),
+          };
+        }),
+      toggleBaseLayerVisibility: (id) =>
+        set((state) => ({
+          visibleBaseLayerIds: state.visibleBaseLayerIds.includes(id)
+            ? state.visibleBaseLayerIds.filter((entry) => entry !== id)
+            : [...state.visibleBaseLayerIds, id],
+        })),
+      setBaseLayerVisibility: (ids, visible) =>
+        set((state) => {
+          const targets = Array.from(new Set(ids));
+          if (visible) {
+            return {
+              visibleBaseLayerIds: Array.from(
+                new Set([...state.visibleBaseLayerIds, ...targets])
+              ),
+            };
+          }
+
+          return {
+            visibleBaseLayerIds: state.visibleBaseLayerIds.filter(
+              (entry) => !targets.includes(entry)
+            ),
+          };
+        }),
+      setAllBaseLayerVisibility: (visible) =>
+        set((state) => ({
+          visibleBaseLayerIds: visible
+            ? state.baseLayersData.map((layer) => layer.id)
+            : [],
+        })),
 
       selectedId: null,
       setSelectedId: (id) => set({ selectedId: id }),

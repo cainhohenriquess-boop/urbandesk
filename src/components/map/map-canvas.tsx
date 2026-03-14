@@ -565,6 +565,7 @@ function MapCanvasInner({
     isFullscreen,
     toggleFullscreen,
     baseLayersData,
+    visibleBaseLayerIds,
     selectedId,
     setSelectedId,
     selectionIds,
@@ -581,10 +582,15 @@ function MapCanvasInner({
     () => (Array.isArray(visibleFeatureIds) ? new Set(visibleFeatureIds) : null),
     [visibleFeatureIds]
   );
+  const visibleBaseLayerIdSet = useMemo(
+    () => new Set(visibleBaseLayerIds),
+    [visibleBaseLayerIds]
+  );
 
   const baseLayersSafe = useMemo(() => {
     return baseLayersData.map((layer) => ({
       id: layer.id,
+      name: layer.name,
       type: layer.type,
       data: parseBaseLayerGeoJson(layer.geoJsonData),
     }));
@@ -1041,7 +1047,9 @@ function MapCanvasInner({
         <NavigationControl position="bottom-right" />
 
         {layers.basegis &&
-          baseLayersSafe.map((layer) => {
+          baseLayersSafe
+            .filter((layer) => visibleBaseLayerIdSet.has(layer.id))
+            .map((layer) => {
             const sourceId = `base-source-${layer.id}`;
 
             return (
@@ -1118,6 +1126,90 @@ function MapCanvasInner({
                       "text-halo-width": 1.8,
                     }}
                   />
+                )}
+
+                {layer.type === "PONNOT" && (
+                  <>
+                    <Layer
+                      source={sourceId}
+                      id={`infra-ponnot-circle-${layer.id}`}
+                      type="circle"
+                      filter={["==", ["geometry-type"], "Point"]}
+                      paint={{
+                        "circle-color": "#0f766e",
+                        "circle-radius": 5.5,
+                        "circle-opacity": 0.9,
+                        "circle-stroke-color": "#ecfeff",
+                        "circle-stroke-width": 1.5,
+                      }}
+                    />
+                    <Layer
+                      source={sourceId}
+                      id={`infra-ponnot-label-${layer.id}`}
+                      type="symbol"
+                      filter={["==", ["geometry-type"], "Point"]}
+                      layout={{
+                        "text-field": [
+                          "coalesce",
+                          ["get", "NOME"],
+                          ["get", "name"],
+                          ["get", "CODIGO"],
+                          ["get", "codigo"],
+                          layer.name,
+                        ],
+                        "text-size": 11,
+                        "text-offset": [0, 1.2],
+                        "text-anchor": "top",
+                      }}
+                      paint={{
+                        "text-color": "#115e59",
+                        "text-halo-color": "#f0fdfa",
+                        "text-halo-width": 1.25,
+                      }}
+                    />
+                  </>
+                )}
+
+                {layer.type === "PONT_ILUM" && (
+                  <>
+                    <Layer
+                      source={sourceId}
+                      id={`infra-pont-ilum-circle-${layer.id}`}
+                      type="circle"
+                      filter={["==", ["geometry-type"], "Point"]}
+                      paint={{
+                        "circle-color": "#ca8a04",
+                        "circle-radius": 6,
+                        "circle-opacity": 0.92,
+                        "circle-stroke-color": "#fffbeb",
+                        "circle-stroke-width": 1.5,
+                      }}
+                    />
+                    <Layer
+                      source={sourceId}
+                      id={`infra-pont-ilum-label-${layer.id}`}
+                      type="symbol"
+                      filter={["==", ["geometry-type"], "Point"]}
+                      layout={{
+                        "text-field": [
+                          "coalesce",
+                          ["get", "NOME"],
+                          ["get", "name"],
+                          ["get", "CODIGO"],
+                          ["get", "codigo"],
+                          layer.name,
+                        ],
+                        "text-size": 11,
+                        "text-offset": [0, 1.2],
+                        "text-anchor": "top",
+                      }}
+                      paint={{
+                        "text-color": "#854d0e",
+                        "text-halo-color": "#fffbeb",
+                        "text-halo-width": 1.25,
+                      }}
+                    />
+                  </>
                 )}
               </React.Fragment>
             );

@@ -245,6 +245,17 @@ enum AssetType {
   AREA
 }
 
+enum InfrastructureLayerCode {
+  PONNOT
+  PONT_ILUM
+}
+
+enum InfrastructureLayerStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
 enum InvoiceStatus {
   PENDENTE
   PAGO
@@ -284,6 +295,7 @@ model Tenant {
   assets                Asset[]
   invoices              Invoice[]
   baseLayers            BaseLayer[]
+  infrastructureLayers  InfrastructureLayerTenantAccess[]
   auditLogs             AuditLog[]
 
   @@map("tenants")
@@ -303,6 +315,50 @@ model BaseLayer {
   @@map("base_layers")
 }
 
+model InfrastructureLayer {
+  id                       String                    @id @default(cuid())
+  code                     InfrastructureLayerCode
+  name                     String
+  description              String?
+  status                   InfrastructureLayerStatus @default(PROCESSING)
+  sourceArchiveName        String
+  sourceArchiveKey         String
+  sourceArchiveUrl         String?
+  sourceArchiveSecureUrl   String?
+  sourceArchiveExpiresAt   DateTime?
+  sourceArchiveContentType String?
+  sourceDatasetName        String?
+  originalCrs              String?
+  geometryType             String?
+  featureCount             Int                       @default(0)
+  bbox                     Json?
+  geoJsonData              Json
+  metadata                 Json                      @default("{}")
+  uploadedById             String
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+
+  uploadedBy        User                              @relation("InfrastructureLayerUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+  authorizedTenants InfrastructureLayerTenantAccess[]
+
+  @@index([code, status, createdAt])
+  @@index([uploadedById, createdAt])
+  @@map("infrastructure_layers")
+}
+
+model InfrastructureLayerTenantAccess {
+  infrastructureLayerId String
+  tenantId              String
+  createdAt             DateTime @default(now())
+
+  infrastructureLayer InfrastructureLayer @relation(fields: [infrastructureLayerId], references: [id], onDelete: Cascade)
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([infrastructureLayerId, tenantId])
+  @@index([tenantId, createdAt])
+  @@map("infrastructure_layer_tenant_access")
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -315,22 +371,23 @@ model User {
   updatedAt    DateTime @updatedAt
   tenantId     String?
 
-  tenant                      Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  assetLogs                   AssetLog[]
-  sessions                    UserSession[]
-  auditLogs                   AuditLog[]
-  managedProjects             Project[]            @relation("ProjectManager")
-  inspectedProjects           Project[]            @relation("ProjectInspector")
-  phaseOwnerships             ProjectPhase[]       @relation("ProjectPhaseOwner")
-  milestoneResponsibilities   ProjectMilestone[]   @relation("ProjectMilestoneResponsible")
-  uploadedProjectDocuments    ProjectDocument[]    @relation("ProjectDocumentUploader")
-  projectMeasurementsTaken    ProjectMeasurement[] @relation("ProjectMeasurementMeasuredBy")
-  projectMeasurementsApproved ProjectMeasurement[] @relation("ProjectMeasurementApprovedBy")
-  projectInspectionsLed       ProjectInspection[]  @relation("ProjectInspectionInspector")
-  projectIssuesReported       ProjectIssue[]       @relation("ProjectIssueReportedBy")
-  projectIssuesAssigned       ProjectIssue[]       @relation("ProjectIssueAssignedTo")
-  projectRiskOwnerships       ProjectRisk[]        @relation("ProjectRiskOwner")
-  projectCommentsAuthored     ProjectComment[]     @relation("ProjectCommentAuthor")
+  tenant                       Tenant?               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assetLogs                    AssetLog[]
+  sessions                     UserSession[]
+  auditLogs                    AuditLog[]
+  uploadedInfrastructureLayers InfrastructureLayer[] @relation("InfrastructureLayerUploader")
+  managedProjects              Project[]             @relation("ProjectManager")
+  inspectedProjects            Project[]             @relation("ProjectInspector")
+  phaseOwnerships              ProjectPhase[]        @relation("ProjectPhaseOwner")
+  milestoneResponsibilities    ProjectMilestone[]    @relation("ProjectMilestoneResponsible")
+  uploadedProjectDocuments     ProjectDocument[]     @relation("ProjectDocumentUploader")
+  projectMeasurementsTaken     ProjectMeasurement[]  @relation("ProjectMeasurementMeasuredBy")
+  projectMeasurementsApproved  ProjectMeasurement[]  @relation("ProjectMeasurementApprovedBy")
+  projectInspectionsLed        ProjectInspection[]   @relation("ProjectInspectionInspector")
+  projectIssuesReported        ProjectIssue[]        @relation("ProjectIssueReportedBy")
+  projectIssuesAssigned        ProjectIssue[]        @relation("ProjectIssueAssignedTo")
+  projectRiskOwnerships        ProjectRisk[]         @relation("ProjectRiskOwner")
+  projectCommentsAuthored      ProjectComment[]      @relation("ProjectCommentAuthor")
 
   @@index([tenantId])
   @@map("users")

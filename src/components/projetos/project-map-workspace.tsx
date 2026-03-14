@@ -60,6 +60,10 @@ import {
   type ProjectDisciplineId,
   type TechnicalObjectTypeId,
 } from "@/lib/project-disciplines";
+import {
+  INFRASTRUCTURE_LAYER_SHORT_LABELS,
+  isInfrastructureLayerCode,
+} from "@/lib/infrastructure-layer-config";
 import { getProjectOperationalStatusLabel } from "@/lib/project-labels";
 import { getDrainageTechnicalPanelStats } from "@/lib/drainage-technical-panel";
 import { getProjectStatusLabel } from "@/lib/project-portfolio";
@@ -322,9 +326,22 @@ function getGeoJsonCenter(geojson: unknown) {
 
 function normalizeBaseLayer(layer: unknown): BaseLayerData | null {
   if (!layer || typeof layer !== "object") return null;
-  const typed = layer as { id?: unknown; name?: unknown; type?: unknown; geoJsonData?: unknown };
+  const typed = layer as {
+    id?: unknown;
+    name?: unknown;
+    type?: unknown;
+    geoJsonData?: unknown;
+    sourceKind?: unknown;
+    featureCount?: unknown;
+    infrastructureLayerId?: unknown;
+  };
   if (typeof typed.id !== "string" || typeof typed.name !== "string") return null;
-  if (!typed.type || !["BOUNDARY", "STREETS", "STREET_NAMES"].includes(String(typed.type))) {
+  if (
+    !typed.type ||
+    !["BOUNDARY", "STREETS", "STREET_NAMES", "PONNOT", "PONT_ILUM"].includes(
+      String(typed.type)
+    )
+  ) {
     return null;
   }
 
@@ -351,6 +368,14 @@ function normalizeBaseLayer(layer: unknown): BaseLayerData | null {
     name: typed.name,
     type: typed.type as BaseLayerData["type"],
     geoJsonData,
+    sourceKind:
+      typed.sourceKind === "INFRASTRUCTURE" ? "INFRASTRUCTURE" : "TENANT_BASE",
+    featureCount:
+      typeof typed.featureCount === "number" ? typed.featureCount : undefined,
+    infrastructureLayerId:
+      typeof typed.infrastructureLayerId === "string"
+        ? typed.infrastructureLayerId
+        : null,
   };
 }
 
@@ -584,6 +609,9 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     setSnapEnabled,
     syncAll,
     setBaseLayersData,
+    visibleBaseLayerIds,
+    toggleBaseLayerVisibility,
+    setBaseLayerVisibility,
     flyToCity,
     replaceFeatures,
     appendFeatures,
@@ -671,6 +699,15 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       ],
     } satisfies Record<DrainageFilterKey, Array<{ value: string; label: string }>>;
   }, [drainageFieldDefinitions]);
+  const publishedBaseLayers = useMemo(
+    () =>
+      baseLayersData.filter(
+        (layer) =>
+          layer.sourceKind === "INFRASTRUCTURE" ||
+          isInfrastructureLayerCode(layer.type)
+      ),
+    [baseLayersData]
+  );
 
   useEffect(() => {
     if (!activeTechnicalArea && availableDisciplines.length > 0) {
@@ -1937,6 +1974,74 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                     ))}
                   </div>
                 </div>
+
+                {publishedBaseLayers.length > 0 ? (
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        Camadas publicadas
+                      </label>
+                      <button
+                        onClick={() =>
+                          setBaseLayerVisibility(
+                            publishedBaseLayers.map((layer) => layer.id),
+                            publishedBaseLayers.some(
+                              (layer) => !visibleBaseLayerIds.includes(layer.id)
+                            )
+                          )
+                        }
+                        className="text-[11px] font-semibold text-brand-600 hover:text-brand-500"
+                      >
+                        {publishedBaseLayers.every((layer) =>
+                          visibleBaseLayerIds.includes(layer.id)
+                        )
+                          ? "Ocultar publicadas"
+                          : "Mostrar publicadas"}
+                      </button>
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {publishedBaseLayers.map((layer) => {
+                        const isVisible = visibleBaseLayerIds.includes(layer.id);
+                        const isElectricLight = layer.type === "PONT_ILUM";
+
+                        return (
+                          <button
+                            key={layer.id}
+                            onClick={() => toggleBaseLayerVisibility(layer.id)}
+                            className={cn(
+                              "flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors",
+                              isVisible
+                                ? "border-border bg-background"
+                                : "border-border/60 bg-slate-50 text-muted-foreground"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "h-3 w-3 rounded-full",
+                                isElectricLight ? "bg-amber-500" : "bg-teal-600"
+                              )}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-foreground">
+                                {layer.name}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {INFRASTRUCTURE_LAYER_SHORT_LABELS[
+                                  layer.type as "PONNOT" | "PONT_ILUM"
+                                ]}{" "}
+                                · {formatNumber(layer.featureCount ?? 0)} feições
+                              </p>
+                            </div>
+                            <ProjectBadge
+                              label={isVisible ? "Ligada" : "Desligada"}
+                              tone={isVisible ? "success" : "neutral"}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div>
                   <div className="flex items-center justify-between">
