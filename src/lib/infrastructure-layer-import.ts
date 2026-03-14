@@ -750,6 +750,90 @@ function normalizePonnotProperties(input: {
   } satisfies InfrastructureLayerNormalizedProperties;
 }
 
+function normalizePontIlumProperties(input: {
+  properties: FeatureProperties;
+  index: number;
+  ownerTenant: OwnerTenantContext | null;
+}) {
+  const spec = INFRASTRUCTURE_LAYER_SPECS.PONT_ILUM;
+  const txtLum = pickPropertyScalarString(input.properties, ["TXT_LUM", "TXTLUM"]);
+  const rawIdentifier = normalizeIdentifier(
+    pickPropertyString(input.properties, spec.fields.identifier)
+  );
+  const identifier = buildIdentifier("PONT_ILUM", rawIdentifier, input.index);
+  const label = txtLum ?? identifier ?? `Ponto de iluminação ${String(input.index).padStart(4, "0")}`;
+  const municipalityName =
+    pickPropertyString(input.properties, spec.fields.municipalityName) ??
+    input.ownerTenant?.name ??
+    null;
+  const municipalityCode = normalizeMunicipalityCode(
+    pickPropertyString(input.properties, spec.fields.municipalityCode)
+  );
+  const streetName = pickPropertyString(input.properties, spec.fields.streetName);
+  const neighborhood = pickPropertyString(input.properties, spec.fields.neighborhood);
+  const district = pickPropertyString(input.properties, spec.fields.district);
+  const region = pickPropertyString(input.properties, spec.fields.region);
+  const feeder = pickPropertyString(input.properties, spec.fields.feeder);
+  const circuit = pickPropertyString(input.properties, spec.fields.circuit);
+  const supportType = pickPropertyString(input.properties, spec.fields.supportType);
+  const operationalStatus = normalizeStatusValue(
+    pickPropertyString(input.properties, spec.fields.operationalStatus)
+  );
+  const lampType = pickPropertyString(input.properties, spec.fields.lampType);
+  const powerWatts = pickPropertyNumber(input.properties, spec.fields.powerWatts);
+  const reference = pickPropertyString(input.properties, spec.fields.reference);
+
+  return {
+    layerCode: "PONT_ILUM" as const,
+    layerLabel: spec.label,
+    layerShortLabel: spec.shortLabel,
+    featureKind: spec.featureKind,
+    label,
+    labelShort: txtLum ?? label,
+    TXT_LUM: txtLum,
+    name: label,
+    NOME: label,
+    identifier,
+    code: identifier,
+    codigo: identifier,
+    CODIGO: identifier,
+    ownerTenantId: input.ownerTenant?.id ?? null,
+    municipalityName,
+    municipalityCode,
+    municipalityState: input.ownerTenant?.state ?? null,
+    streetName,
+    neighborhood,
+    district,
+    region,
+    feeder,
+    circuit,
+    supportType,
+    operationalStatus,
+    lampType,
+    powerWatts,
+    reference,
+    renderColor: spec.renderColor,
+    renderIcon: spec.renderIcon,
+    searchText: buildSearchText([
+      txtLum,
+      identifier,
+      municipalityName,
+      municipalityCode,
+      streetName,
+      neighborhood,
+      district,
+      region,
+      feeder,
+      circuit,
+      supportType,
+      operationalStatus,
+      lampType,
+      powerWatts,
+      reference,
+    ]),
+  } satisfies InfrastructureLayerNormalizedProperties;
+}
+
 function normalizeInfrastructureFeatureProperties(input: {
   code: InfrastructureLayerCodeId;
   properties: FeatureProperties;
@@ -766,7 +850,16 @@ function normalizeInfrastructureFeatureProperties(input: {
     });
   }
 
-  const spec = INFRASTRUCTURE_LAYER_SPECS[input.code];
+  if (input.code === "PONT_ILUM") {
+    return normalizePontIlumProperties({
+      properties: input.properties,
+      index: input.index,
+      ownerTenant: input.ownerTenant,
+    });
+  }
+
+  const fallbackCode = input.code as InfrastructureLayerCodeId;
+  const spec = INFRASTRUCTURE_LAYER_SPECS[fallbackCode];
   const rawLabel = pickPropertyString(input.properties, spec.fields.label);
   const rawIdentifier = normalizeIdentifier(
     pickPropertyString(input.properties, spec.fields.identifier)
@@ -796,7 +889,7 @@ function normalizeInfrastructureFeatureProperties(input: {
   const labelShort = identifier ?? label;
 
   const normalized = {
-    layerCode: input.code,
+    layerCode: fallbackCode,
     layerLabel: spec.label,
     layerShortLabel: spec.shortLabel,
     featureKind: spec.featureKind,

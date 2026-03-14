@@ -1195,21 +1195,19 @@ function MapCanvasInner({
                       source={sourceId}
                       id={`infra-pont-ilum-label-${layer.id}`}
                       type="symbol"
-                      filter={["==", ["geometry-type"], "Point"]}
+                      minzoom={14}
+                      filter={[
+                        "all",
+                        ["==", ["geometry-type"], "Point"],
+                        ["has", "TXT_LUM"],
+                        ["!=", ["get", "TXT_LUM"], ""],
+                      ]}
                       layout={{
-                        "text-field": [
-                          "coalesce",
-                          ["get", "labelShort"],
-                          ["get", "label"],
-                          ["get", "NOME"],
-                          ["get", "name"],
-                          ["get", "CODIGO"],
-                          ["get", "codigo"],
-                          layer.name,
-                        ],
+                        "text-field": ["get", "TXT_LUM"],
                         "text-size": 11,
                         "text-offset": [0, 1.2],
                         "text-anchor": "top",
+                        "text-max-width": 18,
                       }}
                       paint={{
                         "text-color": "#854d0e",

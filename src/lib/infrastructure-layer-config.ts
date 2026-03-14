@@ -11,6 +11,7 @@ export type InfrastructureLayerNormalizedProperties = {
   label: string;
   labelShort: string;
   labelMultiline?: string | null;
+  TXT_LUM?: string | null;
   name: string;
   NOME: string;
   identifier: string | null;
