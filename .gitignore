@@ -16,3 +16,6 @@ public/uploads/
 *.key
 *.p12
 *.pfx
+
+.vercel
+.env*.local
