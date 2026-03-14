@@ -44,6 +44,8 @@ type InfrastructureLayerManagerProps = {
   tenants: TenantOption[];
   layers: InfrastructureLayerRecord[];
   preselectedTenantId?: string | null;
+  schemaReady: boolean;
+  schemaNotice?: string | null;
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -56,6 +58,8 @@ export function InfrastructureLayerManager({
   tenants,
   layers: initialLayers,
   preselectedTenantId,
+  schemaReady,
+  schemaNotice,
 }: InfrastructureLayerManagerProps) {
   const router = useRouter();
   const [layers, setLayers] = useState(initialLayers);
@@ -99,6 +103,14 @@ export function InfrastructureLayerManager({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!schemaReady) {
+      setError(
+        schemaNotice ||
+          "As tabelas de infraestrutura elétrica ainda não existem neste ambiente."
+      );
+      return;
+    }
 
     if (!file) {
       setError("Selecione o arquivo ZIP do shapefile.");
@@ -178,6 +190,12 @@ export function InfrastructureLayerManager({
           </div>
         </div>
 
+        {schemaReady ? null : schemaNotice ? (
+          <div className="mt-6 rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900">
+            {schemaNotice}
+          </div>
+        ) : null}
+
         <form onSubmit={handleSubmit} className="mt-6 space-y-5">
           <div className="space-y-2">
             <label className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -185,8 +203,9 @@ export function InfrastructureLayerManager({
             </label>
             <select
               value={code}
+              disabled={!schemaReady || isSubmitting}
               onChange={(event) => setCode(event.target.value as InfrastructureLayerCodeId)}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {INFRASTRUCTURE_LAYER_CODES.map((layerCode) => (
                 <option key={layerCode} value={layerCode}>
@@ -205,9 +224,10 @@ export function InfrastructureLayerManager({
             </label>
             <input
               value={name}
+              disabled={!schemaReady || isSubmitting}
               onChange={(event) => setName(event.target.value)}
               placeholder={INFRASTRUCTURE_LAYER_LABELS[code]}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
             />
           </div>
 
@@ -217,10 +237,11 @@ export function InfrastructureLayerManager({
             </label>
             <textarea
               value={description}
+              disabled={!schemaReady || isSubmitting}
               onChange={(event) => setDescription(event.target.value)}
               rows={3}
               placeholder="Origem da base, vigência, observações operacionais..."
-              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
             />
           </div>
 
@@ -231,8 +252,9 @@ export function InfrastructureLayerManager({
             <input
               type="file"
               accept=".zip,application/zip,application/x-zip-compressed"
+              disabled={!schemaReady || isSubmitting}
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              className="block w-full rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
+              className="block w-full rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:font-semibold file:text-brand-700 hover:file:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-60"
             />
             <p className="text-xs text-muted-foreground">
               O processamento valida integridade, arquivos obrigatórios e geometria antes de publicar.
@@ -246,8 +268,9 @@ export function InfrastructureLayerManager({
               </label>
               <select
                 value={ownerTenantId}
+                disabled={!schemaReady || isSubmitting}
                 onChange={(event) => setOwnerTenantId(event.target.value)}
-                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <option value="">
                   {selectedCount === 1
@@ -276,9 +299,10 @@ export function InfrastructureLayerManager({
             </div>
             <input
               value={tenantSearch}
+              disabled={!schemaReady || isSubmitting}
               onChange={(event) => setTenantSearch(event.target.value)}
               placeholder="Filtrar município..."
-              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
             />
             <div className="max-h-72 space-y-2 overflow-y-auto rounded-2xl border border-border bg-background p-3">
               {filteredTenants.map((tenant) => {
@@ -290,12 +314,14 @@ export function InfrastructureLayerManager({
                       "flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 transition-colors",
                       checked
                         ? "border-brand-300 bg-brand-50"
-                        : "border-border hover:bg-muted"
+                        : "border-border hover:bg-muted",
+                      (!schemaReady || isSubmitting) && "cursor-not-allowed opacity-60"
                     )}
                   >
                     <input
                       type="checkbox"
                       checked={checked}
+                      disabled={!schemaReady || isSubmitting}
                       onChange={() => toggleTenant(tenant.id)}
                       className="mt-0.5 h-4 w-4 rounded border-border text-brand-600 focus:ring-brand-500"
                     />
@@ -333,13 +359,19 @@ export function InfrastructureLayerManager({
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={!schemaReady || isSubmitting}
             className={cn(
-              "w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-colors",
-              isSubmitting ? "bg-slate-400" : "bg-brand-600 hover:bg-brand-500"
+              "w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed",
+              !schemaReady || isSubmitting
+                ? "bg-slate-400"
+                : "bg-brand-600 hover:bg-brand-500"
             )}
           >
-            {isSubmitting ? "Processando shapefile..." : "Processar e publicar camada"}
+            {!schemaReady
+              ? "Migration pendente no ambiente"
+              : isSubmitting
+                ? "Processando shapefile..."
+                : "Processar e publicar camada"}
           </button>
         </form>
       </section>
@@ -368,7 +400,14 @@ export function InfrastructureLayerManager({
         </div>
 
         <div className="mt-6 space-y-4">
-          {layers.length === 0 ? (
+          {!schemaReady && schemaNotice ? (
+            <div className="rounded-2xl border border-dashed border-warning-200 bg-warning-50 px-6 py-12 text-center">
+              <p className="text-base font-semibold text-foreground">
+                Upload indisponível neste ambiente
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">{schemaNotice}</p>
+            </div>
+          ) : layers.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-background px-6 py-12 text-center">
               <p className="text-base font-semibold text-foreground">
                 Nenhuma camada elétrica publicada ainda

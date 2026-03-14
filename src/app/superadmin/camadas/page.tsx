@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { InfrastructureLayerManager } from "@/components/superadmin/infrastructure-layer-manager";
+import {
+  getInfrastructureLayerSchemaCompatibility,
+  isInfrastructureLayerSchemaCompatError,
+} from "@/lib/infrastructure-layer-schema-compat";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +18,8 @@ export default async function SuperAdminInfrastructureLayersPage({
       ? resolvedSearchParams.tenantId
       : null;
 
+  const compatibility = await getInfrastructureLayerSchemaCompatibility();
+
   const [tenants, layers] = await Promise.all([
     prisma.tenant.findMany({
       orderBy: {
@@ -27,38 +33,47 @@ export default async function SuperAdminInfrastructureLayersPage({
         status: true,
       },
     }),
-    prisma.infrastructureLayer.findMany({
-      include: {
-        uploadedBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        authorizedTenants: {
-          include: {
-            tenant: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                state: true,
-                status: true,
+    compatibility.managementReady
+      ? prisma.infrastructureLayer
+          .findMany({
+            include: {
+              uploadedBy: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+              authorizedTenants: {
+                include: {
+                  tenant: {
+                    select: {
+                      id: true,
+                      name: true,
+                      slug: true,
+                      state: true,
+                      status: true,
+                    },
+                  },
+                },
+                orderBy: {
+                  tenant: {
+                    name: "asc",
+                  },
+                },
               },
             },
-          },
-          orderBy: {
-            tenant: {
-              name: "asc",
+            orderBy: {
+              createdAt: "desc",
             },
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    }),
+          })
+          .catch((error) => {
+            if (isInfrastructureLayerSchemaCompatError(error)) {
+              return [];
+            }
+            throw error;
+          })
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -85,6 +100,8 @@ export default async function SuperAdminInfrastructureLayersPage({
           createdAt: layer.createdAt.toISOString(),
         }))}
         preselectedTenantId={preselectedTenantId}
+        schemaReady={compatibility.managementReady}
+        schemaNotice={compatibility.notice}
       />
     </div>
   );

@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
       data: [...normalizedBaseLayers, ...normalizedInfrastructureLayers],
       compatibility: {
         publishedLayersReady: compatibility.publishedLayersReady,
-        notice: compatibility.notice,
+        notice: compatibility.publishedLayersReady ? null : compatibility.notice,
       },
     });
   } catch (error) {

@@ -16,6 +16,7 @@ import {
   isInfrastructureLayerCode,
   type InfrastructureLayerCodeId,
 } from "@/lib/infrastructure-layer-config";
+import { getInfrastructureLayerSchemaCompatibility } from "@/lib/infrastructure-layer-schema-compat";
 import { prisma } from "@/lib/prisma";
 import { enforceRequestRateLimit } from "@/lib/rate-limit";
 import {
@@ -430,6 +431,17 @@ export async function GET(request: Request) {
     const guardResponse = ensureSuperadmin(session);
     if (guardResponse) return guardResponse;
 
+    const compatibility = await getInfrastructureLayerSchemaCompatibility();
+    if (!compatibility.managementReady) {
+      return NextResponse.json(
+        {
+          error: compatibility.notice,
+          code: "INFRASTRUCTURE_SCHEMA_PENDING",
+        },
+        { status: 503 }
+      );
+    }
+
     const layers = await prisma.infrastructureLayer.findMany({
       include: layerListInclude,
       orderBy: {
@@ -465,6 +477,17 @@ export async function POST(request: Request) {
     const guardResponse = ensureSuperadmin(session);
     if (guardResponse) return guardResponse;
     const sessionUser = session!.user;
+
+    const compatibility = await getInfrastructureLayerSchemaCompatibility();
+    if (!compatibility.managementReady) {
+      return NextResponse.json(
+        {
+          error: compatibility.notice,
+          code: "INFRASTRUCTURE_SCHEMA_PENDING",
+        },
+        { status: 503 }
+      );
+    }
 
     const formData = await request.formData();
     const requestedCode = normalizeRequestedCode(formData.get("code"));
