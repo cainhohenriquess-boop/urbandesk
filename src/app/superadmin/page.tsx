@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getAccessBlockReason } from "@/lib/auth-shared";
+import { importTenantBaseLayerFromZip, type TenantBaseLayerType } from "@/lib/baselayer-import";
 
 // ─────────────────────────────────────────────
 // Força a página a ser dinâmica (evita cache da Vercel)
@@ -63,6 +64,32 @@ export default async function SuperAdminPage({
   
   const targetTenantId = typeof safeParams.tenantId === "string" ? safeParams.tenantId : null;
   const targetTenantName = typeof safeParams.tenantName === "string" ? safeParams.tenantName : "esta prefeitura";
+  const uploadError = typeof safeParams.uploadError === "string" ? safeParams.uploadError : "";
+  const uploadSuccess = typeof safeParams.uploadSuccess === "string" ? safeParams.uploadSuccess : "";
+
+  async function upsertTenantBaseLayer(
+    tenantId: string,
+    type: TenantBaseLayerType,
+    name: string,
+    geoJsonData: unknown
+  ) {
+    const existing = await prisma.baseLayer.findFirst({
+      where: { tenantId, type },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return prisma.baseLayer.update({
+        where: { id: existing.id },
+        data: { name, geoJsonData: geoJsonData as any },
+      });
+    }
+
+    return prisma.baseLayer.create({
+      data: { name, type, tenantId, geoJsonData: geoJsonData as any },
+    });
+  }
 
   // ─────────────────────────────────────────────
   // SERVER ACTION 1: Criar Prefeitura + Robô OSM
@@ -136,28 +163,85 @@ export default async function SuperAdminPage({
     const reason = getAccessBlockReason(session.user);
     if (reason) redirect(`/login?error=${reason}`);
 
-    try {
-      const shp = (await import("shpjs")).default;
-      const file = formData.get("file") as File;
-      const tenantId = formData.get("tenantId") as string;
-      const name = formData.get("name") as string;
-      const type = formData.get("type") as string;
+    const file = formData.get("file") as File;
+    const tenantId = formData.get("tenantId") as string;
+    const tenantNameFromForm = formData.get("tenantName") as string;
+    const name = formData.get("name") as string;
+    const type = formData.get("type") as TenantBaseLayerType;
+    const safeTenantName = tenantNameFromForm || targetTenantName;
 
-      if (!file || !tenantId || file.size === 0) return;
+    try {
+      if (!file || !tenantId || file.size === 0) {
+        redirect(`/superadmin?modal=upload&tenantId=${tenantId}&tenantName=${encodeURIComponent(safeTenantName)}&uploadError=${encodeURIComponent("Selecione um arquivo ZIP válido.")}`);
+      }
+
+      if (!["STREETS", "STREET_NAMES"].includes(type)) {
+        redirect(`/superadmin?modal=upload&tenantId=${tenantId}&tenantName=${encodeURIComponent(safeTenantName)}&uploadError=${encodeURIComponent("Selecione um tipo válido de camada municipal.")}`);
+      }
+
+      if (!file.name.toLowerCase().endsWith(".zip")) {
+        redirect(`/superadmin?modal=upload&tenantId=${tenantId}&tenantName=${encodeURIComponent(safeTenantName)}&uploadError=${encodeURIComponent("Envie a camada municipal em um arquivo .zip.")}`);
+      }
+
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: {
+          id: true,
+          name: true,
+          state: true,
+          baseLayers: {
+            where: { type: "BOUNDARY" },
+            orderBy: { createdAt: "asc" },
+            select: { geoJsonData: true },
+          },
+        },
+      });
+
+      if (!tenant) {
+        redirect("/superadmin?uploadError=Prefeitura não encontrada.");
+      }
 
       const buffer = await file.arrayBuffer();
-      const geojson = await shp(buffer);
-      const geoJsonData = Array.isArray(geojson) ? geojson[0] : geojson;
-
-      await prisma.baseLayer.create({
-        data: { name, type, tenantId, geoJsonData: geoJsonData as any }
+      const imported = await importTenantBaseLayerFromZip({
+        buffer,
+        type,
+        tenantName: tenant.name,
+        tenantState: tenant.state,
+        existingBoundaryGeoJson: tenant.baseLayers[0]?.geoJsonData,
       });
+
+      await upsertTenantBaseLayer(
+        tenantId,
+        type,
+        name || (type === "STREETS" ? "Arruamento Municipal" : "Nomes de ruas"),
+        imported.geoJsonData
+      );
+
+      if (imported.boundaryGeoJson) {
+        await upsertTenantBaseLayer(
+          tenantId,
+          "BOUNDARY",
+          `Limite Municipal (${imported.boundarySource === "IBGE" ? "IBGE" : "Base existente"})`,
+          imported.boundaryGeoJson
+        );
+      }
     } catch (error: any) {
       console.error("ERRO GRAVE SHAPEFILE:", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Falha ao processar o shapefile municipal.";
+      redirect(
+        `/superadmin?modal=upload&tenantId=${tenantId || targetTenantId || ""}&tenantName=${encodeURIComponent(safeTenantName)}&uploadError=${encodeURIComponent(message)}`
+      );
     }
     
     revalidatePath("/superadmin");
-    redirect("/superadmin");
+    redirect(
+      `/superadmin?uploadSuccess=${encodeURIComponent(
+        `Camada ${name || type} importada com sucesso para ${safeTenantName}.`
+      )}`
+    );
   }
 
   // ─────────────────────────────────────────────
@@ -265,6 +349,18 @@ export default async function SuperAdminPage({
           </Link>
         </div>
       </div>
+
+      {uploadSuccess && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-sm">
+          {uploadSuccess}
+        </div>
+      )}
+
+      {uploadError && !isUploadModalOpen && (
+        <div className="rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800 shadow-sm">
+          {uploadError}
+        </div>
+      )}
 
       {/* ── KPIs e Gráficos ── */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -384,9 +480,13 @@ export default async function SuperAdminPage({
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </Link>
 
+                        <Link href={`?modal=upload&tenantId=${tenant.id}&tenantName=${encodeURIComponent(tenant.name)}`} className="text-sky-700 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-md flex items-center gap-1 transition-colors">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h5l2 3h11v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" /></svg>
+                          Base GIS
+                        </Link>
                         <Link href={`/superadmin/camadas?tenantId=${tenant.id}`} className="text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-md flex items-center gap-1 transition-colors">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                          Camadas
+                          Elétrica
                         </Link>
                         <Link href={`/api/auth/impersonate?tenantId=${tenant.id}`} className="text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors flex items-center gap-1">
                           Acessar <span className="text-lg leading-none">→</span>
@@ -442,33 +542,98 @@ export default async function SuperAdminPage({
           </div>
         </div>
       )}
-
-      {/* ── MODAL 2: UPLOAD DE SHAPEFILE ── */}
+      {/* Modal 2: Upload de Base GIS Municipal */}
       {isUploadModalOpen && targetTenantId && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0f1e]/80 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="w-full max-w-md rounded-2xl border border-brand-500/30 bg-card p-6 shadow-2xl relative overflow-hidden">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="bg-brand-100 text-brand-600 p-2 rounded-lg">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0f1e]/80 p-4 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-xl rounded-2xl border border-sky-500/30 bg-card p-6 shadow-2xl">
+            <div className="mb-2 flex items-center gap-3">
+              <div className="rounded-lg bg-sky-100 p-2 text-sky-700">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h5l2 3h11v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                </svg>
               </div>
-              <h3 className="font-display text-xl font-bold text-foreground">Importar Base GIS</h3>
-            </div>
-            <p className="text-sm text-muted-foreground mb-6">
-              O upload de infraestrutura elétrica agora usa uma tela dedicada,
-              com validação estrutural do shapefile e autorização por prefeitura.
-            </p>
-
-            <div className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-4 text-sm text-brand-900">
-              Para publicar `PONNOT` e `PONT_ILUM`, use a nova área de camadas e
-              selecione as prefeituras autorizadas no mesmo fluxo.
+              <div>
+                <h3 className="font-display text-xl font-bold text-foreground">Importar Base GIS Municipal</h3>
+                <p className="text-sm text-muted-foreground">
+                  Arruamento e nomes de ruas com limite automático pela malha do IBGE.
+                </p>
+              </div>
             </div>
 
-            <div className="flex gap-3 pt-4 border-t border-border mt-6">
-              <Link href="/superadmin" className="flex-1 rounded-lg py-2.5 text-center text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">Cancelar</Link>
-              <Link href={`/superadmin/camadas?tenantId=${targetTenantId}`} className="flex-1 rounded-lg bg-brand-600 py-2.5 text-center text-sm font-bold text-white hover:bg-brand-700 shadow-md transition-colors">
-                Abrir publicação
-              </Link>
+            <div className="mb-5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              Prefeitura selecionada: <strong>{targetTenantName}</strong>
             </div>
+
+            {uploadError && (
+              <div className="mb-4 rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">
+                {uploadError}
+              </div>
+            )}
+
+            <form action={uploadShapefileAction} className="space-y-4">
+              <input type="hidden" name="tenantId" value={targetTenantId} />
+              <input type="hidden" name="tenantName" value={targetTenantName} />
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">
+                  Tipo da camada
+                </label>
+                <select
+                  name="type"
+                  required
+                  defaultValue="STREETS"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-all focus:border-sky-500"
+                >
+                  <option value="STREETS">Arruamento</option>
+                  <option value="STREET_NAMES">Textos dos nomes das ruas</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">
+                  Nome de exibição
+                </label>
+                <input
+                  name="name"
+                  type="text"
+                  placeholder="Ex.: Arruamento municipal"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-all focus:border-sky-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">
+                  Shapefile (.zip)
+                </label>
+                <input
+                  name="file"
+                  type="file"
+                  accept=".zip"
+                  required
+                  className="block w-full rounded-lg border border-dashed border-border bg-background px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-sky-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-sky-700 hover:file:bg-sky-200"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Envie o shapefile completo compactado em um único arquivo <code>.zip</code>. O recorte do município será feito pela API do IBGE.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                Use esta tela para <strong>Arruamento</strong> e <strong>Textos dos nomes das ruas</strong>.
+                Para <strong>PONNOT</strong> e <strong>PONT_ILUM</strong>, continue usando a área elétrica dedicada.
+              </div>
+
+              <div className="mt-6 flex gap-3 border-t border-border pt-4">
+                <Link href="/superadmin" className="flex-1 rounded-lg py-2.5 text-center text-sm font-medium text-muted-foreground transition-colors hover:bg-muted">
+                  Cancelar
+                </Link>
+                <Link href={`/superadmin/camadas?tenantId=${targetTenantId}`} className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
+                  Elétrica
+                </Link>
+                <button type="submit" className="flex-1 rounded-lg bg-sky-600 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-sky-700">
+                  Importar camada
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

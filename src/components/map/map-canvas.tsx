@@ -1103,29 +1103,59 @@ function MapCanvasInner({
                 )}
 
                 {layer.type === "STREET_NAMES" && (
-                  <Layer
-                    source={sourceId}
-                    id={`base-street-text-${layer.id}`}
-                    type="symbol"
-                    filter={["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]]}
-                    layout={{
-                      "text-field": [
-                        "coalesce",
-                        ["get", "name"],
-                        ["get", "NAME"],
-                        ["get", "NOME"],
-                        ["get", "Rua"],
-                        ["get", "VIA"],
-                      ],
-                      "text-size": 12,
-                      "symbol-placement": "line-center",
-                    }}
-                    paint={{
-                      "text-color": "#1e293b",
-                      "text-halo-color": "#ffffff",
-                      "text-halo-width": 1.8,
-                    }}
-                  />
+                  <>
+                    <Layer
+                      source={sourceId}
+                      id={`base-street-text-line-${layer.id}`}
+                      type="symbol"
+                      minzoom={13}
+                      filter={["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]]}
+                      layout={{
+                        "text-field": [
+                          "coalesce",
+                          ["get", "name"],
+                          ["get", "label"],
+                          ["get", "NAME"],
+                          ["get", "NOME"],
+                          ["get", "Rua"],
+                          ["get", "VIA"],
+                        ],
+                        "text-size": 12,
+                        "symbol-placement": "line-center",
+                      }}
+                      paint={{
+                        "text-color": "#1e293b",
+                        "text-halo-color": "#ffffff",
+                        "text-halo-width": 1.8,
+                      }}
+                    />
+                    <Layer
+                      source={sourceId}
+                      id={`base-street-text-point-${layer.id}`}
+                      type="symbol"
+                      minzoom={14}
+                      filter={["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]]}
+                      layout={{
+                        "text-field": [
+                          "coalesce",
+                          ["get", "name"],
+                          ["get", "label"],
+                          ["get", "NAME"],
+                          ["get", "NOME"],
+                          ["get", "Rua"],
+                          ["get", "VIA"],
+                        ],
+                        "text-size": 12,
+                        "text-anchor": "center",
+                        "text-max-width": 18,
+                      }}
+                      paint={{
+                        "text-color": "#1e293b",
+                        "text-halo-color": "#ffffff",
+                        "text-halo-width": 1.8,
+                      }}
+                    />
+                  </>
                 )}
 
                 {layer.type === "PONNOT" && (
