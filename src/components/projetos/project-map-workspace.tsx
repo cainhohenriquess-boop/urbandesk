@@ -61,9 +61,16 @@ import {
   type TechnicalObjectTypeId,
 } from "@/lib/project-disciplines";
 import {
+  INFRASTRUCTURE_LAYER_DESCRIPTIONS,
   INFRASTRUCTURE_LAYER_SHORT_LABELS,
   isInfrastructureLayerCode,
 } from "@/lib/infrastructure-layer-config";
+import {
+  collectInfrastructureLayerStatusOptions,
+  countInfrastructureLayerFeatures,
+  EMPTY_INFRASTRUCTURE_LAYER_FILTERS,
+  type InfrastructureLayerFeatureFilters,
+} from "@/lib/infrastructure-layer-map";
 import { getProjectOperationalStatusLabel } from "@/lib/project-labels";
 import { getDrainageTechnicalPanelStats } from "@/lib/drainage-technical-panel";
 import { getProjectStatusLabel } from "@/lib/project-portfolio";
@@ -651,6 +658,9 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const [inspectorForm, setInspectorForm] = useState<InspectorFormState>(EMPTY_FORM);
   const [technicalFieldValues, setTechnicalFieldValues] = useState<Record<string, string>>({});
   const [drainageFilters, setDrainageFilters] = useState<DrainageFilterState>(EMPTY_DRAINAGE_FILTERS);
+  const [infrastructureFilters, setInfrastructureFilters] = useState<InfrastructureLayerFeatureFilters>(
+    EMPTY_INFRASTRUCTURE_LAYER_FILTERS
+  );
   const [drainageCriticalityLocked, setDrainageCriticalityLocked] = useState(false);
   const [pavementWidthLocked, setPavementWidthLocked] = useState(false);
   const [pavementConditionLocked, setPavementConditionLocked] = useState(false);
@@ -707,6 +717,43 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           isInfrastructureLayerCode(layer.type)
       ),
     [baseLayersData]
+  );
+  const infrastructureStatusOptions = useMemo(
+    () => collectInfrastructureLayerStatusOptions(publishedBaseLayers),
+    [publishedBaseLayers]
+  );
+  const publishedBaseLayerSummaries = useMemo(
+    () =>
+      publishedBaseLayers.map((layer) => ({
+        ...layer,
+        filteredFeatureCount: countInfrastructureLayerFeatures(
+          layer.geoJsonData,
+          layer.type,
+          infrastructureFilters
+        ),
+      })),
+    [infrastructureFilters, publishedBaseLayers]
+  );
+  const totalInfrastructureFeatureCount = useMemo(
+    () =>
+      publishedBaseLayers.reduce(
+        (total, layer) =>
+          total +
+          countInfrastructureLayerFeatures(
+            layer.geoJsonData,
+            layer.type,
+            EMPTY_INFRASTRUCTURE_LAYER_FILTERS
+          ),
+        0
+      ),
+    [publishedBaseLayers]
+  );
+  const visibleInfrastructureFeatureCount = useMemo(
+    () =>
+      publishedBaseLayerSummaries
+        .filter((layer) => visibleBaseLayerIds.includes(layer.id))
+        .reduce((total, layer) => total + layer.filteredFeatureCount, 0),
+    [publishedBaseLayerSummaries, visibleBaseLayerIds]
   );
 
   useEffect(() => {
@@ -1999,8 +2046,77 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                           : "Mostrar publicadas"}
                       </button>
                     </div>
+                    <div className="mt-2 rounded-xl border border-border bg-muted/20 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-foreground">Filtros básicos</p>
+                        <span className="text-[11px] text-muted-foreground">
+                          {formatNumber(visibleInfrastructureFeatureCount)} de{" "}
+                          {formatNumber(totalInfrastructureFeatureCount)} feições visíveis
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {(
+                          [
+                            { value: "ALL", label: "Todas" },
+                            { value: "PONNOT", label: "PONNOT" },
+                            { value: "PONT_ILUM", label: "PONT_ILUM" },
+                          ] as Array<{
+                            value: InfrastructureLayerFeatureFilters["code"];
+                            label: string;
+                          }>
+                        ).map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() =>
+                              setInfrastructureFilters((current) => ({
+                                ...current,
+                                code: option.value,
+                              }))
+                            }
+                            className={cn(
+                              "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                              infrastructureFilters.code === option.value
+                                ? "border-brand-500 bg-brand-50 text-brand-700"
+                                : "border-border bg-background text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        <input
+                          value={infrastructureFilters.search}
+                          onChange={(event) =>
+                            setInfrastructureFilters((current) => ({
+                              ...current,
+                              search: event.target.value,
+                            }))
+                          }
+                          placeholder="Buscar por COD_ID, TXT_LUM, circuito ou município"
+                          className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+                        />
+                        <select
+                          value={infrastructureFilters.operationalStatus}
+                          onChange={(event) =>
+                            setInfrastructureFilters((current) => ({
+                              ...current,
+                              operationalStatus: event.target.value,
+                            }))
+                          }
+                          className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+                        >
+                          <option value="ALL">Todos os status</option>
+                          {infrastructureStatusOptions.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                     <div className="mt-2 space-y-2">
-                      {publishedBaseLayers.map((layer) => {
+                      {publishedBaseLayerSummaries.map((layer) => {
                         const isVisible = visibleBaseLayerIds.includes(layer.id);
                         const isElectricLight = layer.type === "PONT_ILUM";
 
@@ -2029,7 +2145,10 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                                 {INFRASTRUCTURE_LAYER_SHORT_LABELS[
                                   layer.type as "PONNOT" | "PONT_ILUM"
                                 ]}{" "}
-                                · {formatNumber(layer.featureCount ?? 0)} feições
+                                · {formatNumber(layer.filteredFeatureCount)} no filtro
+                                {layer.filteredFeatureCount !== (layer.featureCount ?? 0)
+                                  ? ` · ${formatNumber(layer.featureCount ?? 0)} total`
+                                  : ""}
                               </p>
                             </div>
                             <ProjectBadge
@@ -2039,6 +2158,37 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                           </button>
                         );
                       })}
+                    </div>
+                    <div className="mt-2 rounded-xl border border-border bg-background px-3 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        Legenda simples
+                      </p>
+                      <div className="mt-3 space-y-3">
+                        <div className="flex items-start gap-3">
+                          <span className="mt-1 h-3 w-3 rounded-full bg-teal-600" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground">PONNOT · Base de postes</p>
+                            <p className="text-xs text-muted-foreground">
+                              {INFRASTRUCTURE_LAYER_DESCRIPTIONS.PONNOT}
+                            </p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Rótulo em 3 linhas: <code>COD_ID</code>, <code>ESTR ALT/ESF</code> e <code>QTD_UCS</code>.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <span className="mt-1 h-3 w-3 rounded-full bg-amber-500" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground">PONT_ILUM · Iluminação pública</p>
+                            <p className="text-xs text-muted-foreground">
+                              {INFRASTRUCTURE_LAYER_DESCRIPTIONS.PONT_ILUM}
+                            </p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Texto visível no mapa usando exatamente <code>TXT_LUM</code>.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ) : null}
@@ -2265,6 +2415,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
               showFullscreenButton={false}
               showDrawHint={false}
               visibleFeatureIds={visibleFeatureIds}
+              infrastructureFilters={infrastructureFilters}
             />
           </div>
         </section>

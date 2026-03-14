@@ -17,7 +17,13 @@ import {
   splitLineFeature,
   translateFeature,
 } from "@/lib/map-workspace-tools";
+import {
+  EMPTY_INFRASTRUCTURE_LAYER_FILTERS,
+  filterInfrastructureLayerCollection,
+  type InfrastructureLayerFeatureFilters,
+} from "@/lib/infrastructure-layer-map";
 import { readDrainageSegmentFieldValue } from "@/lib/drainage-segment";
+import { isInfrastructureLayerCode } from "@/lib/infrastructure-layer-config";
 import { getTechnicalObjectLabel } from "@/lib/project-disciplines";
 import { cn } from "@/lib/utils";
 import { useMapStore } from "@/store/useMapStore";
@@ -530,6 +536,7 @@ type MapCanvasProps = {
   showFullscreenButton?: boolean;
   showDrawHint?: boolean;
   visibleFeatureIds?: string[];
+  infrastructureFilters?: InfrastructureLayerFeatureFilters;
 };
 
 export function MapCanvas(props: MapCanvasProps) {
@@ -543,6 +550,7 @@ function MapCanvasInner({
   showFullscreenButton = true,
   showDrawHint = true,
   visibleFeatureIds,
+  infrastructureFilters = EMPTY_INFRASTRUCTURE_LAYER_FILTERS,
 }: MapCanvasProps = {}) {
   const {
     features,
@@ -592,9 +600,15 @@ function MapCanvasInner({
       id: layer.id,
       name: layer.name,
       type: layer.type,
-      data: parseBaseLayerGeoJson(layer.geoJsonData),
+      data: isInfrastructureLayerCode(layer.type)
+        ? filterInfrastructureLayerCollection(
+            layer.geoJsonData,
+            layer.type,
+            infrastructureFilters
+          )
+        : parseBaseLayerGeoJson(layer.geoJsonData),
     }));
-  }, [baseLayersData]);
+  }, [baseLayersData, infrastructureFilters]);
 
   useEffect(() => {
     setUtmWarning(detectPotentialUtm(baseLayersSafe.map((layer) => layer.data)));
@@ -1177,19 +1191,13 @@ function MapCanvasInner({
                       source={sourceId}
                       id={`infra-ponnot-label-${layer.id}`}
                       type="symbol"
+                      minzoom={15}
                       filter={["==", ["geometry-type"], "Point"]}
                       layout={{
                         "text-field": [
                           "coalesce",
                           ["get", "labelMultiline"],
-                          ["get", "labelShort"],
-                          ["get", "label"],
                           ["get", "COD_ID"],
-                          ["get", "NOME"],
-                          ["get", "name"],
-                          ["get", "CODIGO"],
-                          ["get", "codigo"],
-                          layer.name,
                         ],
                         "text-size": 11,
                         "text-offset": [0, 1.35],
