@@ -9,7 +9,14 @@ import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit
 import { enforceRequestRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import { requireJsonContentType } from "@/lib/request-guards";
-import { normalizeTechnicalAttributes } from "@/lib/project-disciplines";
+import {
+  getTechnicalFieldsForContext,
+  normalizeTechnicalAttributes,
+  readTechnicalFieldValues,
+  resolveTechnicalArea,
+  resolveTechnicalObjectType,
+  validateTechnicalFieldValues,
+} from "@/lib/project-disciplines";
 
 const ALLOWED_ASSET_TYPES = ["PONTO", "TRECHO", "AREA"] as const;
 type AllowedAssetType = (typeof ALLOWED_ASSET_TYPES)[number];
@@ -77,6 +84,17 @@ function sanitizePhotoArray(value: unknown): string[] {
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
+}
+
+function validateNormalizedTechnicalAttributes(attributes: Record<string, unknown>) {
+  const technicalArea = resolveTechnicalArea(null, attributes, null);
+  const technicalObjectType = resolveTechnicalObjectType(null, attributes);
+  const fields = getTechnicalFieldsForContext(technicalArea, technicalObjectType);
+
+  if (fields.length === 0) return [];
+
+  const values = readTechnicalFieldValues(fields, attributes);
+  return validateTechnicalFieldValues(fields, values);
 }
 
 function normalizeClientRef(value: unknown): string | null {
@@ -401,6 +419,13 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    const technicalErrors = validateNormalizedTechnicalAttributes(normalizedAttributes);
+    if (technicalErrors.length > 0) {
+      return NextResponse.json(
+        { error: "Ficha técnica incompleta.", details: technicalErrors },
+        { status: 400 }
+      );
+    }
     const requestPhotos = sanitizePhotoArray(body.photos);
     const attributePhotos = sanitizePhotoArray(normalizedAttributes.photos);
     const photos = requestPhotos.length > 0 ? requestPhotos : attributePhotos;
@@ -637,6 +662,13 @@ export async function PATCH(req: NextRequest) {
       } catch (error) {
         return NextResponse.json(
           { error: error instanceof Error ? error.message : "Atributos técnicos inválidos." },
+          { status: 400 }
+        );
+      }
+      const technicalErrors = validateNormalizedTechnicalAttributes(normalizedAttributes);
+      if (technicalErrors.length > 0) {
+        return NextResponse.json(
+          { error: "Ficha técnica incompleta.", details: technicalErrors },
           { status: 400 }
         );
       }

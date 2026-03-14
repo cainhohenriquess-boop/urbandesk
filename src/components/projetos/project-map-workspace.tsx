@@ -12,9 +12,18 @@ import {
   ProjectBadge,
   ProjectEmptyBlock,
 } from "@/components/projetos/project-detail-components";
+import { ProjectDrainageSegmentForm } from "@/components/projetos/project-drainage-segment-form";
 import { ProjectMapDisciplineToolset } from "@/components/projetos/project-map-discipline-toolset";
 import { ProjectMapGlobalToolbar } from "@/components/projetos/project-map-global-toolbar";
 import { ProjectMapTechnicalForm } from "@/components/projetos/project-map-technical-form";
+import {
+  buildDrainageSegmentAssistAttributes,
+  buildDrainageSegmentAutoContext,
+  buildDrainageSegmentSuggestedName,
+  isDrainageSegmentObjectType,
+  mergeDrainageSegmentDefaultValues,
+  type DrainageSegmentUserContext,
+} from "@/lib/drainage-segment";
 import {
   importGeoJsonFeatures,
   joinLineFeatures,
@@ -60,6 +69,7 @@ type ProjectMapWorkspaceProject = {
   operationalStatus: ProjectOperationalStatus;
   responsibleDepartment: string | null;
   neighborhood: string | null;
+  district: string | null;
   region: string | null;
   technicalAreas: ProjectTechnicalArea[];
   _count: {
@@ -72,6 +82,7 @@ type ProjectMapWorkspaceProject = {
 
 type ProjectMapWorkspaceProps = {
   project: ProjectMapWorkspaceProject;
+  currentUser: DrainageSegmentUserContext;
 };
 
 type AssetLogRecord = {
@@ -509,7 +520,7 @@ function PanelSection({
     </section>
   );
 }
-export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
+export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspaceProps) {
   const {
     features,
     unsavedCount,
@@ -675,6 +686,42 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
     [features, selectedId]
   );
 
+  const drainageSegmentAutoContext = useMemo(() => {
+    const source = pendingFeature ?? selectedFeature;
+    if (!source) return null;
+
+    const context = getFeatureTechnicalContext(source, effectiveTechnicalArea);
+    if (!isDrainageSegmentObjectType(context.technicalObjectType)) {
+      return null;
+    }
+
+    return buildDrainageSegmentAutoContext({
+      feature: source,
+      baseLayersData,
+      project: {
+        id: project.id,
+        name: project.name,
+        code: project.code,
+        neighborhood: project.neighborhood,
+        district: project.district,
+        region: project.region,
+      },
+      currentUser,
+    });
+  }, [
+    baseLayersData,
+    currentUser,
+    effectiveTechnicalArea,
+    pendingFeature,
+    project.code,
+    project.district,
+    project.id,
+    project.name,
+    project.neighborhood,
+    project.region,
+    selectedFeature,
+  ]);
+
   useEffect(() => {
     const contextSource = pendingFeature ?? selectedFeature;
     if (!contextSource) return;
@@ -740,15 +787,36 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
         context.technicalArea ?? effectiveTechnicalArea,
         context.technicalObjectType
       );
+      const nextTechnicalValues = isDrainageSegmentObjectType(context.technicalObjectType)
+        ? mergeDrainageSegmentDefaultValues(
+            readTechnicalFieldValues(fields, pendingFeature.attributes)
+          )
+        : readTechnicalFieldValues(fields, pendingFeature.attributes);
+      const suggestedName =
+        isDrainageSegmentObjectType(context.technicalObjectType) && drainageSegmentAutoContext
+          ? buildDrainageSegmentSuggestedName(drainageSegmentAutoContext)
+          : "";
+
       setInspectorForm({
-        name: "",
+        name: readStringAttribute(pendingFeature.attributes, ["name"]) || suggestedName,
         description: readStringAttribute(pendingFeature.attributes, ["description", "obs", "notes"]),
-        status: readStringAttribute(pendingFeature.attributes, ["status"]),
-        front: readStringAttribute(pendingFeature.attributes, ["frente", "area", "fase"]),
-        responsible: readStringAttribute(pendingFeature.attributes, ["responsavel", "responsible"]),
+        status:
+          readStringAttribute(pendingFeature.attributes, ["status"]) ||
+          (isDrainageSegmentObjectType(context.technicalObjectType)
+            ? nextTechnicalValues.operationalStatus ?? ""
+            : ""),
+        front:
+          readStringAttribute(pendingFeature.attributes, ["frente", "area", "fase"]) ||
+          project.responsibleDepartment ||
+          "",
+        responsible:
+          readStringAttribute(pendingFeature.attributes, ["responsavel", "responsible"]) ||
+          currentUser.name ||
+          currentUser.email ||
+          "",
         notes: readStringAttribute(pendingFeature.attributes, ["notes", "obs"]),
       });
-      setTechnicalFieldValues(readTechnicalFieldValues(fields, pendingFeature.attributes));
+      setTechnicalFieldValues(nextTechnicalValues);
       return;
     }
 
@@ -760,10 +828,18 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
         context.technicalArea ?? effectiveTechnicalArea,
         context.technicalObjectType
       );
+      const nextTechnicalValues = isDrainageSegmentObjectType(context.technicalObjectType)
+        ? mergeDrainageSegmentDefaultValues(readTechnicalFieldValues(fields, attributes))
+        : readTechnicalFieldValues(fields, attributes);
+      const suggestedName =
+        isDrainageSegmentObjectType(context.technicalObjectType) && drainageSegmentAutoContext
+          ? buildDrainageSegmentSuggestedName(drainageSegmentAutoContext)
+          : "";
+
       setInspectorForm({
         name: preferLocalValues
-          ? selectedFeature.label ?? selectedDetail?.name ?? ""
-          : selectedDetail?.name ?? selectedFeature.label ?? "",
+          ? selectedFeature.label ?? selectedDetail?.name ?? suggestedName
+          : selectedDetail?.name ?? selectedFeature.label ?? suggestedName,
         description: preferLocalValues
           ? selectedFeature.description ??
             selectedDetail?.description ??
@@ -771,18 +847,31 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
           : selectedDetail?.description ??
             selectedFeature.description ??
             readStringAttribute(attributes, ["description", "obs", "notes"]),
-        status: readStringAttribute(attributes, ["status"]),
+        status:
+          readStringAttribute(attributes, ["status"]) ||
+          (isDrainageSegmentObjectType(context.technicalObjectType)
+            ? nextTechnicalValues.operationalStatus ?? ""
+            : ""),
         front: readStringAttribute(attributes, ["frente", "area", "fase"]),
         responsible: readStringAttribute(attributes, ["responsavel", "responsible"]),
         notes: readStringAttribute(attributes, ["notes", "obs"]),
       });
-      setTechnicalFieldValues(readTechnicalFieldValues(fields, attributes));
+      setTechnicalFieldValues(nextTechnicalValues);
       return;
     }
 
     setInspectorForm(EMPTY_FORM);
     setTechnicalFieldValues({});
-  }, [pendingFeature, selectedDetail, selectedFeature, effectiveTechnicalArea]);
+  }, [
+    currentUser.email,
+    currentUser.name,
+    drainageSegmentAutoContext,
+    effectiveTechnicalArea,
+    pendingFeature,
+    project.responsibleDepartment,
+    selectedDetail,
+    selectedFeature,
+  ]);
 
   useEffect(() => {
     setCommentDraft("");
@@ -1080,17 +1169,40 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
       }
 
       const technicalData = buildTechnicalDataPayload(fieldDefinitions, technicalFieldValues);
+      const isDrainageSegment = isDrainageSegmentObjectType(context.technicalObjectType);
+      const assistedDrainageAttributes =
+        isDrainageSegment && drainageSegmentAutoContext
+          ? buildDrainageSegmentAssistAttributes(drainageSegmentAutoContext)
+          : {};
+
+      if (isDrainageSegment) {
+        if (!drainageSegmentAutoContext) {
+          window.alert("Não foi possível montar o contexto assistido do trecho de drenagem.");
+          return;
+        }
+
+        if (!Number.isFinite(drainageSegmentAutoContext.lengthMeters) || drainageSegmentAutoContext.lengthMeters <= 0) {
+          window.alert("Finalize uma geometria válida para calcular o comprimento do trecho.");
+          return;
+        }
+      }
+
       nextAttributes = normalizeTechnicalAttributes(
         compactAttributes({
           ...((selectedFeature?.attributes ?? pendingFeature?.attributes ?? {}) as Record<
             string,
             unknown
           >),
-          status: inspectorForm.status,
+          status:
+            inspectorForm.status ||
+            (typeof technicalData.operationalStatus === "string"
+              ? technicalData.operationalStatus
+              : ""),
           frente: inspectorForm.front,
           responsavel: inspectorForm.responsible,
           notes: inspectorForm.notes,
           description: inspectorForm.description,
+          ...assistedDrainageAttributes,
           ...(fieldArea ? { technicalArea: fieldArea } : {}),
           ...(context.technicalObjectType
             ? {
@@ -1111,7 +1223,12 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
     }
 
     if (pendingFeature) {
-      confirmPendingFeature(nextAttributes, inspectorForm.name.trim() || undefined);
+      const fallbackName =
+        isDrainageSegmentObjectType(inspectorContext?.technicalObjectType ?? null) &&
+        drainageSegmentAutoContext
+          ? buildDrainageSegmentSuggestedName(drainageSegmentAutoContext)
+          : undefined;
+      confirmPendingFeature(nextAttributes, inspectorForm.name.trim() || fallbackName || undefined);
       return;
     }
 
@@ -1119,7 +1236,13 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
 
     const nextFeature: DrawnFeature = {
       ...selectedFeature,
-      label: inspectorForm.name.trim() || selectedFeature.label || "Ativo sem nome",
+      label:
+        inspectorForm.name.trim() ||
+        selectedFeature.label ||
+        (isDrainageSegmentObjectType(inspectorContext?.technicalObjectType ?? null) &&
+        drainageSegmentAutoContext
+          ? buildDrainageSegmentSuggestedName(drainageSegmentAutoContext)
+          : "Ativo sem nome"),
       description: inspectorForm.description.trim() || null,
       attributes: nextAttributes,
     };
@@ -1232,6 +1355,10 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
     const source = pendingFeature ?? selectedFeature;
     return source ? getFeatureTechnicalContext(source, effectiveTechnicalArea) : null;
   }, [effectiveTechnicalArea, pendingFeature, selectedFeature]);
+
+  const isDrainageSegmentInspector = isDrainageSegmentObjectType(
+    inspectorContext?.technicalObjectType ?? null
+  );
 
   const measurementLabel = useMemo(() => {
     if (workspaceTool === "MEASURE_DISTANCE" && measurementPoints.length >= 2) {
@@ -1632,24 +1759,47 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
                       ) : null}
                     </div>
                   ) : null}
-                  <div className="grid gap-3">
-                    <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome técnico do item" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                    <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição ou escopo técnico" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                    <input value={inspectorForm.status} onChange={(event) => setInspectorForm((current) => ({ ...current, status: event.target.value }))} placeholder="Status técnico" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                    <input value={inspectorForm.front} onChange={(event) => setInspectorForm((current) => ({ ...current, front: event.target.value }))} placeholder="Frente, fase ou área" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                    <input value={inspectorForm.responsible} onChange={(event) => setInspectorForm((current) => ({ ...current, responsible: event.target.value }))} placeholder="Responsável técnico" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                    <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações operacionais" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                  </div>
-                  <ProjectMapTechnicalForm
-                    fields={activeTechnicalFields}
-                    values={technicalFieldValues}
-                    onChange={(key, value) =>
-                      setTechnicalFieldValues((current) => ({
-                        ...current,
-                        [key]: value,
-                      }))
-                    }
-                  />
+                  {isDrainageSegmentInspector ? (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome sugerido do trecho" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Escopo, observação inicial ou contexto da drenagem" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Notas complementares da vistoria ou do desenho" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectDrainageSegmentForm
+                        autoContext={drainageSegmentAutoContext}
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={(key, value) =>
+                          setTechnicalFieldValues((current) => ({
+                            ...current,
+                            [key]: value,
+                          }))
+                        }
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome técnico do item" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição ou escopo técnico" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <input value={inspectorForm.status} onChange={(event) => setInspectorForm((current) => ({ ...current, status: event.target.value }))} placeholder="Status técnico" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <input value={inspectorForm.front} onChange={(event) => setInspectorForm((current) => ({ ...current, front: event.target.value }))} placeholder="Frente, fase ou área" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <input value={inspectorForm.responsible} onChange={(event) => setInspectorForm((current) => ({ ...current, responsible: event.target.value }))} placeholder="Responsável técnico" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações operacionais" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectMapTechnicalForm
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={(key, value) =>
+                          setTechnicalFieldValues((current) => ({
+                            ...current,
+                            [key]: value,
+                          }))
+                        }
+                      />
+                    </>
+                  )}
                   <div className="flex gap-2">
                     <button onClick={cancelPendingFeature} className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-muted">Cancelar</button>
                     <button onClick={handleInspectorSave} className="flex-1 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-500">Adicionar ao workspace</button>
@@ -1675,24 +1825,47 @@ export function ProjectMapWorkspace({ project }: ProjectMapWorkspaceProps) {
                     <ProjectBadge label={featureMetricLabel(selectedFeature)} tone="brand" />
                   </div>
 
-                  <div className="grid gap-3">
-                    <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome do item" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                    <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição técnica" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                    <input value={inspectorForm.status} onChange={(event) => setInspectorForm((current) => ({ ...current, status: event.target.value }))} placeholder="Status técnico" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                    <input value={inspectorForm.front} onChange={(event) => setInspectorForm((current) => ({ ...current, front: event.target.value }))} placeholder="Frente, fase ou área" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                    <input value={inspectorForm.responsible} onChange={(event) => setInspectorForm((current) => ({ ...current, responsible: event.target.value }))} placeholder="Responsável técnico" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                    <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações operacionais" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
-                  </div>
-                  <ProjectMapTechnicalForm
-                    fields={activeTechnicalFields}
-                    values={technicalFieldValues}
-                    onChange={(key, value) =>
-                      setTechnicalFieldValues((current) => ({
-                        ...current,
-                        [key]: value,
-                      }))
-                    }
-                  />
+                  {isDrainageSegmentInspector ? (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome sugerido do trecho" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição técnica do trecho" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações operacionais, manutenção ou vistoria" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectDrainageSegmentForm
+                        autoContext={drainageSegmentAutoContext}
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={(key, value) =>
+                          setTechnicalFieldValues((current) => ({
+                            ...current,
+                            [key]: value,
+                          }))
+                        }
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome do item" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição técnica" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <input value={inspectorForm.status} onChange={(event) => setInspectorForm((current) => ({ ...current, status: event.target.value }))} placeholder="Status técnico" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <input value={inspectorForm.front} onChange={(event) => setInspectorForm((current) => ({ ...current, front: event.target.value }))} placeholder="Frente, fase ou área" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <input value={inspectorForm.responsible} onChange={(event) => setInspectorForm((current) => ({ ...current, responsible: event.target.value }))} placeholder="Responsável técnico" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações operacionais" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectMapTechnicalForm
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={(key, value) =>
+                          setTechnicalFieldValues((current) => ({
+                            ...current,
+                            [key]: value,
+                          }))
+                        }
+                      />
+                    </>
+                  )}
 
                   <div className="flex gap-2">
                     <button onClick={() => setSelectedId(null)} className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-muted">Fechar</button>
