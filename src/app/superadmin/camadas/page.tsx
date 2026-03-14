@@ -7,6 +7,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const tenantSummarySelect = {
+  id: true,
+  name: true,
+  slug: true,
+  state: true,
+  status: true,
+} as const;
+
 export default async function SuperAdminInfrastructureLayersPage({
   searchParams,
 }: {
@@ -20,23 +28,20 @@ export default async function SuperAdminInfrastructureLayersPage({
 
   const compatibility = await getInfrastructureLayerSchemaCompatibility();
 
-  const [tenants, layers] = await Promise.all([
+  const [tenants, layers, uploads] = await Promise.all([
     prisma.tenant.findMany({
       orderBy: {
         name: "asc",
       },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        state: true,
-        status: true,
-      },
+      select: tenantSummarySelect,
     }),
     compatibility.managementReady
       ? prisma.infrastructureLayer
           .findMany({
             include: {
+              ownerTenant: {
+                select: tenantSummarySelect,
+              },
               uploadedBy: {
                 select: {
                   id: true,
@@ -47,13 +52,7 @@ export default async function SuperAdminInfrastructureLayersPage({
               authorizedTenants: {
                 include: {
                   tenant: {
-                    select: {
-                      id: true,
-                      name: true,
-                      slug: true,
-                      state: true,
-                      status: true,
-                    },
+                    select: tenantSummarySelect,
                   },
                 },
                 orderBy: {
@@ -74,6 +73,55 @@ export default async function SuperAdminInfrastructureLayersPage({
             throw error;
           })
       : Promise.resolve([]),
+    compatibility.managementReady
+      ? prisma.infrastructureLayerUpload
+          .findMany({
+            include: {
+              ownerTenant: {
+                select: tenantSummarySelect,
+              },
+              uploadedBy: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+              finalLayer: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  status: true,
+                  featureCount: true,
+                  createdAt: true,
+                },
+              },
+              authorizedTenants: {
+                include: {
+                  tenant: {
+                    select: tenantSummarySelect,
+                  },
+                },
+                orderBy: {
+                  tenant: {
+                    name: "asc",
+                  },
+                },
+              },
+            },
+            orderBy: {
+              uploadedAt: "desc",
+            },
+            take: 50,
+          })
+          .catch((error) => {
+            if (isInfrastructureLayerSchemaCompatError(error)) {
+              return [];
+            }
+            throw error;
+          })
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -86,10 +134,10 @@ export default async function SuperAdminInfrastructureLayersPage({
           Publicação de camadas elétricas
         </h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Faça upload dos shapefiles `PONNOT` e `PONT_ILUM`, valide o pacote,
-          vincule as prefeituras autorizadas e disponibilize essas camadas no
-          mapa institucional sem misturar com as baselayers próprias de cada
-          município.
+          Faça upload dos shapefiles <code>PONNOT</code> e{" "}
+          <code>PONT_ILUM</code>, valide o pacote, vincule as prefeituras
+          autorizadas e disponibilize essas camadas no mapa institucional sem
+          misturar com as baselayers próprias de cada município.
         </p>
       </div>
 
@@ -99,6 +147,19 @@ export default async function SuperAdminInfrastructureLayersPage({
           ...layer,
           createdAt: layer.createdAt.toISOString(),
         }))}
+        uploads={uploads.map((upload) => ({
+          ...upload,
+          uploadedAt: upload.uploadedAt.toISOString(),
+          processedAt: upload.processedAt?.toISOString() ?? null,
+          createdAt: upload.createdAt.toISOString(),
+          updatedAt: upload.updatedAt.toISOString(),
+          finalLayer: upload.finalLayer
+            ? {
+                ...upload.finalLayer,
+                createdAt: upload.finalLayer.createdAt.toISOString(),
+              }
+            : null,
+        }))}
         preselectedTenantId={preselectedTenantId}
         schemaReady={compatibility.managementReady}
         schemaNotice={compatibility.notice}
@@ -106,3 +167,4 @@ export default async function SuperAdminInfrastructureLayersPage({
     </div>
   );
 }
+

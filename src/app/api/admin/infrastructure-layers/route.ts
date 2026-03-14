@@ -30,8 +30,18 @@ export const dynamic = "force-dynamic";
 
 const MAX_ARCHIVE_SIZE = 50 * 1024 * 1024;
 const tenantIdSchema = z.string().cuid();
+const tenantSummarySelect = {
+  id: true,
+  name: true,
+  slug: true,
+  state: true,
+  status: true,
+} satisfies Prisma.TenantSelect;
 
 const layerListInclude = {
+  ownerTenant: {
+    select: tenantSummarySelect,
+  },
   uploadedBy: {
     select: {
       id: true,
@@ -42,13 +52,7 @@ const layerListInclude = {
   authorizedTenants: {
     include: {
       tenant: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          state: true,
-          status: true,
-        },
+        select: tenantSummarySelect,
       },
     },
     orderBy: {
@@ -58,6 +62,41 @@ const layerListInclude = {
     },
   },
 } satisfies Prisma.InfrastructureLayerInclude;
+
+const uploadListInclude = {
+  ownerTenant: {
+    select: tenantSummarySelect,
+  },
+  uploadedBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  finalLayer: {
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      status: true,
+      featureCount: true,
+      createdAt: true,
+    },
+  },
+  authorizedTenants: {
+    include: {
+      tenant: {
+        select: tenantSummarySelect,
+      },
+    },
+    orderBy: {
+      tenant: {
+        name: "asc",
+      },
+    },
+  },
+} satisfies Prisma.InfrastructureLayerUploadInclude;
 
 type SessionLike = {
   user: {
@@ -442,14 +481,23 @@ export async function GET(request: Request) {
       );
     }
 
-    const layers = await prisma.infrastructureLayer.findMany({
-      include: layerListInclude,
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+    const [layers, uploads] = await Promise.all([
+      prisma.infrastructureLayer.findMany({
+        include: layerListInclude,
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
+      prisma.infrastructureLayerUpload.findMany({
+        include: uploadListInclude,
+        orderBy: {
+          uploadedAt: "desc",
+        },
+        take: 50,
+      }),
+    ]);
 
-    return NextResponse.json({ data: layers });
+    return NextResponse.json({ data: { layers, uploads } });
   } catch (error) {
     console.error("[INFRASTRUCTURE_LAYER_LIST_ERROR]", error);
     return NextResponse.json(
@@ -728,13 +776,15 @@ export async function POST(request: Request) {
       },
     });
 
+    const upload = await prisma.infrastructureLayerUpload.findUniqueOrThrow({
+      where: { id: uploadId },
+      include: uploadListInclude,
+    });
+
     return NextResponse.json({
       success: true,
       data: created,
-      upload: {
-        id: uploadId,
-        status: "PROCESSED",
-      },
+      upload,
     });
   } catch (error) {
     console.error("[INFRASTRUCTURE_LAYER_UPLOAD_ERROR]", error);
