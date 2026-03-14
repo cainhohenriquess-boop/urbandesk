@@ -9,6 +9,7 @@ import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit
 import { enforceRequestRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import { requireJsonContentType } from "@/lib/request-guards";
+import { normalizeTechnicalAttributes } from "@/lib/project-disciplines";
 
 const ALLOWED_ASSET_TYPES = ["PONTO", "TRECHO", "AREA"] as const;
 type AllowedAssetType = (typeof ALLOWED_ASSET_TYPES)[number];
@@ -391,16 +392,25 @@ export async function POST(req: NextRequest) {
     }
 
     const rawAttributes = toPlainObject(body.attributes);
+    let normalizedAttributes: Record<string, unknown>;
+    try {
+      normalizedAttributes = normalizeTechnicalAttributes(rawAttributes);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Atributos técnicos inválidos." },
+        { status: 400 }
+      );
+    }
     const requestPhotos = sanitizePhotoArray(body.photos);
-    const attributePhotos = sanitizePhotoArray(rawAttributes.photos);
+    const attributePhotos = sanitizePhotoArray(normalizedAttributes.photos);
     const photos = requestPhotos.length > 0 ? requestPhotos : attributePhotos;
 
     const headerClientRef = normalizeClientRef(req.headers.get("x-offline-client-ref"));
-    const attributeClientRef = normalizeClientRef(rawAttributes.clientRef);
+    const attributeClientRef = normalizeClientRef(normalizedAttributes.clientRef);
     const bodyClientRef = normalizeClientRef(body.clientRef);
     const clientRef = headerClientRef ?? attributeClientRef ?? bodyClientRef;
 
-    const normalizedAttributes: Record<string, unknown> = { ...rawAttributes };
+    normalizedAttributes = { ...normalizedAttributes };
     if (clientRef) normalizedAttributes.clientRef = clientRef;
     if (clientRef && !normalizedAttributes.source) normalizedAttributes.source = "campo";
     if (photos.length > 0) normalizedAttributes.photos = photos;
@@ -621,7 +631,16 @@ export async function PATCH(req: NextRequest) {
 
     if (body.attributes !== undefined) {
       const attrs = toPlainObject(body.attributes);
-      updateData.attributes = attrs as Prisma.InputJsonValue;
+      let normalizedAttributes: Record<string, unknown>;
+      try {
+        normalizedAttributes = normalizeTechnicalAttributes(attrs);
+      } catch (error) {
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : "Atributos técnicos inválidos." },
+          { status: 400 }
+        );
+      }
+      updateData.attributes = normalizedAttributes as Prisma.InputJsonValue;
       changedFields.push("attributes");
     }
 

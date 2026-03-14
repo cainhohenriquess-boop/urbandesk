@@ -17,6 +17,7 @@ import {
   splitLineFeature,
   translateFeature,
 } from "@/lib/map-workspace-tools";
+import { getTechnicalObjectLabel } from "@/lib/project-disciplines";
 import { cn } from "@/lib/utils";
 import { useMapStore } from "@/store/useMapStore";
 
@@ -151,6 +152,27 @@ const ASSET_STYLES = {
     ring: "ring-amber-600/50",
     icon: "🚧",
     label: "Buraco",
+  },
+  LUMINARIA: {
+    color: "bg-yellow-500",
+    hex: "#eab308",
+    ring: "ring-yellow-500/50",
+    icon: "*",
+    label: "Lumin?ria",
+  },
+  PONTO_FISCALIZACAO: {
+    color: "bg-violet-500",
+    hex: "#8b5cf6",
+    ring: "ring-violet-500/50",
+    icon: "!",
+    label: "Ponto de fiscaliza??o",
+  },
+  EQUIPAMENTO_OBRA: {
+    color: "bg-stone-500",
+    hex: "#78716c",
+    ring: "ring-stone-500/50",
+    icon: "#",
+    label: "Equipamento de obra",
   },
 } as const;
 
@@ -322,6 +344,7 @@ function MapCanvasInner({
     features,
     drawMode,
     workspaceTool,
+    activeTechnicalObjectType,
     snapEnabled,
     measurementPoints,
     addMeasurementPoint,
@@ -678,30 +701,35 @@ function MapCanvasInner({
 
   const drawHint = useMemo(() => {
     if (drawMode === "line") {
-      return "Clique para adicionar vértices. Botão direito finaliza o trecho.";
+      return activeTechnicalObjectType
+        ? `Clique no mapa para desenhar ${getTechnicalObjectLabel(activeTechnicalObjectType)}. Bot?o direito finaliza o trecho.`
+        : "Clique para adicionar v?rtices. Bot?o direito finaliza o trecho.";
     }
     if (drawMode === "polygon") {
-      return "Clique para adicionar vértices. Botão direito fecha a área.";
+      return activeTechnicalObjectType
+        ? `Clique no mapa para desenhar ${getTechnicalObjectLabel(activeTechnicalObjectType)}. Bot?o direito fecha a ?rea.`
+        : "Clique para adicionar v?rtices. Bot?o direito fecha a ?rea.";
     }
     if (drawMode !== "SELECT") {
-      return `Clique no mapa para lançar ${
-        ASSET_STYLES[drawMode as keyof typeof ASSET_STYLES]?.label || drawMode
+      return `Clique no mapa para lan?ar ${
+        ASSET_STYLES[drawMode as keyof typeof ASSET_STYLES]?.label ||
+        getTechnicalObjectLabel(drawMode)
       }.`;
     }
 
     switch (workspaceTool) {
       case "EDIT_GEOMETRY":
         return selectedGeometry
-          ? "Arraste os vértices em vermelho para editar a geometria selecionada."
-          : "Selecione um trecho ou área para editar a geometria.";
+          ? "Arraste os v?rtices em vermelho para editar a geometria selecionada."
+          : "Selecione um trecho ou ?rea para editar a geometria.";
       case "MOVE":
         return selectedFeature
-          ? "Arraste a alça vermelha para mover o objeto selecionado."
+          ? "Arraste a al?a vermelha para mover o objeto selecionado."
           : "Selecione um objeto para mover.";
       case "MEASURE_DISTANCE":
-        return "Clique no mapa para medir distância. Botão direito limpa a medição.";
+        return "Clique no mapa para medir dist?ncia. Bot?o direito limpa a medi??o.";
       case "MEASURE_AREA":
-        return "Clique no mapa para medir área. Botão direito limpa a medição.";
+        return "Clique no mapa para medir ?rea. Bot?o direito limpa a medi??o.";
       case "SPLIT_TRECHO":
         return "Selecione ou clique em um trecho para dividi-lo no ponto indicado.";
       case "JOIN_TRECHOS":
@@ -711,7 +739,13 @@ function MapCanvasInner({
       default:
         return null;
     }
-  }, [drawMode, selectedFeature, selectedGeometry, workspaceTool]);
+  }, [
+    activeTechnicalObjectType,
+    drawMode,
+    selectedFeature,
+    selectedGeometry,
+    workspaceTool,
+  ]);
 
   return (
     <div

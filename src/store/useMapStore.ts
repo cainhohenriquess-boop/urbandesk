@@ -1,19 +1,12 @@
 ﻿import { create } from "zustand";
 import { devtools } from "zustand/middleware";
+import {
+  getTechnicalObjectDefinition,
+  type ProjectDisciplineId,
+  type TechnicalObjectTypeId,
+} from "@/lib/project-disciplines";
 
-export type AssetCategory =
-  | "BOCA_LOBO"
-  | "POCO_VISITA"
-  | "HIDRANTE"
-  | "SEMAFORO"
-  | "PLACA_TRANSITO"
-  | "LOMBADA"
-  | "PONTO_ONIBUS"
-  | "RADAR"
-  | "POSTE_LUZ"
-  | "ARVORE"
-  | "LIXEIRA"
-  | "BURACO";
+export type AssetCategory = TechnicalObjectTypeId;
 
 export type DrawMode = "SELECT" | "line" | "polygon" | AssetCategory;
 export type MapStyle = "gis" | "satellite" | "topography" | "dark";
@@ -90,6 +83,12 @@ interface MapStore {
   drawMode: DrawMode;
   setDrawMode: (mode: DrawMode) => void;
 
+  activeTechnicalArea: ProjectDisciplineId | null;
+  setActiveTechnicalArea: (area: ProjectDisciplineId | null) => void;
+
+  activeTechnicalObjectType: TechnicalObjectTypeId | null;
+  setActiveTechnicalObjectType: (objectType: TechnicalObjectTypeId | null) => void;
+
   snapEnabled: boolean;
   setSnapEnabled: (enabled: boolean) => void;
 
@@ -162,6 +161,21 @@ function derivePhotos(attributes: Record<string, any>) {
   return attributes.photos.filter((item: unknown): item is string => typeof item === "string");
 }
 
+function buildPendingTechnicalAttributes(
+  technicalArea: ProjectDisciplineId | null,
+  technicalObjectType: TechnicalObjectTypeId | null
+) {
+  const attributes: Record<string, unknown> = {};
+
+  if (technicalArea) attributes.technicalArea = technicalArea;
+  if (technicalObjectType) {
+    attributes.technicalObjectType = technicalObjectType;
+    attributes.subType = technicalObjectType;
+  }
+
+  return attributes;
+}
+
 export const useMapStore = create<MapStore>()(
   devtools(
     (set, get) => ({
@@ -197,7 +211,44 @@ export const useMapStore = create<MapStore>()(
         })),
 
       drawMode: "SELECT",
-      setDrawMode: (mode) => set({ drawMode: mode, draftPoints: [] }),
+      setDrawMode: (mode) =>
+        set((state) => {
+          if (mode !== "SELECT" && mode !== "line" && mode !== "polygon") {
+            const objectDefinition = getTechnicalObjectDefinition(mode);
+            return {
+              drawMode: mode,
+              draftPoints: [],
+              activeTechnicalObjectType: mode,
+              activeTechnicalArea: objectDefinition?.area ?? state.activeTechnicalArea,
+            };
+          }
+
+          return {
+            drawMode: mode,
+            draftPoints: [],
+          };
+        }),
+
+      activeTechnicalArea: null,
+      setActiveTechnicalArea: (area) =>
+        set((state) => ({
+          activeTechnicalArea: area,
+          activeTechnicalObjectType:
+            state.activeTechnicalObjectType &&
+            getTechnicalObjectDefinition(state.activeTechnicalObjectType)?.area !== area
+              ? null
+              : state.activeTechnicalObjectType,
+        })),
+
+      activeTechnicalObjectType: null,
+      setActiveTechnicalObjectType: (objectType) =>
+        set((state) => ({
+          activeTechnicalObjectType: objectType,
+          activeTechnicalArea:
+            objectType !== null
+              ? getTechnicalObjectDefinition(objectType)?.area ?? state.activeTechnicalArea
+              : state.activeTechnicalArea,
+        })),
 
       snapEnabled: true,
       setSnapEnabled: (enabled) => set({ snapEnabled: enabled }),
@@ -206,7 +257,13 @@ export const useMapStore = create<MapStore>()(
       cancelPendingFeature: () => set({ pendingFeature: null, drawMode: "SELECT" }),
 
       confirmPendingFeature: (attributes, label) => {
-        const { pendingFeature, features, unsavedCount } = get();
+        const {
+          pendingFeature,
+          features,
+          unsavedCount,
+          activeTechnicalArea,
+          activeTechnicalObjectType,
+        } = get();
         if (!pendingFeature) return;
 
         const newFeature: DrawnFeature = {
@@ -214,7 +271,10 @@ export const useMapStore = create<MapStore>()(
           label: label || pendingFeature.label,
           description: deriveDescription(attributes),
           photos: derivePhotos(attributes),
-          attributes,
+          attributes: {
+            ...buildPendingTechnicalAttributes(activeTechnicalArea, activeTechnicalObjectType),
+            ...attributes,
+          },
           synced: false,
           id: `feat-${crypto.randomUUID()}`,
           createdAt: Date.now(),
@@ -323,19 +383,43 @@ export const useMapStore = create<MapStore>()(
 
       draftPoints: [],
       addDraftPoint: (point) => {
-        const { drawMode, draftPoints } = get();
+        const {
+          drawMode,
+          draftPoints,
+          activeTechnicalArea,
+          activeTechnicalObjectType,
+        } = get();
         if (drawMode !== "SELECT" && drawMode !== "line" && drawMode !== "polygon") {
-          set({ pendingFeature: { type: drawMode, coords: [point] } });
+          set({
+            pendingFeature: {
+              type: drawMode,
+              coords: [point],
+              attributes: buildPendingTechnicalAttributes(activeTechnicalArea, drawMode),
+            },
+          });
           return;
         }
         set({ draftPoints: [...draftPoints, point] });
       },
       finishDraft: () => {
-        const { drawMode, draftPoints } = get();
+        const {
+          drawMode,
+          draftPoints,
+          activeTechnicalArea,
+          activeTechnicalObjectType,
+        } = get();
         const minPoints = drawMode === "polygon" ? 3 : 2;
         if (draftPoints.length >= minPoints && (drawMode === "line" || drawMode === "polygon")) {
           set({
-            pendingFeature: { type: drawMode, coords: draftPoints, color: "#3b82f6" },
+            pendingFeature: {
+              type: drawMode,
+              coords: draftPoints,
+              color: "#3b82f6",
+              attributes: buildPendingTechnicalAttributes(
+                activeTechnicalArea,
+                activeTechnicalObjectType
+              ),
+            },
             draftPoints: [],
           });
         } else {
