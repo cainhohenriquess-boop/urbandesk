@@ -184,7 +184,25 @@ function EngineeringPanel() {
   );
 }
 
-export function MapCanvas() {
+type MapCanvasProps = {
+  className?: string;
+  showEngineeringPanel?: boolean;
+  showSelectionOverlay?: boolean;
+  showFullscreenButton?: boolean;
+  showDrawHint?: boolean;
+};
+
+export function MapCanvas(props: MapCanvasProps) {
+  return <MapCanvasInner {...props} />;
+}
+
+function MapCanvasInner({
+  className,
+  showEngineeringPanel = true,
+  showSelectionOverlay = true,
+  showFullscreenButton = true,
+  showDrawHint = true,
+}: MapCanvasProps = {}) {
   const {
     features,
     drawMode,
@@ -382,8 +400,11 @@ export function MapCanvas() {
   }, [syncedAssets]);
 
   return (
-    <div className="h-full w-full relative bg-[#ffffff] overflow-hidden" onContextMenu={handleContextMenu}>
-      <EngineeringPanel />
+    <div
+      className={cn("relative h-full w-full overflow-hidden bg-[#ffffff]", className)}
+      onContextMenu={handleContextMenu}
+    >
+      {showEngineeringPanel ? <EngineeringPanel /> : null}
 
       {utmWarning && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-danger-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3">
@@ -391,7 +412,7 @@ export function MapCanvas() {
         </div>
       )}
 
-      {selectedFeature && (
+      {showSelectionOverlay && selectedFeature && (
         <div className="absolute top-4 left-4 z-50 rounded-xl border border-border bg-card/95 backdrop-blur-md px-4 py-3 shadow-xl w-72">
           <p className="text-xs font-bold text-foreground">Selecionado: {selectedFeature.label || selectedFeature.type}</p>
           <p className="text-[11px] text-muted-foreground mt-1">
@@ -417,12 +438,14 @@ export function MapCanvas() {
         </div>
       )}
 
-      <button
-        onClick={toggleFullscreen}
-        className="absolute top-4 right-14 z-40 bg-card/90 backdrop-blur-md text-foreground border border-border p-2 rounded-lg shadow-md hover:bg-muted transition-colors"
-      >
-        {isFullscreen ? "⤢" : "⤢"}
-      </button>
+      {showFullscreenButton ? (
+        <button
+          onClick={toggleFullscreen}
+          className="absolute top-4 right-14 z-40 rounded-lg border border-border bg-card/90 p-2 text-foreground shadow-md backdrop-blur-md transition-colors hover:bg-muted"
+        >
+          {isFullscreen ? "⤢" : "⤢"}
+        </button>
+      ) : null}
 
       <Map
         {...viewState}
@@ -583,7 +606,7 @@ export function MapCanvas() {
         ))}
       </Map>
 
-      {drawMode !== "SELECT" && (
+      {showDrawHint && drawMode !== "SELECT" && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full border border-brand-400 bg-brand-600/90 backdrop-blur-md px-6 py-2.5 text-sm font-bold text-white shadow-2xl flex items-center gap-2 pointer-events-none z-40">
           {drawMode === "line" || drawMode === "polygon"
             ? "Clique para adicionar vértices. Botão direito finaliza."

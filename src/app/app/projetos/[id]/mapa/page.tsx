@@ -17,6 +17,24 @@ export default async function ProjetoMapaPage({
   }
 
   return (
-    <ProjectMapWorkspace projectId={project.id} projectName={project.name} />
+    <ProjectMapWorkspace
+      project={{
+        id: project.id,
+        name: project.name,
+        code: project.code ?? null,
+        status: project.status,
+        operationalStatus: project.operationalStatus,
+        responsibleDepartment: project.responsibleDepartment ?? null,
+        neighborhood: project.neighborhood ?? null,
+        region: project.region ?? null,
+        technicalAreas: project.technicalAreas,
+        _count: {
+          assets: project._count.assets,
+          documents: project._count.documents,
+          measurements: project._count.measurements,
+          inspections: project._count.inspections,
+        },
+      }}
+    />
   );
 }

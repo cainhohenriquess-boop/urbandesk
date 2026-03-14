@@ -16,11 +16,16 @@ export interface GeoPoint {
 
 export interface DrawnFeature {
   id:         string;
+  persistedId?: string | null;
   type:       "line" | "polygon" | AssetCategory;
   coords:     GeoPoint[];
   label?:     string;
   projectId?: string;
   color?:     string;
+  description?: string | null;
+  photos?: string[];
+  updatedAt?: string;
+  createdAtIso?: string;
   synced:     boolean; 
   createdAt:  number;
   attributes?: Record<string, any>; 
@@ -125,9 +130,23 @@ export const useMapStore = create<MapStore>()(
         const { pendingFeature, features, unsavedCount } = get();
         if (!pendingFeature) return;
 
+        const description =
+          typeof attributes.description === "string"
+            ? attributes.description
+            : typeof attributes.obs === "string"
+              ? attributes.obs
+              : typeof attributes.notes === "string"
+                ? attributes.notes
+                : null;
+        const photos = Array.isArray(attributes.photos)
+          ? attributes.photos.filter((item): item is string => typeof item === "string")
+          : [];
+
         const newFeature: DrawnFeature = {
           ...pendingFeature,
           label: label || pendingFeature.label,
+          description,
+          photos,
           attributes,
           synced: false,
           id: `feat-${crypto.randomUUID()}`,

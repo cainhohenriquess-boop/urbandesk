@@ -186,12 +186,14 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = req.nextUrl;
+    const assetId = sanitizeOptionalString(searchParams.get("id"));
     const type = sanitizeOptionalString(searchParams.get("type"));
     const projectId = sanitizeOptionalString(searchParams.get("projectId"));
     const subType = sanitizeOptionalString(searchParams.get("subType"));
     const limit = parseBoundedInt(searchParams.get("limit"), 1000, 2000);
 
     const where: Prisma.AssetWhereInput = { tenantId: targetTenantId };
+    if (assetId) where.id = assetId;
     if (type && isAllowedAssetType(type)) where.type = type;
     if (projectId) where.projectId = projectId;
     if (subType) {
@@ -206,6 +208,66 @@ export async function GET(req: NextRequest) {
       ];
     }
 
+    if (assetId) {
+      const asset = await prisma.asset.findFirst({
+        where,
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          description: true,
+          photos: true,
+          geomWkt: true,
+          createdAt: true,
+          updatedAt: true,
+          attributes: true,
+          projectId: true,
+          project: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          logs: {
+            orderBy: { createdAt: "desc" },
+            take: 12,
+            select: {
+              id: true,
+              note: true,
+              photos: true,
+              lat: true,
+              lng: true,
+              createdAt: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
+          _count: {
+            select: {
+              issues: true,
+              logs: true,
+            },
+          },
+        },
+      });
+
+      if (!asset) {
+        return NextResponse.json({ error: "Ativo não encontrado" }, { status: 404 });
+      }
+
+      return NextResponse.json({
+        data: {
+          ...asset,
+          geometry: parseWktGeometry(asset.geomWkt),
+        },
+      });
+    }
+
     const assets = await prisma.asset.findMany({
       where,
       take: limit,
@@ -214,7 +276,11 @@ export async function GET(req: NextRequest) {
         id: true,
         name: true,
         type: true,
+        description: true,
+        photos: true,
         geomWkt: true,
+        createdAt: true,
+        updatedAt: true,
         attributes: true,
         projectId: true,
         project: { select: { name: true } },
@@ -230,7 +296,11 @@ export async function GET(req: NextRequest) {
           id: asset.id,
           name: asset.name,
           type: asset.type,
+          description: asset.description,
+          photos: asset.photos,
           geomWkt: asset.geomWkt,
+          createdAt: asset.createdAt,
+          updatedAt: asset.updatedAt,
           projectId: asset.projectId,
           projectName: asset.project?.name ?? null,
           ...((asset.attributes as object) ?? {}),
