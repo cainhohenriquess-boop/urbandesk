@@ -21,10 +21,17 @@ export const PROJECT_DISCIPLINE_IDS = [
 export type ProjectDisciplineId = (typeof PROJECT_DISCIPLINE_IDS)[number];
 
 export const TECHNICAL_OBJECT_TYPE_IDS = [
+  "TRECHO_DRENAGEM",
   "BOCA_LOBO",
   "POCO_VISITA",
+  "CAIXA_LIGACAO",
   "HIDRANTE",
   "GALERIA_PLUVIAL",
+  "SARJETA",
+  "CANAL",
+  "DISSIPADOR",
+  "PONTO_ALAGAMENTO",
+  "OCORRENCIA_DRENAGEM",
   "SEMAFORO",
   "PLACA_TRANSITO",
   "LOMBADA",
@@ -46,6 +53,20 @@ export const TECHNICAL_OBJECT_TYPE_IDS = [
 ] as const;
 
 export type TechnicalObjectTypeId = (typeof TECHNICAL_OBJECT_TYPE_IDS)[number];
+export const DRAINAGE_TECHNICAL_OBJECT_TYPE_IDS = [
+  "TRECHO_DRENAGEM",
+  "BOCA_LOBO",
+  "POCO_VISITA",
+  "CAIXA_LIGACAO",
+  "GALERIA_PLUVIAL",
+  "SARJETA",
+  "CANAL",
+  "DISSIPADOR",
+  "PONTO_ALAGAMENTO",
+  "OCORRENCIA_DRENAGEM",
+] as const satisfies readonly TechnicalObjectTypeId[];
+export type DrainageTechnicalObjectTypeId =
+  (typeof DRAINAGE_TECHNICAL_OBJECT_TYPE_IDS)[number];
 export type TechnicalGeometryKind = "point" | "line" | "polygon";
 export type TechnicalFieldKind = "text" | "textarea" | "number" | "select" | "date";
 
@@ -99,6 +120,41 @@ const DISCIPLINE_LABELS: Record<ProjectDisciplineId, string> = {
 };
 
 const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjectDefinition> = {
+  TRECHO_DRENAGEM: {
+    id: "TRECHO_DRENAGEM",
+    area: "DRENAGEM",
+    label: "Trecho de drenagem",
+    helper: "Segmento linear da rede pluvial",
+    geometry: "line",
+    fields: [
+      {
+        key: "drainageSegmentType",
+        label: "Tipo do trecho",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "COLETOR", label: "Coletor" },
+          { value: "RAMAL", label: "Ramal" },
+          { value: "DESCIDA", label: "Descida" },
+          { value: "DESCARGA", label: "Descarga" },
+        ],
+      },
+      {
+        key: "diameterMm",
+        label: "Diâmetro (mm)",
+        kind: "number",
+        min: 100,
+        max: 5000,
+      },
+      {
+        key: "slopePct",
+        label: "Declividade (%)",
+        kind: "number",
+        min: 0,
+        max: 100,
+      },
+    ],
+  },
   BOCA_LOBO: {
     id: "BOCA_LOBO",
     area: "DRENAGEM",
@@ -114,6 +170,16 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
           { value: "INTEGRA", label: "Íntegra" },
           { value: "DANIFICADA", label: "Danificada" },
           { value: "AUSENTE", label: "Ausente" },
+        ],
+      },
+      {
+        key: "inletType",
+        label: "Tipo de captação",
+        kind: "select",
+        options: [
+          { value: "GUIA", label: "Guia" },
+          { value: "GRELHA", label: "Grelha" },
+          { value: "COMBINADA", label: "Combinada" },
         ],
       },
     ],
@@ -132,6 +198,45 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         min: 0,
         max: 100,
       },
+      {
+        key: "coverState",
+        label: "Estado da tampa",
+        kind: "select",
+        options: [
+          { value: "INTEGRA", label: "Íntegra" },
+          { value: "TRINCADA", label: "Trincada" },
+          { value: "AUSENTE", label: "Ausente" },
+        ],
+      },
+    ],
+  },
+  CAIXA_LIGACAO: {
+    id: "CAIXA_LIGACAO",
+    area: "DRENAGEM",
+    label: "Caixa de ligação",
+    helper: "Caixa de inspeção ou interligação da rede",
+    geometry: "point",
+    fields: [
+      {
+        key: "junctionBoxType",
+        label: "Tipo de caixa",
+        kind: "select",
+        options: [
+          { value: "PASSAGEM", label: "Passagem" },
+          { value: "INSPECAO", label: "Inspeção" },
+          { value: "LIGACAO", label: "Ligação" },
+        ],
+      },
+      {
+        key: "boxMaterial",
+        label: "Material",
+        kind: "select",
+        options: [
+          { value: "CONCRETO", label: "Concreto" },
+          { value: "ALVENARIA", label: "Alvenaria" },
+          { value: "PVC", label: "PVC" },
+        ],
+      },
     ],
   },
   HIDRANTE: {
@@ -144,16 +249,208 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
   GALERIA_PLUVIAL: {
     id: "GALERIA_PLUVIAL",
     area: "DRENAGEM",
-    label: "Galeria pluvial",
-    helper: "Rede linear de drenagem",
+    label: "Galeria",
+    helper: "Galeria fechada da rede pluvial",
     geometry: "line",
     fields: [
       {
-        key: "diameterMm",
-        label: "Diâmetro (mm)",
+        key: "gallerySection",
+        label: "Seção da galeria",
+        kind: "select",
+        options: [
+          { value: "TUBULAR", label: "Tubular" },
+          { value: "CELULAR", label: "Celular" },
+          { value: "ADUELA", label: "Aduela" },
+        ],
+      },
+      {
+        key: "internalWidthMeters",
+        label: "Largura interna (m)",
         kind: "number",
-        min: 100,
-        max: 5000,
+        min: 0,
+        max: 20,
+      },
+      {
+        key: "internalHeightMeters",
+        label: "Altura interna (m)",
+        kind: "number",
+        min: 0,
+        max: 20,
+      },
+    ],
+  },
+  SARJETA: {
+    id: "SARJETA",
+    area: "DRENAGEM",
+    label: "Sarjeta",
+    helper: "Escoamento superficial junto ao meio-fio",
+    geometry: "line",
+    fields: [
+      {
+        key: "gutterProfile",
+        label: "Perfil",
+        kind: "select",
+        options: [
+          { value: "CONCRETO", label: "Concreto" },
+          { value: "ASFALTO", label: "Asfalto" },
+          { value: "NATURAL", label: "Natural" },
+        ],
+      },
+      {
+        key: "widthMeters",
+        label: "Largura média (m)",
+        kind: "number",
+        min: 0,
+        max: 10,
+      },
+    ],
+  },
+  CANAL: {
+    id: "CANAL",
+    area: "DRENAGEM",
+    label: "Canal",
+    helper: "Trecho de canal aberto de drenagem",
+    geometry: "line",
+    fields: [
+      {
+        key: "liningType",
+        label: "Revestimento",
+        kind: "select",
+        options: [
+          { value: "CONCRETO", label: "Concreto" },
+          { value: "ENROCAMENTO", label: "Enrocamento" },
+          { value: "SOLO", label: "Solo" },
+          { value: "MISTO", label: "Misto" },
+        ],
+      },
+      {
+        key: "channelWidthMeters",
+        label: "Largura (m)",
+        kind: "number",
+        min: 0,
+        max: 100,
+      },
+      {
+        key: "channelDepthMeters",
+        label: "Profundidade (m)",
+        kind: "number",
+        min: 0,
+        max: 30,
+      },
+    ],
+  },
+  DISSIPADOR: {
+    id: "DISSIPADOR",
+    area: "DRENAGEM",
+    label: "Dissipador",
+    helper: "Estrutura de dissipação de energia hidráulica",
+    geometry: "point",
+    fields: [
+      {
+        key: "dissipatorType",
+        label: "Tipo",
+        kind: "select",
+        options: [
+          { value: "ESCADA_HIDRAULICA", label: "Escada hidráulica" },
+          { value: "BLOCO_DISSIPADOR", label: "Bloco dissipador" },
+          { value: "BACIA_DISSIPACAO", label: "Bacia de dissipação" },
+        ],
+      },
+      {
+        key: "structureCondition",
+        label: "Condição estrutural",
+        kind: "select",
+        options: [
+          { value: "BOA", label: "Boa" },
+          { value: "REGULAR", label: "Regular" },
+          { value: "CRITICA", label: "Crítica" },
+        ],
+      },
+    ],
+  },
+  PONTO_ALAGAMENTO: {
+    id: "PONTO_ALAGAMENTO",
+    area: "DRENAGEM",
+    label: "Ponto de alagamento",
+    helper: "Ponto recorrente de acúmulo de água",
+    geometry: "point",
+    fields: [
+      {
+        key: "recurrence",
+        label: "Recorrência",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "BAIXA", label: "Baixa" },
+          { value: "MEDIA", label: "Média" },
+          { value: "ALTA", label: "Alta" },
+          { value: "CRITICA", label: "Crítica" },
+        ],
+      },
+      {
+        key: "floodDepthCm",
+        label: "Lâmina d'água (cm)",
+        kind: "number",
+        min: 0,
+        max: 500,
+      },
+      {
+        key: "impactLevel",
+        label: "Impacto",
+        kind: "select",
+        options: [
+          { value: "LOCAL", label: "Local" },
+          { value: "VIARIO", label: "Viário" },
+          { value: "EDIFICACOES", label: "Edificações" },
+          { value: "GENERALIZADO", label: "Generalizado" },
+        ],
+      },
+    ],
+  },
+  OCORRENCIA_DRENAGEM: {
+    id: "OCORRENCIA_DRENAGEM",
+    area: "DRENAGEM",
+    label: "Ocorrência de obstrução/manutenção",
+    helper: "Registro operacional de manutenção na rede de drenagem",
+    geometry: "point",
+    fields: [
+      {
+        key: "maintenanceType",
+        label: "Tipo de ocorrência",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "OBSTRUCAO", label: "Obstrução" },
+          { value: "LIMPEZA", label: "Limpeza" },
+          { value: "DESASSOREAMENTO", label: "Desassoreamento" },
+          { value: "REPARO", label: "Reparo" },
+        ],
+      },
+      {
+        key: "occurrenceStatus",
+        label: "Status",
+        kind: "select",
+        options: [
+          { value: "ABERTA", label: "Aberta" },
+          { value: "EM_EXECUCAO", label: "Em execução" },
+          { value: "CONCLUIDA", label: "Concluída" },
+        ],
+      },
+      {
+        key: "priority",
+        label: "Prioridade",
+        kind: "select",
+        options: [
+          { value: "BAIXA", label: "Baixa" },
+          { value: "MEDIA", label: "Média" },
+          { value: "ALTA", label: "Alta" },
+          { value: "CRITICA", label: "Crítica" },
+        ],
+      },
+      {
+        key: "openedAt",
+        label: "Data da ocorrência",
+        kind: "date",
       },
     ],
   },
@@ -403,7 +700,7 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
   DRENAGEM: {
     id: "DRENAGEM",
     label: DISCIPLINE_LABELS.DRENAGEM,
-    description: "Rede pluvial, dispositivos de captação e intervenções lineares.",
+    description: "Rede pluvial, dispositivos de captação, pontos críticos e manutenção operacional.",
     accentClassName: "border-sky-200 bg-sky-50 text-sky-700",
     commonFields: [
       {
@@ -418,6 +715,16 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
         ],
       },
       {
+        key: "flowDirection",
+        label: "Sentido do escoamento",
+        kind: "select",
+        options: [
+          { value: "MONTANTE_JUSANTE", label: "Montante -> jusante" },
+          { value: "JUSANTE_MONTANTE", label: "Jusante -> montante" },
+          { value: "NAO_IDENTIFICADO", label: "Não identificado" },
+        ],
+      },
+      {
         key: "hydraulicCondition",
         label: "Situação hidráulica",
         kind: "select",
@@ -429,7 +736,18 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
         ],
       },
     ],
-    objectTypes: ["BOCA_LOBO", "POCO_VISITA", "GALERIA_PLUVIAL"],
+    objectTypes: [
+      "TRECHO_DRENAGEM",
+      "BOCA_LOBO",
+      "POCO_VISITA",
+      "CAIXA_LIGACAO",
+      "GALERIA_PLUVIAL",
+      "SARJETA",
+      "CANAL",
+      "DISSIPADOR",
+      "PONTO_ALAGAMENTO",
+      "OCORRENCIA_DRENAGEM",
+    ],
   },
   PAVIMENTACAO: {
     id: "PAVIMENTACAO",

@@ -58,16 +58,22 @@ const PROJECT_AREA_TOOLSET_GROUPS: Partial<
 > = {
   DRENAGEM: [
     {
-      id: "drainage-points",
-      title: "Dispositivos pontuais",
-      description: "Captação e acesso à rede pluvial.",
-      items: ["BOCA_LOBO", "POCO_VISITA"],
+      id: "drainage-network",
+      title: "Rede e condução",
+      description: "Trechos lineares e estruturas principais da drenagem.",
+      items: ["TRECHO_DRENAGEM", "GALERIA_PLUVIAL", "SARJETA", "CANAL"],
     },
     {
-      id: "drainage-network",
-      title: "Rede de drenagem",
-      description: "Galerias e trechos lineares de escoamento.",
-      items: ["GALERIA_PLUVIAL"],
+      id: "drainage-nodes",
+      title: "Captação e inspeção",
+      description: "Dispositivos pontuais de coleta, acesso e interligação.",
+      items: ["BOCA_LOBO", "POCO_VISITA", "CAIXA_LIGACAO", "DISSIPADOR"],
+    },
+    {
+      id: "drainage-events",
+      title: "Pontos críticos e ocorrências",
+      description: "Alagamentos e registros operacionais de manutenção.",
+      items: ["PONTO_ALAGAMENTO", "OCORRENCIA_DRENAGEM"],
     },
   ],
   PAVIMENTACAO: [
