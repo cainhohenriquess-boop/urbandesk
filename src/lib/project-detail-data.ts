@@ -582,3 +582,7 @@ export async function getProjectGisData(projectId: string) {
     ...(await loadGisData(context)),
   };
 }
+
+export type ProjectOverviewData = NonNullable<
+  Awaited<ReturnType<typeof getProjectOverviewData>>
+>;
