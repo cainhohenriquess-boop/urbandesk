@@ -10,6 +10,11 @@ import { enforceRequestRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import { requireJsonContentType } from "@/lib/request-guards";
 import {
+  assessDrainageSegment,
+  isDrainageSegmentObjectType,
+  validateDrainageSegmentGeometry,
+} from "@/lib/drainage-segment";
+import {
   getTechnicalFieldsForContext,
   normalizeTechnicalAttributes,
   readTechnicalFieldValues,
@@ -149,6 +154,74 @@ function parseWktGeometry(wkt: string | null): Record<string, unknown> | null {
   }
 
   return null;
+}
+
+function extractLineCoordsFromGeometry(geometry: Record<string, unknown> | null) {
+  if (!geometry || geometry.type !== "LineString" || !Array.isArray(geometry.coordinates)) {
+    return [];
+  }
+
+  return geometry.coordinates
+    .map((pair) =>
+      Array.isArray(pair) && pair.length >= 2
+        ? {
+            lng: Number(pair[0]),
+            lat: Number(pair[1]),
+          }
+        : null
+    )
+    .filter(
+      (point): point is { lng: number; lat: number } =>
+        !!point && Number.isFinite(point.lng) && Number.isFinite(point.lat)
+    );
+}
+
+function enrichDrainageAttributes(
+  normalizedAttributes: Record<string, unknown>,
+  geomWkt: string | null
+) {
+  const technicalObjectType = resolveTechnicalObjectType(null, normalizedAttributes);
+  if (!isDrainageSegmentObjectType(technicalObjectType)) {
+    return { attributes: normalizedAttributes, errors: [] as string[] };
+  }
+
+  const geometry = parseWktGeometry(geomWkt);
+  const lineCoords = extractLineCoordsFromGeometry(geometry);
+  const geometryValidation = validateDrainageSegmentGeometry({ coords: lineCoords });
+
+  if (geometryValidation.errors.length > 0) {
+    return {
+      attributes: normalizedAttributes,
+      errors: geometryValidation.errors,
+    };
+  }
+
+  const technicalFields = getTechnicalFieldsForContext("DRENAGEM", technicalObjectType);
+  const technicalValues = readTechnicalFieldValues(technicalFields, normalizedAttributes);
+  const assessment = assessDrainageSegment(technicalValues);
+  const technicalData =
+    normalizedAttributes.technicalData &&
+    typeof normalizedAttributes.technicalData === "object" &&
+    !Array.isArray(normalizedAttributes.technicalData)
+      ? { ...(normalizedAttributes.technicalData as Record<string, unknown>) }
+      : {};
+
+  if (!technicalData.criticality && assessment.suggestedCriticality) {
+    technicalData.criticality = assessment.suggestedCriticality;
+  }
+
+  return {
+    attributes: {
+      ...normalizedAttributes,
+      lengthMeters: Number(geometryValidation.lengthMeters.toFixed(2)),
+      geometryWarnings: geometryValidation.warnings,
+      riskLevel: assessment.riskLevel,
+      riskReason: assessment.reason,
+      suggestedCriticality: assessment.suggestedCriticality,
+      technicalData,
+    },
+    errors: [] as string[],
+  };
 }
 
 // GET /api/gis - Fetch GIS assets (supports superadmin impersonation)
@@ -426,6 +499,14 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    const enrichedDrainageCreate = enrichDrainageAttributes(normalizedAttributes, geomWkt);
+    if (enrichedDrainageCreate.errors.length > 0) {
+      return NextResponse.json(
+        { error: "Geometria linear inválida para drenagem.", details: enrichedDrainageCreate.errors },
+        { status: 400 }
+      );
+    }
+    normalizedAttributes = enrichedDrainageCreate.attributes;
     const requestPhotos = sanitizePhotoArray(body.photos);
     const attributePhotos = sanitizePhotoArray(normalizedAttributes.photos);
     const photos = requestPhotos.length > 0 ? requestPhotos : attributePhotos;
@@ -672,6 +753,17 @@ export async function PATCH(req: NextRequest) {
           { status: 400 }
         );
       }
+      const enrichedDrainageUpdate = enrichDrainageAttributes(
+        normalizedAttributes,
+        body.geomWkt !== undefined ? sanitizeOptionalString(body.geomWkt) : existing.geomWkt
+      );
+      if (enrichedDrainageUpdate.errors.length > 0) {
+        return NextResponse.json(
+          { error: "Geometria linear inválida para drenagem.", details: enrichedDrainageUpdate.errors },
+          { status: 400 }
+        );
+      }
+      normalizedAttributes = enrichedDrainageUpdate.attributes;
       updateData.attributes = normalizedAttributes as Prisma.InputJsonValue;
       changedFields.push("attributes");
     }
@@ -680,6 +772,25 @@ export async function PATCH(req: NextRequest) {
       const photos = sanitizePhotoArray(body.photos);
       updateData.photos = photos;
       changedFields.push("photos");
+    }
+
+    if (body.geomWkt !== undefined && body.attributes === undefined) {
+      const normalizedExistingAttributes = toPlainObject(existing.attributes);
+      const enrichedDrainageUpdate = enrichDrainageAttributes(
+        normalizedExistingAttributes,
+        sanitizeOptionalString(body.geomWkt)
+      );
+      if (enrichedDrainageUpdate.errors.length > 0) {
+        return NextResponse.json(
+          { error: "Geometria linear inválida para drenagem.", details: enrichedDrainageUpdate.errors },
+          { status: 400 }
+        );
+      }
+
+      if (JSON.stringify(enrichedDrainageUpdate.attributes) !== JSON.stringify(normalizedExistingAttributes)) {
+        updateData.attributes = enrichedDrainageUpdate.attributes as Prisma.InputJsonValue;
+        if (!changedFields.includes("attributes")) changedFields.push("attributes");
+      }
     }
 
     if (changedFields.length === 0) {

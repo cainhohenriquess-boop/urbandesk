@@ -2,7 +2,11 @@
 
 import { formatDateTime, formatDistance } from "@/lib/utils";
 import type { TechnicalFieldDefinition } from "@/lib/project-disciplines";
-import type { DrainageSegmentAutoContext } from "@/lib/drainage-segment";
+import type {
+  DrainageSegmentAssessment,
+  DrainageSegmentAutoContext,
+} from "@/lib/drainage-segment";
+import { buildDrainageSegmentSuggestedName } from "@/lib/drainage-segment";
 
 const PRIMARY_KEYS = [
   "networkMaterial",
@@ -23,6 +27,7 @@ const SECONDARY_KEYS = [
 
 type ProjectDrainageSegmentFormProps = {
   autoContext: DrainageSegmentAutoContext | null;
+  assessment: DrainageSegmentAssessment | null;
   fields: TechnicalFieldDefinition[];
   values: Record<string, string>;
   onChange: (key: string, value: string) => void;
@@ -85,6 +90,7 @@ function ReadonlyInfo({
 
 export function ProjectDrainageSegmentForm({
   autoContext,
+  assessment,
   fields,
   values,
   onChange,
@@ -140,7 +146,67 @@ export function ProjectDrainageSegmentForm({
           label="Data"
           value={autoContext ? formatDateTime(autoContext.createdAtIso) : "Agora"}
         />
+        <ReadonlyInfo
+          label="Nome sugerido"
+          value={autoContext ? buildDrainageSegmentSuggestedName(autoContext) : "Aguardando geometria"}
+        />
+        <ReadonlyInfo
+          label="Conexões"
+          value={
+            autoContext?.startConnection || autoContext?.endConnection
+              ? [
+                  autoContext?.startConnection ? `Início: ${autoContext.startConnection.label}` : null,
+                  autoContext?.endConnection ? `Fim: ${autoContext.endConnection.label}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : "Nenhuma estrutura próxima encontrada"
+          }
+        />
+        <ReadonlyInfo
+          label="Criticidade sugerida"
+          value={assessment?.suggestedCriticality ?? "Calculando"}
+        />
+        <ReadonlyInfo
+          label="Risco operacional"
+          value={assessment?.riskLevel ?? "Calculando"}
+        />
       </div>
+
+      {assessment?.reason ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">
+            Critério da classificação
+          </p>
+          <p className="mt-1 text-sm text-amber-900">{assessment.reason}</p>
+        </div>
+      ) : null}
+
+      {autoContext?.geometryValidation.errors?.length ? (
+        <div className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-danger-700">
+            Validação geométrica
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-danger-900">
+            {autoContext.geometryValidation.errors.map((error) => (
+              <li key={error}>• {error}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {autoContext?.geometryValidation.warnings?.length ? (
+        <div className="rounded-xl border border-sky-200 bg-white/80 px-3 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-700">
+            Observações automáticas
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-slate-700">
+            {autoContext.geometryValidation.warnings.map((warning) => (
+              <li key={warning}>• {warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="grid gap-3 md:grid-cols-2">
         {primaryFields.map((field) => (

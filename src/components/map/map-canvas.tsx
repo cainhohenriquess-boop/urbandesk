@@ -17,6 +17,7 @@ import {
   splitLineFeature,
   translateFeature,
 } from "@/lib/map-workspace-tools";
+import { readDrainageSegmentFieldValue } from "@/lib/drainage-segment";
 import { getTechnicalObjectLabel } from "@/lib/project-disciplines";
 import { cn } from "@/lib/utils";
 import { useMapStore } from "@/store/useMapStore";
@@ -204,6 +205,118 @@ const ASSET_STYLES = {
   },
 } as const;
 
+function readFeatureString(attributes: Record<string, unknown> | undefined, key: string) {
+  return readDrainageSegmentFieldValue(attributes ?? {}, key);
+}
+
+function getDrainageLineStyle(feature: { attributes?: Record<string, unknown>; color?: string }) {
+  const technicalObjectType =
+    readFeatureString(feature.attributes, "technicalObjectType") ??
+    readFeatureString(feature.attributes, "subType");
+  const operationalStatus = readFeatureString(feature.attributes, "operationalStatus");
+  const assetCondition = readFeatureString(feature.attributes, "assetCondition");
+  const riskLevel =
+    readFeatureString(feature.attributes, "riskLevel") ??
+    readFeatureString(feature.attributes, "criticality");
+  const diameterMm = Number(readFeatureString(feature.attributes, "diameterMm") ?? "0");
+  const isDrainageLine =
+    technicalObjectType === "TRECHO_DRENAGEM" ||
+    technicalObjectType === "GALERIA_PLUVIAL" ||
+    technicalObjectType === "SARJETA" ||
+    technicalObjectType === "CANAL";
+
+  if (!isDrainageLine) {
+    return {
+      lineColor: feature.color || "#3b82f6",
+      lineWidth: 4,
+      lineOpacity: 0.94,
+    };
+  }
+
+  const baseColor =
+    technicalObjectType === "GALERIA_PLUVIAL"
+      ? "#2563eb"
+      : technicalObjectType === "SARJETA"
+        ? "#06b6d4"
+        : technicalObjectType === "CANAL"
+          ? "#0891b2"
+          : "#0284c7";
+
+  let lineColor = feature.color || baseColor;
+  if (riskLevel === "CRITICO" || assetCondition === "CRITICA" || operationalStatus === "INTERDITADO") {
+    lineColor = "#dc2626";
+  } else if (riskLevel === "ALTO" || assetCondition === "RUIM" || operationalStatus === "OBSTRUIDO") {
+    lineColor = "#f97316";
+  } else if (
+    riskLevel === "MODERADO" ||
+    assetCondition === "REGULAR" ||
+    operationalStatus === "PARCIAL" ||
+    operationalStatus === "MANUTENCAO"
+  ) {
+    lineColor = "#d97706";
+  }
+
+  let lineWidth = 4;
+  if (Number.isFinite(diameterMm) && diameterMm > 0) {
+    if (diameterMm >= 1500) lineWidth = 7;
+    else if (diameterMm >= 1000) lineWidth = 6;
+    else if (diameterMm >= 800) lineWidth = 5.25;
+    else if (diameterMm >= 600) lineWidth = 4.75;
+    else if (diameterMm >= 400) lineWidth = 4.25;
+  }
+
+  return {
+    lineColor,
+    lineWidth,
+    lineOpacity: operationalStatus === "INTERDITADO" ? 0.72 : 0.94,
+  };
+}
+
+function getPointVisualStyle(feature: { type: string; attributes?: Record<string, unknown> }) {
+  const baseStyle = ASSET_STYLES[feature.type as keyof typeof ASSET_STYLES];
+  const technicalObjectType =
+    readFeatureString(feature.attributes, "technicalObjectType") ??
+    readFeatureString(feature.attributes, "subType");
+  const isDrainagePoint =
+    technicalObjectType === "BOCA_LOBO" ||
+    technicalObjectType === "POCO_VISITA" ||
+    technicalObjectType === "CAIXA_LIGACAO" ||
+    technicalObjectType === "DISSIPADOR" ||
+    technicalObjectType === "PONTO_ALAGAMENTO" ||
+    technicalObjectType === "OCORRENCIA_DRENAGEM";
+  const assetCondition = readFeatureString(feature.attributes, "assetCondition");
+  const operationalStatus = readFeatureString(feature.attributes, "operationalStatus");
+  const riskLevel =
+    readFeatureString(feature.attributes, "riskLevel") ??
+    readFeatureString(feature.attributes, "criticality");
+
+  let hex = baseStyle?.hex || "#ffffff";
+  if (!isDrainagePoint) {
+    return {
+      ...(baseStyle ?? {}),
+      hex,
+    };
+  }
+
+  if (riskLevel === "CRITICO" || assetCondition === "CRITICA" || operationalStatus === "INTERDITADO") {
+    hex = "#dc2626";
+  } else if (riskLevel === "ALTO" || assetCondition === "RUIM" || operationalStatus === "OBSTRUIDO") {
+    hex = "#f97316";
+  } else if (
+    riskLevel === "MODERADO" ||
+    assetCondition === "REGULAR" ||
+    operationalStatus === "PARCIAL" ||
+    operationalStatus === "MANUTENCAO"
+  ) {
+    hex = "#d97706";
+  }
+
+  return {
+    ...(baseStyle ?? {}),
+    hex,
+  };
+}
+
 function hasValidPoint(coords: { lng: number; lat: number }[] | undefined): boolean {
   if (!coords || coords.length === 0) return false;
   return Number.isFinite(coords[0]?.lng) && Number.isFinite(coords[0]?.lat);
@@ -355,6 +468,7 @@ type MapCanvasProps = {
   showSelectionOverlay?: boolean;
   showFullscreenButton?: boolean;
   showDrawHint?: boolean;
+  visibleFeatureIds?: string[];
 };
 
 export function MapCanvas(props: MapCanvasProps) {
@@ -367,6 +481,7 @@ function MapCanvasInner({
   showSelectionOverlay = true,
   showFullscreenButton = true,
   showDrawHint = true,
+  visibleFeatureIds,
 }: MapCanvasProps = {}) {
   const {
     features,
@@ -401,6 +516,10 @@ function MapCanvasInner({
   } = useMapStore();
 
   const [utmWarning, setUtmWarning] = useState(false);
+  const visibleIdSet = useMemo(
+    () => (Array.isArray(visibleFeatureIds) ? new Set(visibleFeatureIds) : null),
+    [visibleFeatureIds]
+  );
 
   const baseLayersSafe = useMemo(() => {
     return baseLayersData.map((layer) => ({
@@ -416,11 +535,12 @@ function MapCanvasInner({
 
   const geometryFeatures = useMemo(() => {
     return features.filter((feature) => {
+      if (visibleIdSet && !visibleIdSet.has(feature.id)) return false;
       if (feature.type !== "line" && feature.type !== "polygon") return false;
       if (!feature.coords || feature.coords.length < 2) return false;
       return feature.coords.every((point) => Number.isFinite(point.lng) && Number.isFinite(point.lat));
     });
-  }, [features]);
+  }, [features, visibleIdSet]);
 
   const selectedFeature = useMemo(
     () => features.find((feature) => feature.id === selectedId) ?? null,
@@ -438,8 +558,12 @@ function MapCanvasInner({
   }, [selectedFeature]);
 
   const assetFeatures = useMemo(
-    () => features.filter((feature) => feature.type !== "line" && feature.type !== "polygon"),
-    [features]
+    () =>
+      features.filter((feature) => {
+        if (visibleIdSet && !visibleIdSet.has(feature.id)) return false;
+        return feature.type !== "line" && feature.type !== "polygon";
+      }),
+    [features, visibleIdSet]
   );
 
   const syncedAssets = useMemo(() => assetFeatures.filter((feature) => feature.synced), [assetFeatures]);
@@ -636,6 +760,7 @@ function MapCanvasInner({
       type: "FeatureCollection",
       features: geometryFeatures.map((feature) => {
         const coords = feature.coords.map((coord) => [coord.lng, coord.lat]);
+        const lineStyle = feature.type === "line" ? getDrainageLineStyle(feature) : null;
 
         if (feature.type === "polygon" && coords.length > 2) {
           coords.push([feature.coords[0].lng, feature.coords[0].lat]);
@@ -659,6 +784,9 @@ function MapCanvasInner({
           properties: {
             id: feature.id,
             color: feature.color || "#3b82f6",
+            lineColor: lineStyle?.lineColor ?? feature.color ?? "#3b82f6",
+            lineWidth: lineStyle?.lineWidth ?? 4,
+            lineOpacity: lineStyle?.lineOpacity ?? 0.94,
             selectionState,
           },
         };
@@ -699,7 +827,7 @@ function MapCanvasInner({
       features: syncedAssets
         .filter((feature) => hasValidPoint(feature.coords))
         .map((feature) => {
-          const style = ASSET_STYLES[feature.type as keyof typeof ASSET_STYLES];
+          const style = getPointVisualStyle(feature);
           const selectionState =
             feature.id === selectedId
               ? "selected"
@@ -1034,7 +1162,7 @@ function MapCanvasInner({
                   "#10b981",
                   "search",
                   "#0ea5e9",
-                  ["get", "color"],
+                  ["get", "lineColor"],
                 ],
                 "line-width": [
                   "match",
@@ -1045,7 +1173,18 @@ function MapCanvasInner({
                   5,
                   "search",
                   5,
-                  4,
+                  ["get", "lineWidth"],
+                ],
+                "line-opacity": [
+                  "match",
+                  ["get", "selectionState"],
+                  "selected",
+                  1,
+                  "grouped",
+                  1,
+                  "search",
+                  1,
+                  ["get", "lineOpacity"],
                 ],
               }}
             />
@@ -1152,7 +1291,7 @@ function MapCanvasInner({
 
         {layers.ativos &&
           unsyncedAssets.map((feature) => {
-            const style = ASSET_STYLES[feature.type as keyof typeof ASSET_STYLES];
+            const style = getPointVisualStyle(feature);
             if (!style || !hasValidPoint(feature.coords)) return null;
 
             const isSelected = selectedId === feature.id;

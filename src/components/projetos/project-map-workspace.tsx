@@ -17,11 +17,14 @@ import { ProjectMapDisciplineToolset } from "@/components/projetos/project-map-d
 import { ProjectMapGlobalToolbar } from "@/components/projetos/project-map-global-toolbar";
 import { ProjectMapTechnicalForm } from "@/components/projetos/project-map-technical-form";
 import {
+  assessDrainageSegment,
   buildDrainageSegmentAssistAttributes,
   buildDrainageSegmentAutoContext,
   buildDrainageSegmentSuggestedName,
   isDrainageSegmentObjectType,
   mergeDrainageSegmentDefaultValues,
+  readDrainageSegmentFieldValue,
+  validateDrainageSegmentGeometry,
   type DrainageSegmentUserContext,
 } from "@/lib/drainage-segment";
 import {
@@ -60,6 +63,14 @@ import {
 import { type BaseLayerData, type DrawnFeature, type LayerVisibility, type MapStyle, useMapStore } from "@/store/useMapStore";
 
 type AssetTypeFilter = "ALL" | "PONTO" | "TRECHO" | "AREA";
+type DrainageFilterKey =
+  | "assetCondition"
+  | "networkMaterial"
+  | "diameterMm"
+  | "operationalStatus"
+  | "riskLevel";
+
+type DrainageFilterState = Record<DrainageFilterKey, string>;
 
 type ProjectMapWorkspaceProject = {
   id: string;
@@ -158,6 +169,22 @@ const LAYER_DEFS: Array<{
   { key: "viario", label: "Viário", description: "Camada reservada para rede temática", tone: "bg-slate-500" },
   { key: "topografia", label: "Topografia", description: "Curvas e relevo futuro", tone: "bg-emerald-500" },
 ];
+
+const EMPTY_DRAINAGE_FILTERS: DrainageFilterState = {
+  assetCondition: "ALL",
+  networkMaterial: "ALL",
+  diameterMm: "ALL",
+  operationalStatus: "ALL",
+  riskLevel: "ALL",
+};
+
+const DRAINAGE_FILTER_LABELS: Record<DrainageFilterKey, string> = {
+  assetCondition: "Condição",
+  networkMaterial: "Material",
+  diameterMm: "Diâmetro",
+  operationalStatus: "Status",
+  riskLevel: "Risco",
+};
 
 function parseCoordPair(rawPair: string): { lng: number; lat: number } | null {
   const [lngRaw, latRaw] = rawPair.trim().split(/\s+/);
@@ -490,6 +517,14 @@ function readStringAttribute(attributes: Record<string, unknown> | undefined, ke
   return "";
 }
 
+function readDrainageFilterValue(feature: DrawnFeature, key: DrainageFilterKey) {
+  const attributes = (feature.attributes ?? {}) as Record<string, unknown>;
+  if (key === "riskLevel") {
+    return readDrainageSegmentFieldValue(attributes, key) ?? readDrainageSegmentFieldValue(attributes, "criticality");
+  }
+  return readDrainageSegmentFieldValue(attributes, key);
+}
+
 function PanelSection({
   title,
   eyebrow,
@@ -575,6 +610,8 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const [selectedDetail, setSelectedDetail] = useState<AssetDetailRecord | null>(null);
   const [inspectorForm, setInspectorForm] = useState<InspectorFormState>(EMPTY_FORM);
   const [technicalFieldValues, setTechnicalFieldValues] = useState<Record<string, string>>({});
+  const [drainageFilters, setDrainageFilters] = useState<DrainageFilterState>(EMPTY_DRAINAGE_FILTERS);
+  const [drainageCriticalityLocked, setDrainageCriticalityLocked] = useState(false);
   const [isSavingInspector, setIsSavingInspector] = useState(false);
   const [detailRefreshTick, setDetailRefreshTick] = useState(0);
   const [commentDraft, setCommentDraft] = useState("");
@@ -595,6 +632,29 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     effectiveTechnicalArea,
     activeTechnicalObjectType
   );
+  const drainageFieldDefinitions = useMemo(
+    () => getTechnicalFieldsForContext("DRENAGEM", "TRECHO_DRENAGEM"),
+    []
+  );
+  const drainageFilterOptions = useMemo(() => {
+    const buildOptionsForField = (key: Exclude<DrainageFilterKey, "riskLevel">) => {
+      const field = drainageFieldDefinitions.find((item) => item.key === key);
+      return field?.options ?? [];
+    };
+
+    return {
+      assetCondition: buildOptionsForField("assetCondition"),
+      networkMaterial: buildOptionsForField("networkMaterial"),
+      diameterMm: buildOptionsForField("diameterMm"),
+      operationalStatus: buildOptionsForField("operationalStatus"),
+      riskLevel: [
+        { value: "BAIXO", label: "Baixo" },
+        { value: "MODERADO", label: "Moderado" },
+        { value: "ALTO", label: "Alto" },
+        { value: "CRITICO", label: "Crítico" },
+      ],
+    } satisfies Record<DrainageFilterKey, Array<{ value: string; label: string }>>;
+  }, [drainageFieldDefinitions]);
 
   useEffect(() => {
     if (!activeTechnicalArea && availableDisciplines.length > 0) {
@@ -707,11 +767,13 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         region: project.region,
       },
       currentUser,
+      availableFeatures: features,
     });
   }, [
     baseLayersData,
     currentUser,
     effectiveTechnicalArea,
+    features,
     pendingFeature,
     project.code,
     project.district,
@@ -721,6 +783,11 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     project.region,
     selectedFeature,
   ]);
+
+  const drainageSegmentAssessment = useMemo(() => {
+    if (!drainageSegmentAutoContext) return null;
+    return assessDrainageSegment(technicalFieldValues, drainageSegmentAutoContext);
+  }, [drainageSegmentAutoContext, technicalFieldValues]);
 
   useEffect(() => {
     const contextSource = pendingFeature ?? selectedFeature;
@@ -817,6 +884,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         notes: readStringAttribute(pendingFeature.attributes, ["notes", "obs"]),
       });
       setTechnicalFieldValues(nextTechnicalValues);
+      setDrainageCriticalityLocked(false);
       return;
     }
 
@@ -857,11 +925,13 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         notes: readStringAttribute(attributes, ["notes", "obs"]),
       });
       setTechnicalFieldValues(nextTechnicalValues);
+      setDrainageCriticalityLocked(false);
       return;
     }
 
     setInspectorForm(EMPTY_FORM);
     setTechnicalFieldValues({});
+    setDrainageCriticalityLocked(false);
   }, [
     currentUser.email,
     currentUser.name,
@@ -874,17 +944,61 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   ]);
 
   useEffect(() => {
+    if (!drainageSegmentAssessment || drainageCriticalityLocked) return;
+
+    setTechnicalFieldValues((current) => {
+      if (current.criticality === drainageSegmentAssessment.suggestedCriticality) {
+        return current;
+      }
+
+      return {
+        ...current,
+        criticality: drainageSegmentAssessment.suggestedCriticality,
+      };
+    });
+  }, [drainageCriticalityLocked, drainageSegmentAssessment]);
+
+  useEffect(() => {
     setCommentDraft("");
     setCommentFiles([]);
   }, [selectedFeature?.id]);
+
+  const handleTechnicalFieldChange = useCallback((key: string, value: string) => {
+    if (key === "criticality") {
+      setDrainageCriticalityLocked(true);
+    }
+
+    setTechnicalFieldValues((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }, []);
+
+  const handleDrainageFilterChange = useCallback((key: DrainageFilterKey, value: string) => {
+    setDrainageFilters((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }, []);
 
   const filteredFeatures = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
     return features.filter((feature) => {
       if (pendingOnly && feature.synced) return false;
+      const context = getFeatureTechnicalContext(feature, effectiveTechnicalArea);
+
+      if (effectiveTechnicalArea === "DRENAGEM") {
+        const matchesDrainageFilters = (Object.keys(drainageFilters) as DrainageFilterKey[]).every((key) => {
+          const expectedValue = drainageFilters[key];
+          if (expectedValue === "ALL") return true;
+          return readDrainageFilterValue(feature, key) === expectedValue;
+        });
+
+        if (!matchesDrainageFilters) return false;
+      }
+
       if (!normalizedSearch) return true;
 
-      const context = getFeatureTechnicalContext(feature, effectiveTechnicalArea);
       const haystack = [
         featureDisplayLabel(feature, effectiveTechnicalArea),
         featureTypeLabel(feature.type, context.technicalObjectType),
@@ -900,7 +1014,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
 
       return haystack.includes(normalizedSearch);
     });
-  }, [effectiveTechnicalArea, features, pendingOnly, searchQuery]);
+  }, [drainageFilters, effectiveTechnicalArea, features, pendingOnly, searchQuery]);
 
   const disciplineCounts = useMemo(() => {
     return availableDisciplines.reduce<Record<ProjectDisciplineId, number>>((acc, discipline) => {
@@ -911,6 +1025,11 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       return acc;
     }, {} as Record<ProjectDisciplineId, number>);
   }, [availableDisciplines, features]);
+
+  const visibleFeatureIds = useMemo(
+    () => filteredFeatures.map((feature) => feature.id),
+    [filteredFeatures]
+  );
 
   const persistedCount = useMemo(() => features.filter((feature) => feature.persistedId).length, [features]);
   const pendingCount = useMemo(() => features.filter((feature) => !feature.synced).length, [features]);
@@ -1147,6 +1266,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
 
   const handleInspectorSave = async () => {
     let nextAttributes: Record<string, unknown>;
+    let normalizedDrainageCoords: DrawnFeature["coords"] | null = null;
 
     try {
       const contextSource = pendingFeature ?? selectedFeature;
@@ -1168,11 +1288,13 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         return;
       }
 
-      const technicalData = buildTechnicalDataPayload(fieldDefinitions, technicalFieldValues);
+      const technicalData = {
+        ...buildTechnicalDataPayload(fieldDefinitions, technicalFieldValues),
+      };
       const isDrainageSegment = isDrainageSegmentObjectType(context.technicalObjectType);
       const assistedDrainageAttributes =
-        isDrainageSegment && drainageSegmentAutoContext
-          ? buildDrainageSegmentAssistAttributes(drainageSegmentAutoContext)
+        isDrainageSegment && drainageSegmentAutoContext && drainageSegmentAssessment
+          ? buildDrainageSegmentAssistAttributes(drainageSegmentAutoContext, drainageSegmentAssessment)
           : {};
 
       if (isDrainageSegment) {
@@ -1181,9 +1303,18 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           return;
         }
 
-        if (!Number.isFinite(drainageSegmentAutoContext.lengthMeters) || drainageSegmentAutoContext.lengthMeters <= 0) {
-          window.alert("Finalize uma geometria válida para calcular o comprimento do trecho.");
+        const geometryValidation = validateDrainageSegmentGeometry(contextSource ?? { coords: [] });
+        if (geometryValidation.errors.length > 0) {
+          window.alert(geometryValidation.errors.join("\n"));
           return;
+        }
+
+        normalizedDrainageCoords = geometryValidation.normalizedCoords;
+        if (
+          drainageSegmentAssessment?.suggestedCriticality &&
+          typeof technicalData.criticality !== "string"
+        ) {
+          technicalData.criticality = drainageSegmentAssessment.suggestedCriticality;
         }
       }
 
@@ -1236,6 +1367,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
 
     const nextFeature: DrawnFeature = {
       ...selectedFeature,
+      ...(normalizedDrainageCoords ? { coords: normalizedDrainageCoords } : {}),
       label:
         inspectorForm.name.trim() ||
         selectedFeature.label ||
@@ -1249,6 +1381,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
 
     if (!selectedFeature.persistedId) {
       updateFeature(selectedFeature.id, {
+        ...(normalizedDrainageCoords ? { coords: normalizedDrainageCoords } : {}),
         label: nextFeature.label,
         description: nextFeature.description,
         attributes: nextAttributes,
@@ -1260,6 +1393,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     try {
       await persistFeature(nextFeature);
       updateFeature(selectedFeature.id, {
+        ...(normalizedDrainageCoords ? { coords: normalizedDrainageCoords } : {}),
         label: nextFeature.label,
         description: nextFeature.description,
         attributes: nextAttributes,
@@ -1618,6 +1752,48 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                   />
                 </div>
 
+                {effectiveTechnicalArea === "DRENAGEM" ? (
+                  <div className="space-y-3 rounded-2xl border border-sky-200 bg-sky-50/70 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">
+                          Filtros da drenagem
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          Condição, material, diâmetro, status e risco do trecho.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setDrainageFilters(EMPTY_DRAINAGE_FILTERS)}
+                        className="text-[11px] font-semibold text-sky-700 hover:text-sky-600"
+                      >
+                        Limpar
+                      </button>
+                    </div>
+                    <div className="grid gap-3">
+                      {(Object.keys(DRAINAGE_FILTER_LABELS) as DrainageFilterKey[]).map((key) => (
+                        <label key={key} className="grid gap-1.5">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            {DRAINAGE_FILTER_LABELS[key]}
+                          </span>
+                          <select
+                            value={drainageFilters[key]}
+                            onChange={(event) => handleDrainageFilterChange(key, event.target.value)}
+                            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-brand-500"
+                          >
+                            <option value="ALL">Todos</option>
+                            {drainageFilterOptions[key].map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 <label className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3 text-sm">
                   <span className="font-medium text-foreground">Mostrar apenas pendentes locais</span>
                   <input
@@ -1731,6 +1907,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
               showSelectionOverlay={false}
               showFullscreenButton={false}
               showDrawHint={false}
+              visibleFeatureIds={visibleFeatureIds}
             />
           </div>
         </section>
@@ -1768,14 +1945,10 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                       </div>
                       <ProjectDrainageSegmentForm
                         autoContext={drainageSegmentAutoContext}
+                        assessment={drainageSegmentAssessment}
                         fields={activeTechnicalFields}
                         values={technicalFieldValues}
-                        onChange={(key, value) =>
-                          setTechnicalFieldValues((current) => ({
-                            ...current,
-                            [key]: value,
-                          }))
-                        }
+                        onChange={handleTechnicalFieldChange}
                       />
                     </>
                   ) : (
@@ -1791,12 +1964,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                       <ProjectMapTechnicalForm
                         fields={activeTechnicalFields}
                         values={technicalFieldValues}
-                        onChange={(key, value) =>
-                          setTechnicalFieldValues((current) => ({
-                            ...current,
-                            [key]: value,
-                          }))
-                        }
+                        onChange={handleTechnicalFieldChange}
                       />
                     </>
                   )}
@@ -1834,14 +2002,10 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                       </div>
                       <ProjectDrainageSegmentForm
                         autoContext={drainageSegmentAutoContext}
+                        assessment={drainageSegmentAssessment}
                         fields={activeTechnicalFields}
                         values={technicalFieldValues}
-                        onChange={(key, value) =>
-                          setTechnicalFieldValues((current) => ({
-                            ...current,
-                            [key]: value,
-                          }))
-                        }
+                        onChange={handleTechnicalFieldChange}
                       />
                     </>
                   ) : (
@@ -1857,12 +2021,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                       <ProjectMapTechnicalForm
                         fields={activeTechnicalFields}
                         values={technicalFieldValues}
-                        onChange={(key, value) =>
-                          setTechnicalFieldValues((current) => ({
-                            ...current,
-                            [key]: value,
-                          }))
-                        }
+                        onChange={handleTechnicalFieldChange}
                       />
                     </>
                   )}
