@@ -65,6 +65,7 @@ export function InfrastructureLayerManager({
   const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>(
     preselectedTenantId ? [preselectedTenantId] : []
   );
+  const [ownerTenantId, setOwnerTenantId] = useState(preselectedTenantId ?? "");
   const [tenantSearch, setTenantSearch] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,6 +83,10 @@ export function InfrastructureLayerManager({
   }, [tenantSearch, tenants]);
 
   const selectedCount = selectedTenantIds.length;
+  const selectedTenants = useMemo(
+    () => tenants.filter((tenant) => selectedTenantIds.includes(tenant.id)),
+    [selectedTenantIds, tenants]
+  );
 
   function toggleTenant(tenantId: string) {
     setSelectedTenantIds((current) =>
@@ -89,6 +94,7 @@ export function InfrastructureLayerManager({
         ? current.filter((item) => item !== tenantId)
         : [...current, tenantId]
     );
+    setOwnerTenantId((current) => (current === tenantId ? "" : current));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -114,6 +120,7 @@ export function InfrastructureLayerManager({
       formData.set("file", file);
       if (name.trim()) formData.set("name", name.trim());
       if (description.trim()) formData.set("description", description.trim());
+      if (ownerTenantId.trim()) formData.set("ownerTenantId", ownerTenantId.trim());
       selectedTenantIds.forEach((tenantId) => formData.append("tenantIds", tenantId));
 
       const response = await fetch("/api/admin/infrastructure-layers", {
@@ -233,6 +240,32 @@ export function InfrastructureLayerManager({
           </div>
 
           <div className="space-y-3">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Município dono do dado
+              </label>
+              <select
+                value={ownerTenantId}
+                onChange={(event) => setOwnerTenantId(event.target.value)}
+                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+              >
+                <option value="">
+                  {selectedCount === 1
+                    ? "Inferir automaticamente da prefeitura autorizada"
+                    : "Selecione o município dono do dado"}
+                </option>
+                {selectedTenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name} · {tenant.state}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Este vínculo identifica quem é o dono do arquivo enviado. O backend
+                exige que esse município também esteja autorizado a visualizar a camada.
+              </p>
+            </div>
+
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Prefeituras autorizadas

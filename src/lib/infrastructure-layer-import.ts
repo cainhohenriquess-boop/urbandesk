@@ -3,6 +3,7 @@ import "server-only";
 import { unzipSync, strFromU8 } from "fflate";
 import {
   INFRASTRUCTURE_LAYER_LABELS,
+  isInfrastructureLayerCode,
   type InfrastructureLayerCodeId,
 } from "@/lib/infrastructure-layer-config";
 
@@ -25,10 +26,51 @@ type FeatureCollectionRecord = {
   features: FeatureRecord[];
 };
 
-export interface InfrastructureLayerImportResult {
+export type InfrastructureLayerImportErrorCode =
+  | "INVALID_ARCHIVE"
+  | "MISSING_REQUIRED_FILES"
+  | "MULTIPLE_DATASETS"
+  | "UNSUPPORTED_LAYER"
+  | "LAYER_CODE_MISMATCH"
+  | "INVALID_GEOJSON"
+  | "INVALID_GEOMETRY"
+  | "EMPTY_LAYER"
+  | "OUT_OF_BOUNDS_CRS"
+  | "PARSE_ERROR"
+  | "IMPORTER_UNAVAILABLE";
+
+export class InfrastructureLayerImportError extends Error {
+  constructor(
+    message: string,
+    public readonly code: InfrastructureLayerImportErrorCode,
+    public readonly details?: Record<string, unknown>,
+    public readonly status = 400
+  ) {
+    super(message);
+    this.name = "InfrastructureLayerImportError";
+  }
+}
+
+export interface InfrastructureLayerArchiveFile {
+  role: "SHP" | "SHX" | "DBF" | "PRJ" | "CPG";
+  originalName: string;
+  archiveEntryName: string;
+}
+
+export interface InfrastructureLayerArchiveInspection {
   code: InfrastructureLayerCodeId;
+  detectedCode: InfrastructureLayerCodeId | null;
   datasetName: string;
   originalCrs: string | null;
+  entryNames: string[];
+  archiveFiles: InfrastructureLayerArchiveFile[];
+  requiredFiles: string[];
+  optionalFiles: string[];
+  hasCpg: boolean;
+}
+
+export interface InfrastructureLayerImportResult
+  extends InfrastructureLayerArchiveInspection {
   featureCount: number;
   geometryType: "POINT";
   bbox: [number, number, number, number] | null;
@@ -38,6 +80,8 @@ export interface InfrastructureLayerImportResult {
     optionalFiles: string[];
     zipEntries: string[];
     hasCpg: boolean;
+    detectedCode: InfrastructureLayerCodeId | null;
+    archiveFiles: InfrastructureLayerArchiveFile[];
   };
 }
 
@@ -49,6 +93,17 @@ type OptionalExtension = (typeof OPTIONAL_EXTENSIONS)[number];
 type RecognizedExtension = RequiredExtension | OptionalExtension;
 
 type DatasetFiles = Partial<Record<RecognizedExtension, string>>;
+
+type ArchiveEntryMap = Record<string, Uint8Array>;
+
+function createImportError(
+  code: InfrastructureLayerImportErrorCode,
+  message: string,
+  details?: Record<string, unknown>,
+  status = 400
+) {
+  return new InfrastructureLayerImportError(message, code, details, status);
+}
 
 function normalizeEntryName(name: string) {
   return name.replace(/\\/g, "/").replace(/^\/+/, "").trim();
@@ -102,36 +157,97 @@ function resolveDataset(entries: string[]) {
       continue;
     }
 
-    const bestPartialFiles = bestPartial?.files;
-    const currentBestMissingCount = bestPartialFiles
-      ? REQUIRED_EXTENSIONS.filter((extension) => !bestPartialFiles[extension])
-          .length
+    const currentBestMissingCount = bestPartial
+      ? REQUIRED_EXTENSIONS.filter((extension) => !bestPartial!.files[extension]).length
       : Number.POSITIVE_INFINITY;
 
-    if (
-      !bestPartial ||
-      missing.length < currentBestMissingCount
-    ) {
+    if (!bestPartial || missing.length < currentBestMissingCount) {
       bestPartial = { baseName, files, missing };
     }
   }
 
   if (completeDatasets.length === 0) {
     const missingList = bestPartial?.missing ?? [...REQUIRED_EXTENSIONS];
-    throw new Error(
+    throw createImportError(
+      "MISSING_REQUIRED_FILES",
       `Upload incompleto. Faltam arquivo(s) obrigatório(s): ${missingList
         .map((extension) => `.${extension}`)
-        .join(", ")}.`
+        .join(", ")}.`,
+      {
+        missingExtensions: missingList,
+        requiredExtensions: [...REQUIRED_EXTENSIONS],
+        datasetName: bestPartial?.baseName ?? null,
+      }
     );
   }
 
   if (completeDatasets.length > 1) {
-    throw new Error(
-      "O ZIP contém mais de um shapefile completo. Envie apenas um conjunto por upload."
+    throw createImportError(
+      "MULTIPLE_DATASETS",
+      "O ZIP contém mais de um shapefile completo. Envie apenas um conjunto por upload.",
+      {
+        datasetNames: completeDatasets.map((dataset) => dataset.baseName),
+      }
     );
   }
 
   return completeDatasets[0];
+}
+
+function mapArchiveFiles(files: DatasetFiles): InfrastructureLayerArchiveFile[] {
+  return [...REQUIRED_EXTENSIONS, ...OPTIONAL_EXTENSIONS]
+    .map((extension) => {
+      const archiveEntryName = files[extension];
+      if (!archiveEntryName) return null;
+      const parsed = getEntryBaseName(archiveEntryName);
+      return {
+        role: extension.toUpperCase() as InfrastructureLayerArchiveFile["role"],
+        originalName: parsed ? `${parsed.baseName}.${extension}` : archiveEntryName,
+        archiveEntryName,
+      } satisfies InfrastructureLayerArchiveFile;
+    })
+    .filter((file): file is InfrastructureLayerArchiveFile => file !== null);
+}
+
+function inferInfrastructureLayerCode(entryNames: string[], datasetName: string) {
+  const haystack = [datasetName, ...entryNames]
+    .join(" ")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ");
+
+  const detected = new Set<InfrastructureLayerCodeId>();
+  if (/\bPONNOT\b/.test(haystack)) {
+    detected.add("PONNOT");
+  }
+  if (/\bPONT\s*ILUM\b/.test(haystack) || /\bPONTILUM\b/.test(haystack)) {
+    detected.add("PONT_ILUM");
+  }
+
+  if (detected.size === 0) return null;
+  if (detected.size === 1) return Array.from(detected)[0];
+
+  throw createImportError(
+    "UNSUPPORTED_LAYER",
+    "Não foi possível identificar de forma unívoca a camada técnica enviada. Use um pacote contendo apenas PONNOT ou PONT_ILUM.",
+    {
+      matchedCodes: Array.from(detected),
+      datasetName,
+    }
+  );
+}
+
+function readArchiveEntries(buffer: Buffer) {
+  try {
+    return unzipSync(new Uint8Array(buffer));
+  } catch (error) {
+    console.error("[INFRASTRUCTURE_LAYER_ARCHIVE_ERROR]", error);
+    throw createImportError(
+      "INVALID_ARCHIVE",
+      "O arquivo ZIP está corrompido ou não pôde ser aberto.",
+      undefined,
+      400
+    );
+  }
 }
 
 function toArrayBuffer(buffer: Buffer) {
@@ -143,8 +259,12 @@ function toArrayBuffer(buffer: Buffer) {
 function toFeatureCollection(raw: unknown): FeatureCollectionRecord {
   if (Array.isArray(raw)) {
     if (raw.length !== 1) {
-      throw new Error(
-        "O arquivo ZIP gerou múltiplas camadas. Envie apenas um shapefile por upload."
+      throw createImportError(
+        "MULTIPLE_DATASETS",
+        "O arquivo ZIP gerou múltiplas camadas. Envie apenas um shapefile por upload.",
+        {
+          generatedLayers: raw.length,
+        }
       );
     }
     return toFeatureCollection(raw[0]);
@@ -159,7 +279,10 @@ function toFeatureCollection(raw: unknown): FeatureCollectionRecord {
     return raw as FeatureCollectionRecord;
   }
 
-  throw new Error("Não foi possível interpretar o shapefile como GeoJSON.");
+  throw createImportError(
+    "INVALID_GEOJSON",
+    "Não foi possível interpretar o shapefile como GeoJSON válido."
+  );
 }
 
 function isFiniteLngLat(coordinates: unknown): coordinates is [number, number] {
@@ -178,12 +301,21 @@ function explodeMultiPointFeatures(
 
   for (const feature of featureCollection.features) {
     if (!feature.geometry) {
-      throw new Error("O shapefile contém geometria vazia ou inválida.");
+      throw createImportError(
+        "INVALID_GEOMETRY",
+        "O shapefile contém geometria vazia ou inválida."
+      );
     }
 
     if (feature.geometry.type === "Point") {
       if (!isFiniteLngLat(feature.geometry.coordinates)) {
-        throw new Error("O shapefile contém ponto com coordenadas inválidas.");
+        throw createImportError(
+          "INVALID_GEOMETRY",
+          "O shapefile contém ponto com coordenadas inválidas.",
+          {
+            geometryType: feature.geometry.type,
+          }
+        );
       }
       exploded.push(feature);
       continue;
@@ -191,13 +323,23 @@ function explodeMultiPointFeatures(
 
     if (feature.geometry.type === "MultiPoint") {
       if (!Array.isArray(feature.geometry.coordinates)) {
-        throw new Error("O shapefile contém multiponto com coordenadas inválidas.");
+        throw createImportError(
+          "INVALID_GEOMETRY",
+          "O shapefile contém multiponto com coordenadas inválidas.",
+          {
+            geometryType: feature.geometry.type,
+          }
+        );
       }
 
       for (const coordinates of feature.geometry.coordinates) {
         if (!isFiniteLngLat(coordinates)) {
-          throw new Error(
-            "O shapefile contém multiponto com coordenadas inválidas."
+          throw createImportError(
+            "INVALID_GEOMETRY",
+            "O shapefile contém multiponto com coordenadas inválidas.",
+            {
+              geometryType: feature.geometry.type,
+            }
           );
         }
         exploded.push({
@@ -211,13 +353,20 @@ function explodeMultiPointFeatures(
       continue;
     }
 
-    throw new Error(
-      "A camada enviada possui geometria incompatível. Para este fluxo, use apenas feições pontuais."
+    throw createImportError(
+      "INVALID_GEOMETRY",
+      "A camada enviada possui geometria incompatível. Para este fluxo, use apenas feições pontuais.",
+      {
+        geometryType: feature.geometry.type,
+      }
     );
   }
 
   if (exploded.length === 0) {
-    throw new Error("O shapefile não possui feições válidas para publicar.");
+    throw createImportError(
+      "EMPTY_LAYER",
+      "O shapefile não possui feições válidas para publicar."
+    );
   }
 
   return {
@@ -259,29 +408,88 @@ function computeBbox(
   return [minLng, minLat, maxLng, maxLat];
 }
 
-export async function importInfrastructureLayerFromZip(input: {
-  code: InfrastructureLayerCodeId;
+export function inspectInfrastructureLayerArchive(input: {
   buffer: Buffer;
-}) {
-  const archiveEntries = unzipSync(new Uint8Array(input.buffer));
+  expectedCode?: InfrastructureLayerCodeId | null;
+}): InfrastructureLayerArchiveInspection {
+  const archiveEntries = readArchiveEntries(input.buffer);
   const entryNames = Object.keys(archiveEntries)
     .map(normalizeEntryName)
     .filter((entry) => entry.length > 0 && !entry.endsWith("/"));
 
   if (entryNames.length === 0) {
-    throw new Error("O arquivo ZIP está vazio ou corrompido.");
+    throw createImportError(
+      "INVALID_ARCHIVE",
+      "O arquivo ZIP está vazio ou corrompido."
+    );
   }
 
   const dataset = resolveDataset(entryNames);
   const prjEntry = dataset.files.prj;
   const cpgEntry = dataset.files.cpg;
   const prjContents = prjEntry ? strFromU8(archiveEntries[prjEntry]).trim() : "";
+  const detectedCode = inferInfrastructureLayerCode(entryNames, dataset.baseName);
+  const resolvedCode = input.expectedCode ?? detectedCode;
+
+  if (!resolvedCode || !isInfrastructureLayerCode(resolvedCode)) {
+    throw createImportError(
+      "UNSUPPORTED_LAYER",
+      "Não foi possível identificar se a camada enviada é PONNOT ou PONT_ILUM.",
+      {
+        datasetName: dataset.baseName,
+        entryNames,
+        detectedCode,
+      }
+    );
+  }
+
+  if (input.expectedCode && detectedCode && input.expectedCode !== detectedCode) {
+    throw createImportError(
+      "LAYER_CODE_MISMATCH",
+      `O ZIP enviado parece ser ${detectedCode}, mas o upload foi iniciado como ${input.expectedCode}.`,
+      {
+        expectedCode: input.expectedCode,
+        detectedCode,
+        datasetName: dataset.baseName,
+      }
+    );
+  }
+
+  return {
+    code: resolvedCode,
+    detectedCode,
+    datasetName: dataset.baseName,
+    originalCrs: prjContents || null,
+    entryNames,
+    archiveFiles: mapArchiveFiles(dataset.files),
+    requiredFiles: REQUIRED_EXTENSIONS.map((extension) => `.${extension}`),
+    optionalFiles: OPTIONAL_EXTENSIONS.map((extension) => `.${extension}`),
+    hasCpg: Boolean(cpgEntry),
+  };
+}
+
+export async function importInfrastructureLayerFromZip(input: {
+  buffer: Buffer;
+  expectedCode?: InfrastructureLayerCodeId | null;
+  inspection?: InfrastructureLayerArchiveInspection;
+}) {
+  const inspection =
+    input.inspection ??
+    inspectInfrastructureLayerArchive({
+      buffer: input.buffer,
+      expectedCode: input.expectedCode,
+    });
 
   let shpjs: (input: ArrayBuffer) => Promise<unknown>;
   try {
     shpjs = (await import("shpjs")).default;
   } catch {
-    throw new Error("Não foi possível carregar o processador de shapefile.");
+    throw createImportError(
+      "IMPORTER_UNAVAILABLE",
+      "Não foi possível carregar o processador de shapefile.",
+      undefined,
+      500
+    );
   }
 
   let parsed: unknown;
@@ -289,32 +497,42 @@ export async function importInfrastructureLayerFromZip(input: {
     parsed = await shpjs(toArrayBuffer(input.buffer));
   } catch (error) {
     console.error("[INFRASTRUCTURE_LAYER_PARSE_ERROR]", error);
-    throw new Error(
-      `Falha ao processar ${INFRASTRUCTURE_LAYER_LABELS[input.code]}. Verifique se o shapefile não está corrompido.`
+    throw createImportError(
+      "PARSE_ERROR",
+      `Falha ao processar ${INFRASTRUCTURE_LAYER_LABELS[inspection.code]}. Verifique se o shapefile não está corrompido.`,
+      {
+        code: inspection.code,
+        datasetName: inspection.datasetName,
+      }
     );
   }
 
   const featureCollection = explodeMultiPointFeatures(toFeatureCollection(parsed));
 
   if (detectOutOfBoundsCoordinates(featureCollection)) {
-    throw new Error(
-      "As coordenadas publicadas ficaram fora de EPSG:4326. Revise o arquivo .prj e reprojete o shapefile antes do upload."
+    throw createImportError(
+      "OUT_OF_BOUNDS_CRS",
+      "As coordenadas publicadas ficaram fora de EPSG:4326. Revise o arquivo .prj e reprojete o shapefile antes do upload.",
+      {
+        datasetName: inspection.datasetName,
+        originalCrs: inspection.originalCrs,
+      }
     );
   }
 
   return {
-    code: input.code,
-    datasetName: dataset.baseName,
-    originalCrs: prjContents || null,
+    ...inspection,
     featureCount: featureCollection.features.length,
     geometryType: "POINT" as const,
     bbox: computeBbox(featureCollection),
     geoJsonData: featureCollection,
     metadata: {
-      requiredFiles: REQUIRED_EXTENSIONS.map((extension) => `.${extension}`),
-      optionalFiles: OPTIONAL_EXTENSIONS.map((extension) => `.${extension}`),
-      zipEntries: entryNames,
-      hasCpg: Boolean(cpgEntry),
+      requiredFiles: inspection.requiredFiles,
+      optionalFiles: inspection.optionalFiles,
+      zipEntries: inspection.entryNames,
+      hasCpg: inspection.hasCpg,
+      detectedCode: inspection.detectedCode,
+      archiveFiles: inspection.archiveFiles,
     },
   } satisfies InfrastructureLayerImportResult;
 }
