@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getProjectShellData, type ProjectShellRecord } from "@/lib/project-pages";
+import { summarizePavementProjectAssets } from "@/lib/pavement-technical";
 
 type ProjectContext = {
   tenantId: string;
@@ -435,7 +436,7 @@ async function loadHistoryData(context: ProjectContext) {
 async function loadGisData(context: ProjectContext) {
   const { tenantId, project } = context;
 
-  const [assetGroups, recentAssets] = await Promise.all([
+  const [assetGroups, recentAssets, pavementAssets] = await Promise.all([
     prisma.asset.groupBy({
       by: ["type"],
       where: { tenantId, projectId: project.id },
@@ -452,9 +453,28 @@ async function loadGisData(context: ProjectContext) {
         updatedAt: true,
       },
     }),
+    prisma.asset.findMany({
+      where: { tenantId, projectId: project.id, type: "TRECHO" },
+      select: {
+        id: true,
+        name: true,
+        attributes: true,
+      },
+    }),
   ]);
 
-  return { assetGroups, recentAssets };
+  const pavementSummary = summarizePavementProjectAssets(
+    pavementAssets.map((asset) => ({
+      id: asset.id,
+      name: asset.name,
+      attributes:
+        asset.attributes && typeof asset.attributes === "object" && !Array.isArray(asset.attributes)
+          ? { ...(asset.attributes as Record<string, unknown>) }
+          : {},
+    }))
+  );
+
+  return { assetGroups, recentAssets, pavementSummary };
 }
 
 export async function getProjectOverviewData(projectId: string) {

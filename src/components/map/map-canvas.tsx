@@ -179,8 +179,22 @@ const ASSET_STYLES = {
     color: "bg-amber-600",
     hex: "#d97706",
     ring: "ring-amber-600/50",
-    icon: "🚧",
+    icon: "BK",
     label: "Buraco",
+  },
+  DEFEITO_PAVIMENTO: {
+    color: "bg-orange-500",
+    hex: "#f97316",
+    ring: "ring-orange-500/50",
+    icon: "DP",
+    label: "Defeito",
+  },
+  AFUNDAMENTO_VIARIO: {
+    color: "bg-red-500",
+    hex: "#ef4444",
+    ring: "ring-red-500/50",
+    icon: "AF",
+    label: "Afundamento",
   },
   LUMINARIA: {
     color: "bg-yellow-500",
@@ -215,24 +229,56 @@ function getDrainageLineStyle(feature: { attributes?: Record<string, unknown>; c
     readFeatureString(feature.attributes, "subType");
   const operationalStatus = readFeatureString(feature.attributes, "operationalStatus");
   const assetCondition = readFeatureString(feature.attributes, "assetCondition");
+  const surfaceCondition = readFeatureString(feature.attributes, "surfaceCondition");
   const riskLevel =
     readFeatureString(feature.attributes, "riskLevel") ??
     readFeatureString(feature.attributes, "criticality");
   const diameterMm = Number(readFeatureString(feature.attributes, "diameterMm") ?? "0");
+  const widthMeters = Number(readFeatureString(feature.attributes, "widthMeters") ?? "0");
   const isDrainageLine =
     technicalObjectType === "TRECHO_DRENAGEM" ||
     technicalObjectType === "GALERIA_PLUVIAL" ||
     technicalObjectType === "SARJETA" ||
     technicalObjectType === "CANAL";
-
-  if (!isDrainageLine) {
+  const isPavementLine = technicalObjectType === "TRECHO_PAVIMENTO";
+  if (!isDrainageLine && !isPavementLine) {
     return {
       lineColor: feature.color || "#3b82f6",
       lineWidth: 4,
       lineOpacity: 0.94,
     };
   }
-
+  if (isPavementLine) {
+    let lineColor = feature.color || "#d97706";
+    if (
+      riskLevel === "CRITICA" ||
+      riskLevel === "CRITICO" ||
+      surfaceCondition === "CRITICA" ||
+      operationalStatus === "BLOQUEADO"
+    ) {
+      lineColor = "#dc2626";
+    } else if (
+      riskLevel === "ALTA" ||
+      riskLevel === "ALTO" ||
+      surfaceCondition === "RUIM" ||
+      operationalStatus === "EM_OBRA"
+    ) {
+      lineColor = "#f97316";
+    } else if (surfaceCondition === "REGULAR" || operationalStatus === "MEIA_PISTA") {
+      lineColor = "#f59e0b";
+    }
+    let lineWidth = 4.5;
+    if (Number.isFinite(widthMeters) && widthMeters > 0) {
+      if (widthMeters >= 18) lineWidth = 7;
+      else if (widthMeters >= 12) lineWidth = 6;
+      else if (widthMeters >= 8) lineWidth = 5.25;
+    }
+    return {
+      lineColor,
+      lineWidth,
+      lineOpacity: operationalStatus === "BLOQUEADO" ? 0.74 : 0.96,
+    };
+  }
   const baseColor =
     technicalObjectType === "GALERIA_PLUVIAL"
       ? "#2563eb"
@@ -241,7 +287,6 @@ function getDrainageLineStyle(feature: { attributes?: Record<string, unknown>; c
         : technicalObjectType === "CANAL"
           ? "#0891b2"
           : "#0284c7";
-
   let lineColor = feature.color || baseColor;
   if (riskLevel === "CRITICO" || assetCondition === "CRITICA" || operationalStatus === "INTERDITADO") {
     lineColor = "#dc2626";
@@ -255,7 +300,6 @@ function getDrainageLineStyle(feature: { attributes?: Record<string, unknown>; c
   ) {
     lineColor = "#d97706";
   }
-
   let lineWidth = 4;
   if (Number.isFinite(diameterMm) && diameterMm > 0) {
     if (diameterMm >= 1500) lineWidth = 7;
@@ -264,7 +308,6 @@ function getDrainageLineStyle(feature: { attributes?: Record<string, unknown>; c
     else if (diameterMm >= 600) lineWidth = 4.75;
     else if (diameterMm >= 400) lineWidth = 4.25;
   }
-
   return {
     lineColor,
     lineWidth,
@@ -284,40 +327,58 @@ function getPointVisualStyle(feature: { type: string; attributes?: Record<string
     technicalObjectType === "DISSIPADOR" ||
     technicalObjectType === "PONTO_ALAGAMENTO" ||
     technicalObjectType === "OCORRENCIA_DRENAGEM";
+  const isPavementPoint =
+    technicalObjectType === "DEFEITO_PAVIMENTO" ||
+    technicalObjectType === "BURACO" ||
+    technicalObjectType === "AFUNDAMENTO_VIARIO";
   const assetCondition = readFeatureString(feature.attributes, "assetCondition");
   const operationalStatus = readFeatureString(feature.attributes, "operationalStatus");
+  const surfaceCondition = readFeatureString(feature.attributes, "surfaceCondition");
   const riskLevel =
     readFeatureString(feature.attributes, "riskLevel") ??
-    readFeatureString(feature.attributes, "criticality");
-
+    readFeatureString(feature.attributes, "criticality") ??
+    readFeatureString(feature.attributes, "severity");
   let hex = baseStyle?.hex || "#ffffff";
-  if (!isDrainagePoint) {
+  if (!isDrainagePoint && !isPavementPoint) {
     return {
       ...(baseStyle ?? {}),
       hex,
     };
   }
-
-  if (riskLevel === "CRITICO" || assetCondition === "CRITICA" || operationalStatus === "INTERDITADO") {
+  if (
+    riskLevel === "CRITICO" ||
+    riskLevel === "CRITICA" ||
+    assetCondition === "CRITICA" ||
+    surfaceCondition === "CRITICA" ||
+    operationalStatus === "INTERDITADO" ||
+    operationalStatus === "BLOQUEADO"
+  ) {
     hex = "#dc2626";
-  } else if (riskLevel === "ALTO" || assetCondition === "RUIM" || operationalStatus === "OBSTRUIDO") {
+  } else if (
+    riskLevel === "ALTO" ||
+    riskLevel === "ALTA" ||
+    assetCondition === "RUIM" ||
+    surfaceCondition === "RUIM" ||
+    operationalStatus === "OBSTRUIDO" ||
+    operationalStatus === "EM_OBRA"
+  ) {
     hex = "#f97316";
   } else if (
     riskLevel === "MODERADO" ||
+    riskLevel === "MEDIA" ||
     assetCondition === "REGULAR" ||
+    surfaceCondition === "REGULAR" ||
     operationalStatus === "PARCIAL" ||
+    operationalStatus === "MEIA_PISTA" ||
     operationalStatus === "MANUTENCAO"
   ) {
     hex = "#d97706";
   }
-
   return {
     ...(baseStyle ?? {}),
     hex,
   };
-}
-
-function hasValidPoint(coords: { lng: number; lat: number }[] | undefined): boolean {
+}function hasValidPoint(coords: { lng: number; lat: number }[] | undefined): boolean {
   if (!coords || coords.length === 0) return false;
   return Number.isFinite(coords[0]?.lng) && Number.isFinite(coords[0]?.lat);
 }

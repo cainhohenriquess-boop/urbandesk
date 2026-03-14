@@ -16,6 +16,7 @@ import { ProjectDrainageSegmentForm } from "@/components/projetos/project-draina
 import { ProjectDrainageTechnicalPanel } from "@/components/projetos/project-drainage-technical-panel";
 import { ProjectMapDisciplineToolset } from "@/components/projetos/project-map-discipline-toolset";
 import { ProjectMapGlobalToolbar } from "@/components/projetos/project-map-global-toolbar";
+import { ProjectPavementRoadForm } from "@/components/projetos/project-pavement-road-form";
 import { ProjectMapTechnicalForm } from "@/components/projetos/project-map-technical-form";
 import {
   assessDrainageSegment,
@@ -28,6 +29,15 @@ import {
   validateDrainageSegmentGeometry,
   type DrainageSegmentUserContext,
 } from "@/lib/drainage-segment";
+import {
+  buildPavementRoadSegmentAssistAttributes,
+  buildPavementRoadSegmentAutoContext,
+  buildPavementRoadSegmentSuggestedName,
+  evaluatePavementRoadSegment,
+  isPavementRoadSegmentObjectType,
+  mergePavementRoadSegmentDefaultValues,
+  validatePavementRoadSegmentGeometry,
+} from "@/lib/pavement-segment";
 import {
   importGeoJsonFeatures,
   joinLineFeatures,
@@ -614,6 +624,10 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const [technicalFieldValues, setTechnicalFieldValues] = useState<Record<string, string>>({});
   const [drainageFilters, setDrainageFilters] = useState<DrainageFilterState>(EMPTY_DRAINAGE_FILTERS);
   const [drainageCriticalityLocked, setDrainageCriticalityLocked] = useState(false);
+  const [pavementWidthLocked, setPavementWidthLocked] = useState(false);
+  const [pavementConditionLocked, setPavementConditionLocked] = useState(false);
+  const [pavementPriorityLocked, setPavementPriorityLocked] = useState(false);
+  const [pavementCostLocked, setPavementCostLocked] = useState(false);
   const [isSavingInspector, setIsSavingInspector] = useState(false);
   const [detailRefreshTick, setDetailRefreshTick] = useState(0);
   const [commentDraft, setCommentDraft] = useState("");
@@ -789,6 +803,47 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     return assessDrainageSegment(technicalFieldValues, drainageSegmentAutoContext);
   }, [drainageSegmentAutoContext, technicalFieldValues]);
 
+  const pavementRoadSegmentAutoContext = useMemo(() => {
+    const source = pendingFeature ?? selectedFeature;
+    if (!source) return null;
+
+    const context = getFeatureTechnicalContext(source, effectiveTechnicalArea);
+    if (!isPavementRoadSegmentObjectType(context.technicalObjectType)) {
+      return null;
+    }
+
+    return buildPavementRoadSegmentAutoContext({
+      feature: source,
+      baseLayersData,
+      project: {
+        id: project.id,
+        name: project.name,
+        code: project.code,
+        neighborhood: project.neighborhood,
+        district: project.district,
+        region: project.region,
+      },
+      currentUser,
+    });
+  }, [
+    baseLayersData,
+    currentUser,
+    effectiveTechnicalArea,
+    pendingFeature,
+    project.code,
+    project.district,
+    project.id,
+    project.name,
+    project.neighborhood,
+    project.region,
+    selectedFeature,
+  ]);
+
+  const pavementRoadSegmentAssessment = useMemo(() => {
+    if (!pavementRoadSegmentAutoContext) return null;
+    return evaluatePavementRoadSegment(technicalFieldValues, pavementRoadSegmentAutoContext);
+  }, [pavementRoadSegmentAutoContext, technicalFieldValues]);
+
   useEffect(() => {
     const contextSource = pendingFeature ?? selectedFeature;
     if (!contextSource) return;
@@ -854,22 +909,30 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         context.technicalArea ?? effectiveTechnicalArea,
         context.technicalObjectType
       );
+      const rawTechnicalValues = readTechnicalFieldValues(fields, pendingFeature.attributes);
       const nextTechnicalValues = isDrainageSegmentObjectType(context.technicalObjectType)
-        ? mergeDrainageSegmentDefaultValues(
-            readTechnicalFieldValues(fields, pendingFeature.attributes)
-          )
-        : readTechnicalFieldValues(fields, pendingFeature.attributes);
+        ? mergeDrainageSegmentDefaultValues(rawTechnicalValues)
+        : isPavementRoadSegmentObjectType(context.technicalObjectType)
+          ? mergePavementRoadSegmentDefaultValues(rawTechnicalValues)
+          : rawTechnicalValues;
       const suggestedName =
         isDrainageSegmentObjectType(context.technicalObjectType) && drainageSegmentAutoContext
           ? buildDrainageSegmentSuggestedName(drainageSegmentAutoContext)
-          : "";
+          : isPavementRoadSegmentObjectType(context.technicalObjectType) &&
+              pavementRoadSegmentAutoContext
+            ? buildPavementRoadSegmentSuggestedName(
+                pavementRoadSegmentAutoContext,
+                nextTechnicalValues
+              )
+            : "";
 
       setInspectorForm({
         name: readStringAttribute(pendingFeature.attributes, ["name"]) || suggestedName,
         description: readStringAttribute(pendingFeature.attributes, ["description", "obs", "notes"]),
         status:
           readStringAttribute(pendingFeature.attributes, ["status"]) ||
-          (isDrainageSegmentObjectType(context.technicalObjectType)
+          (isDrainageSegmentObjectType(context.technicalObjectType) ||
+          isPavementRoadSegmentObjectType(context.technicalObjectType)
             ? nextTechnicalValues.operationalStatus ?? ""
             : ""),
         front:
@@ -885,6 +948,10 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       });
       setTechnicalFieldValues(nextTechnicalValues);
       setDrainageCriticalityLocked(false);
+      setPavementWidthLocked(rawTechnicalValues.widthSource === "INFORMADA");
+      setPavementConditionLocked(Boolean(rawTechnicalValues.surfaceCondition));
+      setPavementPriorityLocked(Boolean(rawTechnicalValues.interventionPriority));
+      setPavementCostLocked(Boolean(rawTechnicalValues.estimatedUnitCostSqm));
       return;
     }
 
@@ -896,13 +963,22 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         context.technicalArea ?? effectiveTechnicalArea,
         context.technicalObjectType
       );
+      const rawTechnicalValues = readTechnicalFieldValues(fields, attributes);
       const nextTechnicalValues = isDrainageSegmentObjectType(context.technicalObjectType)
-        ? mergeDrainageSegmentDefaultValues(readTechnicalFieldValues(fields, attributes))
-        : readTechnicalFieldValues(fields, attributes);
+        ? mergeDrainageSegmentDefaultValues(rawTechnicalValues)
+        : isPavementRoadSegmentObjectType(context.technicalObjectType)
+          ? mergePavementRoadSegmentDefaultValues(rawTechnicalValues)
+          : rawTechnicalValues;
       const suggestedName =
         isDrainageSegmentObjectType(context.technicalObjectType) && drainageSegmentAutoContext
           ? buildDrainageSegmentSuggestedName(drainageSegmentAutoContext)
-          : "";
+          : isPavementRoadSegmentObjectType(context.technicalObjectType) &&
+              pavementRoadSegmentAutoContext
+            ? buildPavementRoadSegmentSuggestedName(
+                pavementRoadSegmentAutoContext,
+                nextTechnicalValues
+              )
+            : "";
 
       setInspectorForm({
         name: preferLocalValues
@@ -917,7 +993,8 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
             readStringAttribute(attributes, ["description", "obs", "notes"]),
         status:
           readStringAttribute(attributes, ["status"]) ||
-          (isDrainageSegmentObjectType(context.technicalObjectType)
+          (isDrainageSegmentObjectType(context.technicalObjectType) ||
+          isPavementRoadSegmentObjectType(context.technicalObjectType)
             ? nextTechnicalValues.operationalStatus ?? ""
             : ""),
         front: readStringAttribute(attributes, ["frente", "area", "fase"]),
@@ -926,18 +1003,27 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       });
       setTechnicalFieldValues(nextTechnicalValues);
       setDrainageCriticalityLocked(false);
+      setPavementWidthLocked(rawTechnicalValues.widthSource === "INFORMADA");
+      setPavementConditionLocked(Boolean(rawTechnicalValues.surfaceCondition));
+      setPavementPriorityLocked(Boolean(rawTechnicalValues.interventionPriority));
+      setPavementCostLocked(Boolean(rawTechnicalValues.estimatedUnitCostSqm));
       return;
     }
 
     setInspectorForm(EMPTY_FORM);
     setTechnicalFieldValues({});
     setDrainageCriticalityLocked(false);
+    setPavementWidthLocked(false);
+    setPavementConditionLocked(false);
+    setPavementPriorityLocked(false);
+    setPavementCostLocked(false);
   }, [
     currentUser.email,
     currentUser.name,
     drainageSegmentAutoContext,
     effectiveTechnicalArea,
     pendingFeature,
+    pavementRoadSegmentAutoContext,
     project.responsibleDepartment,
     selectedDetail,
     selectedFeature,
@@ -959,6 +1045,59 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   }, [drainageCriticalityLocked, drainageSegmentAssessment]);
 
   useEffect(() => {
+    if (!pavementRoadSegmentAssessment) return;
+
+    setTechnicalFieldValues((current) => {
+      const next = { ...current };
+      let changed = false;
+
+      if (!pavementWidthLocked && pavementRoadSegmentAssessment.effectiveWidthMeters) {
+        const suggestedWidth = String(pavementRoadSegmentAssessment.effectiveWidthMeters);
+        if (current.widthSource !== "ESTIMADA") {
+          next.widthSource = "ESTIMADA";
+          changed = true;
+        }
+        if (current.widthMeters !== suggestedWidth) {
+          next.widthMeters = suggestedWidth;
+          changed = true;
+        }
+      }
+
+      if (
+        !pavementConditionLocked &&
+        current.surfaceCondition !== pavementRoadSegmentAssessment.suggestedSurfaceCondition
+      ) {
+        next.surfaceCondition = pavementRoadSegmentAssessment.suggestedSurfaceCondition;
+        changed = true;
+      }
+
+      if (
+        !pavementPriorityLocked &&
+        current.interventionPriority !== pavementRoadSegmentAssessment.suggestedPriority
+      ) {
+        next.interventionPriority = pavementRoadSegmentAssessment.suggestedPriority;
+        changed = true;
+      }
+
+      if (!pavementCostLocked && pavementRoadSegmentAssessment.estimatedUnitCostSqm !== null) {
+        const suggestedCost = String(pavementRoadSegmentAssessment.estimatedUnitCostSqm);
+        if (current.estimatedUnitCostSqm !== suggestedCost) {
+          next.estimatedUnitCostSqm = suggestedCost;
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [
+    pavementConditionLocked,
+    pavementCostLocked,
+    pavementPriorityLocked,
+    pavementRoadSegmentAssessment,
+    pavementWidthLocked,
+  ]);
+
+  useEffect(() => {
     setCommentDraft("");
     setCommentFiles([]);
   }, [selectedFeature?.id]);
@@ -966,6 +1105,33 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const handleTechnicalFieldChange = useCallback((key: string, value: string) => {
     if (key === "criticality") {
       setDrainageCriticalityLocked(true);
+    }
+
+    if (key === "surfaceCondition") {
+      setPavementConditionLocked(true);
+    }
+
+    if (key === "interventionPriority") {
+      setPavementPriorityLocked(true);
+    }
+
+    if (key === "estimatedUnitCostSqm") {
+      setPavementCostLocked(value.trim().length > 0);
+    }
+
+    if (key === "widthSource") {
+      setPavementWidthLocked(value === "INFORMADA");
+      if (value === "ESTIMADA") {
+        setTechnicalFieldValues((current) => ({
+          ...current,
+          widthSource: value,
+        }));
+        return;
+      }
+    }
+
+    if (key === "widthMeters") {
+      setPavementWidthLocked(true);
     }
 
     setTechnicalFieldValues((current) => ({
@@ -1283,6 +1449,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const handleInspectorSave = async () => {
     let nextAttributes: Record<string, unknown>;
     let normalizedDrainageCoords: DrawnFeature["coords"] | null = null;
+    let normalizedPavementCoords: DrawnFeature["coords"] | null = null;
 
     try {
       const contextSource = pendingFeature ?? selectedFeature;
@@ -1308,9 +1475,20 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         ...buildTechnicalDataPayload(fieldDefinitions, technicalFieldValues),
       };
       const isDrainageSegment = isDrainageSegmentObjectType(context.technicalObjectType);
+      const isPavementRoadSegment = isPavementRoadSegmentObjectType(
+        context.technicalObjectType
+      );
       const assistedDrainageAttributes =
         isDrainageSegment && drainageSegmentAutoContext && drainageSegmentAssessment
           ? buildDrainageSegmentAssistAttributes(drainageSegmentAutoContext, drainageSegmentAssessment)
+          : {};
+      const assistedPavementAttributes =
+        isPavementRoadSegment && pavementRoadSegmentAutoContext && pavementRoadSegmentAssessment
+          ? buildPavementRoadSegmentAssistAttributes(
+              pavementRoadSegmentAutoContext,
+              pavementRoadSegmentAssessment,
+              technicalFieldValues
+            )
           : {};
 
       if (isDrainageSegment) {
@@ -1334,6 +1512,30 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         }
       }
 
+      if (isPavementRoadSegment) {
+        if (!pavementRoadSegmentAutoContext) {
+          window.alert("Não foi possível montar o contexto assistido do trecho viário.");
+          return;
+        }
+        if (!pavementRoadSegmentAssessment) {
+          window.alert("Não foi possível calcular os indicadores automáticos do trecho viário.");
+          return;
+        }
+
+        const geometryValidation = validatePavementRoadSegmentGeometry(contextSource ?? { coords: [] });
+        if (geometryValidation.errors.length > 0) {
+          window.alert(geometryValidation.errors.join("\n"));
+          return;
+        }
+
+        if (pavementRoadSegmentAssessment.errors.length > 0) {
+          window.alert(pavementRoadSegmentAssessment.errors.join("\n"));
+          return;
+        }
+
+        normalizedPavementCoords = geometryValidation.normalizedCoords;
+      }
+
       nextAttributes = normalizeTechnicalAttributes(
         compactAttributes({
           ...((selectedFeature?.attributes ?? pendingFeature?.attributes ?? {}) as Record<
@@ -1350,6 +1552,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           notes: inspectorForm.notes,
           description: inspectorForm.description,
           ...assistedDrainageAttributes,
+          ...assistedPavementAttributes,
           ...(fieldArea ? { technicalArea: fieldArea } : {}),
           ...(context.technicalObjectType
             ? {
@@ -1374,6 +1577,12 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         isDrainageSegmentObjectType(inspectorContext?.technicalObjectType ?? null) &&
         drainageSegmentAutoContext
           ? buildDrainageSegmentSuggestedName(drainageSegmentAutoContext)
+          : isPavementRoadSegmentObjectType(inspectorContext?.technicalObjectType ?? null) &&
+              pavementRoadSegmentAutoContext
+            ? buildPavementRoadSegmentSuggestedName(
+                pavementRoadSegmentAutoContext,
+                technicalFieldValues
+              )
           : undefined;
       confirmPendingFeature(nextAttributes, inspectorForm.name.trim() || fallbackName || undefined);
       return;
@@ -1384,12 +1593,19 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     const nextFeature: DrawnFeature = {
       ...selectedFeature,
       ...(normalizedDrainageCoords ? { coords: normalizedDrainageCoords } : {}),
+      ...(normalizedPavementCoords ? { coords: normalizedPavementCoords } : {}),
       label:
         inspectorForm.name.trim() ||
         selectedFeature.label ||
         (isDrainageSegmentObjectType(inspectorContext?.technicalObjectType ?? null) &&
         drainageSegmentAutoContext
           ? buildDrainageSegmentSuggestedName(drainageSegmentAutoContext)
+          : isPavementRoadSegmentObjectType(inspectorContext?.technicalObjectType ?? null) &&
+              pavementRoadSegmentAutoContext
+            ? buildPavementRoadSegmentSuggestedName(
+                pavementRoadSegmentAutoContext,
+                technicalFieldValues
+              )
           : "Ativo sem nome"),
       description: inspectorForm.description.trim() || null,
       attributes: nextAttributes,
@@ -1398,6 +1614,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     if (!selectedFeature.persistedId) {
       updateFeature(selectedFeature.id, {
         ...(normalizedDrainageCoords ? { coords: normalizedDrainageCoords } : {}),
+        ...(normalizedPavementCoords ? { coords: normalizedPavementCoords } : {}),
         label: nextFeature.label,
         description: nextFeature.description,
         attributes: nextAttributes,
@@ -1410,6 +1627,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       await persistFeature(nextFeature);
       updateFeature(selectedFeature.id, {
         ...(normalizedDrainageCoords ? { coords: normalizedDrainageCoords } : {}),
+        ...(normalizedPavementCoords ? { coords: normalizedPavementCoords } : {}),
         label: nextFeature.label,
         description: nextFeature.description,
         attributes: nextAttributes,
@@ -1507,6 +1725,9 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   }, [effectiveTechnicalArea, pendingFeature, selectedFeature]);
 
   const isDrainageSegmentInspector = isDrainageSegmentObjectType(
+    inspectorContext?.technicalObjectType ?? null
+  );
+  const isPavementRoadSegmentInspector = isPavementRoadSegmentObjectType(
     inspectorContext?.technicalObjectType ?? null
   );
 
@@ -1982,6 +2203,21 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                         onChange={handleTechnicalFieldChange}
                       />
                     </>
+                  ) : isPavementRoadSegmentInspector ? (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome sugerido do trecho viário" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Escopo da intervenção viária, frente ou observação inicial" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Notas complementares da frente de pavimentação" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectPavementRoadForm
+                        autoContext={pavementRoadSegmentAutoContext}
+                        assessment={pavementRoadSegmentAssessment}
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={handleTechnicalFieldChange}
+                      />
+                    </>
                   ) : (
                     <>
                       <div className="grid gap-3">
@@ -2034,6 +2270,21 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                       <ProjectDrainageSegmentForm
                         autoContext={drainageSegmentAutoContext}
                         assessment={drainageSegmentAssessment}
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={handleTechnicalFieldChange}
+                      />
+                    </>
+                  ) : isPavementRoadSegmentInspector ? (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome sugerido do trecho viário" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição técnica do trecho viário" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações operacionais da pavimentação" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectPavementRoadForm
+                        autoContext={pavementRoadSegmentAutoContext}
+                        assessment={pavementRoadSegmentAssessment}
                         fields={activeTechnicalFields}
                         values={technicalFieldValues}
                         onChange={handleTechnicalFieldChange}

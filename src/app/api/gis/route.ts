@@ -15,6 +15,11 @@ import {
   validateDrainageSegmentGeometry,
 } from "@/lib/drainage-segment";
 import {
+  isPavementRoadSegmentObjectType,
+  validatePavementRoadSegmentGeometry,
+} from "@/lib/pavement-segment";
+import { assessPavementRoadSegment } from "@/lib/pavement-technical";
+import {
   getTechnicalFieldsForContext,
   normalizeTechnicalAttributes,
   readTechnicalFieldValues,
@@ -218,6 +223,72 @@ function enrichDrainageAttributes(
       riskLevel: assessment.riskLevel,
       riskReason: assessment.reason,
       suggestedCriticality: assessment.suggestedCriticality,
+      technicalData,
+    },
+    errors: [] as string[],
+  };
+}
+
+function enrichPavementAttributes(
+  normalizedAttributes: Record<string, unknown>,
+  geomWkt: string | null
+) {
+  const technicalObjectType = resolveTechnicalObjectType(null, normalizedAttributes);
+  if (!isPavementRoadSegmentObjectType(technicalObjectType)) {
+    return { attributes: normalizedAttributes, errors: [] as string[] };
+  }
+
+  const geometry = parseWktGeometry(geomWkt);
+  const lineCoords = extractLineCoordsFromGeometry(geometry);
+  const geometryValidation = validatePavementRoadSegmentGeometry({ coords: lineCoords });
+
+  if (geometryValidation.errors.length > 0) {
+    return {
+      attributes: normalizedAttributes,
+      errors: geometryValidation.errors,
+    };
+  }
+
+  const technicalFields = getTechnicalFieldsForContext("PAVIMENTACAO", technicalObjectType);
+  const technicalValues = readTechnicalFieldValues(technicalFields, normalizedAttributes);
+  const assessment = assessPavementRoadSegment(technicalValues, {
+    lengthMeters: geometryValidation.lengthMeters,
+  });
+
+  if (assessment.errors.length > 0) {
+    return {
+      attributes: normalizedAttributes,
+      errors: assessment.errors,
+    };
+  }
+
+  const technicalData =
+    normalizedAttributes.technicalData &&
+    typeof normalizedAttributes.technicalData === "object" &&
+    !Array.isArray(normalizedAttributes.technicalData)
+      ? { ...(normalizedAttributes.technicalData as Record<string, unknown>) }
+      : {};
+
+  if (!technicalData.surfaceCondition && assessment.suggestedSurfaceCondition) {
+    technicalData.surfaceCondition = assessment.suggestedSurfaceCondition;
+  }
+
+  if (!technicalData.interventionPriority && assessment.suggestedPriority) {
+    technicalData.interventionPriority = assessment.suggestedPriority;
+  }
+
+  return {
+    attributes: {
+      ...normalizedAttributes,
+      lengthMeters: Number(geometryValidation.lengthMeters.toFixed(2)),
+      geometryWarnings: geometryValidation.warnings,
+      effectiveWidthMeters: assessment.effectiveWidthMeters ?? undefined,
+      widthWasEstimated: assessment.widthWasEstimated,
+      areaSqm: assessment.areaSqm ?? undefined,
+      estimatedUnitCostSqm: assessment.estimatedUnitCostSqm ?? undefined,
+      estimatedTotalCost: assessment.estimatedTotalCost ?? undefined,
+      suggestedSurfaceCondition: assessment.suggestedSurfaceCondition,
+      suggestedPriority: assessment.suggestedPriority,
       technicalData,
     },
     errors: [] as string[],
@@ -507,6 +578,14 @@ export async function POST(req: NextRequest) {
       );
     }
     normalizedAttributes = enrichedDrainageCreate.attributes;
+    const enrichedPavementCreate = enrichPavementAttributes(normalizedAttributes, geomWkt);
+    if (enrichedPavementCreate.errors.length > 0) {
+      return NextResponse.json(
+        { error: "Geometria linear inválida para pavimentação.", details: enrichedPavementCreate.errors },
+        { status: 400 }
+      );
+    }
+    normalizedAttributes = enrichedPavementCreate.attributes;
     const requestPhotos = sanitizePhotoArray(body.photos);
     const attributePhotos = sanitizePhotoArray(normalizedAttributes.photos);
     const photos = requestPhotos.length > 0 ? requestPhotos : attributePhotos;
@@ -764,6 +843,17 @@ export async function PATCH(req: NextRequest) {
         );
       }
       normalizedAttributes = enrichedDrainageUpdate.attributes;
+      const enrichedPavementUpdate = enrichPavementAttributes(
+        normalizedAttributes,
+        body.geomWkt !== undefined ? sanitizeOptionalString(body.geomWkt) : existing.geomWkt
+      );
+      if (enrichedPavementUpdate.errors.length > 0) {
+        return NextResponse.json(
+          { error: "Geometria linear inválida para pavimentação.", details: enrichedPavementUpdate.errors },
+          { status: 400 }
+        );
+      }
+      normalizedAttributes = enrichedPavementUpdate.attributes;
       updateData.attributes = normalizedAttributes as Prisma.InputJsonValue;
       changedFields.push("attributes");
     }
@@ -789,6 +879,22 @@ export async function PATCH(req: NextRequest) {
 
       if (JSON.stringify(enrichedDrainageUpdate.attributes) !== JSON.stringify(normalizedExistingAttributes)) {
         updateData.attributes = enrichedDrainageUpdate.attributes as Prisma.InputJsonValue;
+        if (!changedFields.includes("attributes")) changedFields.push("attributes");
+      }
+      const baseAttributes = toPlainObject(updateData.attributes ?? existing.attributes);
+      const enrichedPavementUpdate = enrichPavementAttributes(
+        baseAttributes,
+        sanitizeOptionalString(body.geomWkt)
+      );
+      if (enrichedPavementUpdate.errors.length > 0) {
+        return NextResponse.json(
+          { error: "Geometria linear inválida para pavimentação.", details: enrichedPavementUpdate.errors },
+          { status: 400 }
+        );
+      }
+
+      if (JSON.stringify(enrichedPavementUpdate.attributes) !== JSON.stringify(baseAttributes)) {
+        updateData.attributes = enrichedPavementUpdate.attributes as Prisma.InputJsonValue;
         if (!changedFields.includes("attributes")) changedFields.push("attributes");
       }
     }

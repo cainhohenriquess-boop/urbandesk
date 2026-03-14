@@ -41,6 +41,7 @@ import {
   formatBRL,
   formatDate,
   formatDateTime,
+  formatDistance,
   formatNumber,
   truncate,
 } from "@/lib/utils";
@@ -319,6 +320,7 @@ export function ProjectSummaryTab({ data }: { data: ProjectOverviewData }) {
     assetGroups,
     recentAssets,
     measurementTotals,
+    pavementSummary,
   } = data;
 
   const contractedAmount = resolveProjectContractedAmount(project);
@@ -375,6 +377,8 @@ export function ProjectSummaryTab({ data }: { data: ProjectOverviewData }) {
   const criticalAlerts = criticalIssues.filter((issue) => getPriorityRank(issue.priority) >= 3).length;
   const criticalRiskAlerts =
     criticalRisks.filter((risk) => getRiskImpactRank(risk.impact) >= 3).length;
+  const showPavementSnapshot =
+    project.technicalAreas.includes("PAVIMENTACAO") || pavementSummary.totalRoadSegments > 0;
 
   return (
     <div className="space-y-6">
@@ -834,6 +838,60 @@ export function ProjectSummaryTab({ data }: { data: ProjectOverviewData }) {
                     tone="warning"
                   />
                 ))}
+              </div>
+            </div>
+          ) : null}
+
+          {showPavementSnapshot ? (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">Leitura rápida de pavimentação</p>
+                  <p className="mt-1 text-sm text-amber-800">
+                    Resumo automático dos trechos viários cadastrados no mapa do projeto.
+                  </p>
+                </div>
+                <Link
+                  href={`/app/projetos/${project.id}/mapa`}
+                  className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+                >
+                  Abrir mapa
+                </Link>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-4">
+                <SummaryDetailRow
+                  label="Trechos viários"
+                  value={formatNumber(pavementSummary.totalRoadSegments)}
+                  helper={`${formatNumber(pavementSummary.criticalSegments)} crítico(s).`}
+                />
+                <SummaryDetailRow
+                  label="Extensão total"
+                  value={formatDistance(pavementSummary.totalLengthMeters)}
+                  helper="Comprimento consolidado dos trechos cadastrados."
+                />
+                <SummaryDetailRow
+                  label="Área estimada"
+                  value={`${formatNumber(pavementSummary.totalAreaSqm)} m²`}
+                  helper="Calculada automaticamente a partir do comprimento e da largura efetiva."
+                />
+                <SummaryDetailRow
+                  label="Custo estimado"
+                  value={formatMoney(pavementSummary.totalEstimatedCost || null)}
+                  helper="Soma dos custos estimados por m² dos trechos viários."
+                />
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {Object.entries(pavementSummary.conditionCounts)
+                  .filter(([, count]) => count > 0)
+                  .map(([condition, count]) => (
+                    <ProjectBadge
+                      key={condition}
+                      label={`${formatEnumLabel(condition)} · ${formatNumber(count)}`}
+                      tone={condition === "CRITICA" ? "danger" : condition === "RUIM" ? "warning" : "neutral"}
+                    />
+                  ))}
               </div>
             </div>
           ) : null}
