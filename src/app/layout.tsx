@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Syne, DM_Sans, JetBrains_Mono } from "next/font/google";
 // ❌ REMOVIDO: import { SessionProvider } from "next-auth/react";
 // ✅ ADICIONADO: A nossa nova importação do client component
-import { Providers } from "@/components/providers"; 
+import { Providers } from "@/components/providers";
+import { ServiceWorkerCleanup } from "@/components/app/service-worker-cleanup";
 import "./globals.css";
 
 // ─────────────────────────────────────────────
@@ -42,7 +43,6 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   icons: {
     icon: "/logo-urbandesk.svg",
-    apple: "/apple-touch-icon.png",
   },
   keywords: ["gestão municipal", "GIS", "infraestrutura urbana", "prefeitura", "B2G", "obras públicas"],
   authors: [{ name: "UrbanDesk" }],
@@ -72,7 +72,10 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         {/* ✅ ADICIONADO: Usando o nosso novo componente Providers */}
-        <Providers>{children}</Providers>
+        <Providers>
+          <ServiceWorkerCleanup />
+          {children}
+        </Providers>
       </body>
     </html>
   );
