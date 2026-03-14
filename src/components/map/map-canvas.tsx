@@ -1151,8 +1151,10 @@ function MapCanvasInner({
                       layout={{
                         "text-field": [
                           "coalesce",
+                          ["get", "labelMultiline"],
                           ["get", "labelShort"],
                           ["get", "label"],
+                          ["get", "COD_ID"],
                           ["get", "NOME"],
                           ["get", "name"],
                           ["get", "CODIGO"],
@@ -1160,8 +1162,10 @@ function MapCanvasInner({
                           layer.name,
                         ],
                         "text-size": 11,
-                        "text-offset": [0, 1.2],
+                        "text-offset": [0, 1.35],
                         "text-anchor": "top",
+                        "text-justify": "center",
+                        "text-max-width": 14,
                       }}
                       paint={{
                         "text-color": "#115e59",

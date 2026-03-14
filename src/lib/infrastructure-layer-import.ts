@@ -8,6 +8,13 @@ import {
   type InfrastructureLayerCodeId,
   type InfrastructureLayerNormalizedProperties,
 } from "@/lib/infrastructure-layer-config";
+import {
+  PONNOT_FIELD_ALIASES,
+  buildPonnotLabel,
+  decodePonnotAlt,
+  decodePonnotEsf,
+  resolvePonnotQtdUcs,
+} from "@/lib/ponnot";
 
 type Geometry =
   | { type: "Point"; coordinates: [number, number] }
@@ -37,6 +44,7 @@ type OwnerTenantContext = {
 
 type InfrastructureLayerImportContext = {
   ownerTenant: OwnerTenantContext | null;
+  ponnotUcCountsByCodId?: Record<string, number> | Map<string, number> | null;
 };
 
 type InfrastructureFeatureCoverageKey =
@@ -176,6 +184,19 @@ function normalizeFreeText(value: unknown) {
   return normalized.length > 0 ? normalized : null;
 }
 
+function normalizeScalarString(value: unknown) {
+  if (typeof value === "string") {
+    const normalized = normalizeWhitespace(value);
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return null;
+}
+
 function normalizeIdentifier(value: string | null) {
   if (!value) return null;
   const normalized = normalizeWhitespace(value).replace(/\s+/g, "-");
@@ -223,7 +244,7 @@ function buildNormalizedPropertyMap(properties: FeatureProperties) {
 
 function pickPropertyValue(
   properties: FeatureProperties,
-  aliases: string[]
+  aliases: readonly string[]
 ) {
   const normalizedMap = buildNormalizedPropertyMap(properties);
   for (const alias of aliases) {
@@ -237,14 +258,21 @@ function pickPropertyValue(
 
 function pickPropertyString(
   properties: FeatureProperties,
-  aliases: string[]
+  aliases: readonly string[]
 ) {
   return normalizeFreeText(pickPropertyValue(properties, aliases));
 }
 
+function pickPropertyScalarString(
+  properties: FeatureProperties,
+  aliases: readonly string[]
+) {
+  return normalizeScalarString(pickPropertyValue(properties, aliases));
+}
+
 function pickPropertyNumber(
   properties: FeatureProperties,
-  aliases: string[]
+  aliases: readonly string[]
 ) {
   return normalizeNumber(pickPropertyValue(properties, aliases));
 }
@@ -587,12 +615,157 @@ function buildFeatureId(
   return candidate;
 }
 
+function normalizePonnotProperties(input: {
+  properties: FeatureProperties;
+  index: number;
+  ownerTenant: OwnerTenantContext | null;
+  linkedUcCountsByCodId?: Record<string, number> | Map<string, number> | null;
+}) {
+  const rawCodId = pickPropertyScalarString(input.properties, [
+    ...PONNOT_FIELD_ALIASES.COD_ID,
+    ...INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.identifier,
+  ]);
+  const codId =
+    rawCodId ??
+    buildIdentifier("PONNOT", null, input.index);
+  const estr = pickPropertyScalarString(input.properties, PONNOT_FIELD_ALIASES.ESTR);
+  const alt = pickPropertyScalarString(input.properties, PONNOT_FIELD_ALIASES.ALT);
+  const esf = pickPropertyScalarString(input.properties, PONNOT_FIELD_ALIASES.ESF);
+  const qtdUcs = resolvePonnotQtdUcs({
+    rawQtdUcs: pickPropertyValue(input.properties, PONNOT_FIELD_ALIASES.QTD_UCS),
+    codId,
+    linkedUcCountsByCodId: input.linkedUcCountsByCodId,
+  });
+  const altDecoded = decodePonnotAlt(alt);
+  const esfDecoded = decodePonnotEsf(esf);
+  const municipalityName =
+    pickPropertyString(input.properties, INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.municipalityName) ??
+    input.ownerTenant?.name ??
+    null;
+  const municipalityCode = normalizeMunicipalityCode(
+    pickPropertyString(input.properties, INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.municipalityCode)
+  );
+  const streetName = pickPropertyString(
+    input.properties,
+    INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.streetName
+  );
+  const neighborhood = pickPropertyString(
+    input.properties,
+    INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.neighborhood
+  );
+  const district = pickPropertyString(
+    input.properties,
+    INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.district
+  );
+  const region = pickPropertyString(
+    input.properties,
+    INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.region
+  );
+  const feeder = pickPropertyString(
+    input.properties,
+    INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.feeder
+  );
+  const circuit = pickPropertyString(
+    input.properties,
+    INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.circuit
+  );
+  const supportType =
+    estr ??
+    pickPropertyString(input.properties, INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.supportType);
+  const operationalStatus = normalizeStatusValue(
+    pickPropertyString(
+      input.properties,
+      INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.operationalStatus
+    )
+  );
+  const reference = pickPropertyString(
+    input.properties,
+    INFRASTRUCTURE_LAYER_SPECS.PONNOT.fields.reference
+  );
+  const labelMultiline = buildPonnotLabel({
+    codId,
+    estr,
+    altDecoded,
+    esfDecoded,
+    qtdUcs,
+  });
+
+  return {
+    layerCode: "PONNOT" as const,
+    layerLabel: INFRASTRUCTURE_LAYER_SPECS.PONNOT.label,
+    layerShortLabel: INFRASTRUCTURE_LAYER_SPECS.PONNOT.shortLabel,
+    featureKind: INFRASTRUCTURE_LAYER_SPECS.PONNOT.featureKind,
+    label: codId,
+    labelShort: codId,
+    labelMultiline,
+    name: codId,
+    NOME: codId,
+    identifier: codId,
+    code: codId,
+    codigo: codId,
+    CODIGO: codId,
+    COD_ID: codId,
+    ESTR: estr,
+    ALT: alt,
+    ESF: esf,
+    QTD_UCS: qtdUcs,
+    ALT_DECODIFICADO: altDecoded,
+    ESF_DECODIFICADO: esfDecoded,
+    ownerTenantId: input.ownerTenant?.id ?? null,
+    municipalityName,
+    municipalityCode,
+    municipalityState: input.ownerTenant?.state ?? null,
+    streetName,
+    neighborhood,
+    district,
+    region,
+    feeder,
+    circuit,
+    supportType,
+    operationalStatus,
+    lampType: null,
+    powerWatts: null,
+    reference,
+    renderColor: INFRASTRUCTURE_LAYER_SPECS.PONNOT.renderColor,
+    renderIcon: INFRASTRUCTURE_LAYER_SPECS.PONNOT.renderIcon,
+    searchText: buildSearchText([
+      codId,
+      estr,
+      alt,
+      altDecoded,
+      esf,
+      esfDecoded,
+      qtdUcs,
+      municipalityName,
+      municipalityCode,
+      streetName,
+      neighborhood,
+      district,
+      region,
+      feeder,
+      circuit,
+      operationalStatus,
+      reference,
+    ]),
+  } satisfies InfrastructureLayerNormalizedProperties;
+}
+
 function normalizeInfrastructureFeatureProperties(input: {
   code: InfrastructureLayerCodeId;
   properties: FeatureProperties;
   index: number;
   ownerTenant: OwnerTenantContext | null;
+  ponnotUcCountsByCodId?: Record<string, number> | Map<string, number> | null;
 }) {
+  if (input.code === "PONNOT") {
+    return normalizePonnotProperties({
+      properties: input.properties,
+      index: input.index,
+      ownerTenant: input.ownerTenant,
+      linkedUcCountsByCodId: input.ponnotUcCountsByCodId,
+    });
+  }
+
   const spec = INFRASTRUCTURE_LAYER_SPECS[input.code];
   const rawLabel = pickPropertyString(input.properties, spec.fields.label);
   const rawIdentifier = normalizeIdentifier(
@@ -679,6 +852,7 @@ function normalizeFeatureCollection(input: {
   code: InfrastructureLayerCodeId;
   featureCollection: FeatureCollectionRecord;
   ownerTenant: OwnerTenantContext | null;
+  ponnotUcCountsByCodId?: Record<string, number> | Map<string, number> | null;
 }) {
   const usedIds = new Set<string>();
   const sourcePropertyKeys = new Set<string>();
@@ -718,6 +892,7 @@ function normalizeFeatureCollection(input: {
       properties: feature.properties,
       index: index + 1,
       ownerTenant: input.ownerTenant,
+      ponnotUcCountsByCodId: input.ponnotUcCountsByCodId,
     });
 
     Object.keys(normalizedProperties).forEach((key) => normalizedPropertyKeys.add(key));
@@ -890,6 +1065,7 @@ export async function importInfrastructureLayerFromZip(input: {
     code: inspection.code,
     featureCollection: exploded,
     ownerTenant: input.context?.ownerTenant ?? null,
+    ponnotUcCountsByCodId: input.context?.ponnotUcCountsByCodId ?? null,
   });
 
   return {

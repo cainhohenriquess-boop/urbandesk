@@ -10,12 +10,20 @@ export type InfrastructureLayerNormalizedProperties = {
   featureKind: string;
   label: string;
   labelShort: string;
+  labelMultiline?: string | null;
   name: string;
   NOME: string;
   identifier: string | null;
   code: string | null;
   codigo: string | null;
   CODIGO: string | null;
+  COD_ID?: string | null;
+  ESTR?: string | null;
+  ALT?: string | null;
+  ESF?: string | null;
+  QTD_UCS?: number;
+  ALT_DECODIFICADO?: string | null;
+  ESF_DECODIFICADO?: string | null;
   ownerTenantId: string | null;
   municipalityName: string | null;
   municipalityCode: string | null;
@@ -116,6 +124,7 @@ export const INFRASTRUCTURE_LAYER_SPECS: Record<
         "LABEL",
       ],
       identifier: [
+        "COD_ID",
         "CODIGO",
         "COD",
         "ID",
@@ -191,7 +200,7 @@ export const INFRASTRUCTURE_LAYER_SPECS: Record<
       circuit: ["CIRCUITO", "CIRC", "CIR", "REDE"],
       supportType: ["TIPOLUZ", "TIPOPOSTE", "TIPO", "SUPORTE"],
       operationalStatus: ["STATUS", "SITUACAO", "SITUAÇÃO", "OPERACAO", "OPERAÇÃO"],
-      lampType: ["TIPOLAMP", "LAMPADA", "LAMPÂDA", "LUMINARIA", "LUMINÁRIA", "TECNOLOGIA"],
+      lampType: ["TIPOLAMP", "LAMPADA", "LÂMPADA", "LUMINARIA", "LUMINÁRIA", "TECNOLOGIA"],
       powerWatts: ["POTENCIA", "POTÊNCIA", "POTW", "WATTS"],
       reference: ["REFERENCIA", "REFERÊNCIA", "PONTOREF", "OBS", "OBSERVACAO", "OBSERVAÇÃO"],
     },
