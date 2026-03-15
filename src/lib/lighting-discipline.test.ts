@@ -1,11 +1,12 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
+import { listInfrastructureLayerFeatures } from "@/lib/infrastructure-layer-map";
+import { getLightingTechnicalPanelStats } from "@/lib/lighting-technical-panel";
 import type { BaseLayerData, DrawnFeature } from "@/store/useMapStore";
 import {
   buildLightingAssistAttributes,
   buildLightingAutoContext,
   buildLightingSuggestedName,
-  getLightingTechnicalPanelStats,
   mergeLightingDefaultValues,
 } from "@/lib/lighting-discipline";
 
@@ -161,8 +162,15 @@ test("aplica valores padrão da disciplina de iluminação", () => {
 });
 
 test("calcula painel técnico da disciplina com base importada e itens operacionais", () => {
+  const infrastructureItems = listInfrastructureLayerFeatures(baseLayersData).map((item) => ({
+    ...item,
+    linkedOperationalCount: item.featureId === "lum-1" ? 1 : 0,
+  }));
+
   const stats = getLightingTechnicalPanelStats({
     baseLayersData,
+    infrastructureItems,
+    filteredInfrastructureItems: infrastructureItems,
     features: [
       feature,
       {
@@ -184,14 +192,34 @@ test("calcula painel técnico da disciplina com base importada e itens operacion
           technicalObjectType: "ITEM_VISTORIADO_ILUMINACAO",
         },
       },
+      {
+        ...feature,
+        id: "manut-1",
+        type: "OCORRENCIA_MANUTENCAO_ILUMINACAO",
+        attributes: {
+          technicalArea: "ILUMINACAO",
+          technicalObjectType: "OCORRENCIA_MANUTENCAO_ILUMINACAO",
+          occurrenceStatus: "ABERTA",
+        },
+      },
     ],
   });
 
+  assert.equal(stats.authorizedPoles, 1);
+  assert.equal(stats.authorizedLightingPoints, 1);
   assert.equal(stats.importedPoles, 1);
   assert.equal(stats.importedLightingPoints, 1);
+  assert.equal(stats.openOccurrences, 1);
+  assert.equal(stats.pendingMaintenance, 1);
   assert.equal(stats.operationalOutages, 1);
   assert.equal(stats.operationalLightingPoints, 1);
+  assert.equal(stats.operationalMaintenance, 1);
   assert.equal(stats.operationalInspections, 1);
   assert.equal(stats.linkedOperationalItems, 1);
+  assert.equal(stats.linkedImportedItems, 1);
+  assert.equal(stats.unlinkedImportedItems, 1);
+  assert.deepEqual(stats.municipalities.map((item) => item.label), ["Santa Cruz"]);
+  assert.deepEqual(stats.neighborhoods.map((item) => item.label), ["Centro"]);
+  assert.deepEqual(stats.statuses.map((item) => item.label), ["Operante"]);
   assert.deepEqual(stats.circuits, ["CIR-12"]);
 });

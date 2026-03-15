@@ -47,10 +47,13 @@ import {
   buildLightingAutoContext,
   buildLightingTechnicalDefaults,
   buildLightingSuggestedName,
-  getLightingTechnicalPanelStats,
   isLightingTechnicalObjectType,
   type LightingTechnicalObjectTypeId,
 } from "@/lib/lighting-discipline";
+import {
+  getLightingTechnicalPanelStats,
+  type LightingProjectLinkFilter,
+} from "@/lib/lighting-technical-panel";
 import {
   importGeoJsonFeatures,
   joinLineFeatures,
@@ -111,7 +114,6 @@ type DrainageFilterKey =
   | "riskLevel";
 
 type DrainageFilterState = Record<DrainageFilterKey, string>;
-type LightingProjectLinkFilter = "ALL" | "LINKED" | "UNLINKED";
 
 type ProjectMapWorkspaceProject = {
   id: string;
@@ -1520,8 +1522,14 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     [features]
   );
   const lightingPanelStats = useMemo(
-    () => getLightingTechnicalPanelStats({ features, baseLayersData }),
-    [baseLayersData, features]
+    () =>
+      getLightingTechnicalPanelStats({
+        features,
+        baseLayersData,
+        infrastructureItems: lightingInfrastructureItems,
+        filteredInfrastructureItems: filteredLightingInfrastructureItems,
+      }),
+    [baseLayersData, features, filteredLightingInfrastructureItems, lightingInfrastructureItems]
   );
   const hasPonnotLayer = useMemo(
     () => publishedBaseLayers.some((layer) => layer.type === "PONNOT"),
@@ -2358,6 +2366,24 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                   stats={lightingPanelStats}
                   hasPonnotLayer={hasPonnotLayer}
                   hasPontIlumLayer={hasPontIlumLayer}
+                  projectLinkFilter={lightingProjectLinkFilter}
+                  onProjectLinkFilterChange={setLightingProjectLinkFilter}
+                  activeOperationalStatus={infrastructureFilters.operationalStatus}
+                  onOperationalStatusChange={(value) =>
+                    setInfrastructureFilters((current) => ({
+                      ...current,
+                      operationalStatus: value,
+                    }))
+                  }
+                  activeMunicipality={infrastructureFilters.municipalityName}
+                  onMunicipalityChange={(value) =>
+                    setInfrastructureFilters((current) => ({
+                      ...current,
+                      municipalityName: value,
+                    }))
+                  }
+                  municipalityOptions={infrastructureMunicipalityOptions}
+                  statusOptions={infrastructureStatusOptions}
                 />
               </PanelSection>
             ) : null}

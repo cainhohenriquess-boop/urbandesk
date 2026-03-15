@@ -1,10 +1,9 @@
-"use client";
+﻿"use client";
 
 import { ProjectBadge } from "@/components/projetos/project-detail-components";
 import type { InfrastructureLayerFeatureRecord } from "@/lib/infrastructure-layer-map";
+import type { LightingProjectLinkFilter } from "@/lib/lighting-technical-panel";
 import { cn, formatNumber } from "@/lib/utils";
-
-type LightingProjectLinkFilter = "ALL" | "LINKED" | "UNLINKED";
 
 type ProjectLightingImportedPanelProps = {
   items: Array<
@@ -76,7 +75,9 @@ export function ProjectLightingImportedPanel({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-foreground">
-                    {item.layerType === "PONNOT" ? item.codId || item.visibleLabel : item.txtLum || item.visibleLabel}
+                    {item.layerType === "PONNOT"
+                      ? item.codId || item.visibleLabel
+                      : item.txtLum || item.visibleLabel}
                   </p>
                   <p className="mt-1 truncate text-xs text-muted-foreground">
                     {item.layerType} · {item.streetName || item.municipalityName || "Sem logradouro"}
