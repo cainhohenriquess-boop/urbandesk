@@ -1,9 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  collectInfrastructureLayerConditionOptions,
+  collectInfrastructureMunicipalityOptions,
   collectInfrastructureLayerStatusOptions,
   countInfrastructureLayerFeatures,
   filterInfrastructureLayerCollection,
+  listInfrastructureLayerFeatures,
 } from "@/lib/infrastructure-layer-map";
 
 const ponnotCollection = {
@@ -16,6 +19,8 @@ const ponnotCollection = {
         layerCode: "PONNOT",
         COD_ID: "POSTE-001",
         operationalStatus: "OPERANTE",
+        municipalityName: "Fortaleza",
+        supportType: "CONCRETO",
         searchText: "POSTE-001 | CENTRO | OPERANTE",
       },
     },
@@ -26,6 +31,8 @@ const ponnotCollection = {
         layerCode: "PONNOT",
         COD_ID: "POSTE-002",
         operationalStatus: "MANUTENCAO",
+        municipalityName: "Fortaleza",
+        supportType: "METALICO",
         searchText: "POSTE-002 | ALDEOTA | MANUTENCAO",
       },
     },
@@ -42,6 +49,7 @@ const pontIlumCollection = {
         layerCode: "PONT_ILUM",
         TXT_LUM: "IP-045 - LED 120W",
         operationalStatus: "OPERANTE",
+        municipalityName: "Fortaleza",
         searchText: "IP-045 - LED 120W | CENTRO | OPERANTE",
       },
     },
@@ -53,6 +61,8 @@ test("filtra feições por busca e status operacional", () => {
     code: "ALL",
     search: "POSTE-002",
     operationalStatus: "MANUTENCAO",
+    condition: "ALL",
+    municipalityName: "ALL",
   });
 
   assert.equal(filtered.features.length, 1);
@@ -67,6 +77,8 @@ test("esconde feições quando o filtro estiver em outro tipo de camada", () => 
     code: "PONT_ILUM",
     search: "",
     operationalStatus: "ALL",
+    condition: "ALL",
+    municipalityName: "ALL",
   });
 
   assert.equal(filtered.features.length, 0);
@@ -86,7 +98,50 @@ test("conta feições visíveis após aplicar filtros", () => {
     code: "ALL",
     search: "LED 120W",
     operationalStatus: "OPERANTE",
+    condition: "ALL",
+    municipalityName: "ALL",
   });
 
   assert.equal(count, 1);
+});
+
+test("filtra feições por condição e município", () => {
+  const filtered = filterInfrastructureLayerCollection(ponnotCollection, "PONNOT", {
+    code: "ALL",
+    search: "",
+    operationalStatus: "ALL",
+    condition: "CONCRETO",
+    municipalityName: "FORTALEZA",
+  });
+
+  assert.equal(filtered.features.length, 1);
+  assert.equal(
+    (filtered.features[0].properties as Record<string, unknown>).COD_ID,
+    "POSTE-001"
+  );
+});
+
+test("lista feições de infraestrutura com rótulo operacional correto", () => {
+  const items = listInfrastructureLayerFeatures([
+    { id: "ponnot-layer", name: "PONNOT", type: "PONNOT", geoJsonData: ponnotCollection },
+    { id: "pont-layer", name: "PONT_ILUM", type: "PONT_ILUM", geoJsonData: pontIlumCollection },
+  ]);
+
+  assert.equal(items.length, 3);
+  assert.equal(items[0].selectionKey, "PONNOT:POSTE-001");
+  assert.equal(items[0].visibleLabel, "POSTE-001");
+  assert.equal(items[2].visibleLabel, "IP-045 - LED 120W");
+});
+
+test("coleta opções de condição e município das camadas importadas", () => {
+  const conditions = collectInfrastructureLayerConditionOptions([
+    { type: "PONNOT", geoJsonData: ponnotCollection },
+  ]);
+  const municipalities = collectInfrastructureMunicipalityOptions([
+    { type: "PONNOT", geoJsonData: ponnotCollection },
+    { type: "PONT_ILUM", geoJsonData: pontIlumCollection },
+  ]);
+
+  assert.deepEqual(conditions, ["CONCRETO", "METALICO"]);
+  assert.deepEqual(municipalities, ["Fortaleza"]);
 });

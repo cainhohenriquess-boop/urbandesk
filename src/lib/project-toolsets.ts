@@ -104,10 +104,26 @@ const PROJECT_AREA_TOOLSET_GROUPS: Partial<
   ],
   ILUMINACAO: [
     {
-      id: "lighting-assets",
-      title: "Pontos de iluminação",
-      description: "Postes, luminárias e apoio operacional.",
+      id: "lighting-reference",
+      title: "Base e refer?ncia",
+      description: "Postes e pontos operacionais apoiados nas camadas PONNOT e PONT_ILUM.",
       items: ["POSTE_LUZ", "LUMINARIA"],
+    },
+    {
+      id: "lighting-network",
+      title: "Circuitos e rede",
+      description: "Circuitos, eixos de atendimento e continuidade da ilumina??o p?blica.",
+      items: ["CIRCUITO_ILUMINACAO"],
+    },
+    {
+      id: "lighting-operations",
+      title: "Opera??o e vistoria",
+      description: "Pontos apagados, manuten??o e itens vistoriados do projeto.",
+      items: [
+        "PONTO_APAGADO",
+        "OCORRENCIA_MANUTENCAO_ILUMINACAO",
+        "ITEM_VISTORIADO_ILUMINACAO",
+      ],
     },
   ],
   ARBORIZACAO: [

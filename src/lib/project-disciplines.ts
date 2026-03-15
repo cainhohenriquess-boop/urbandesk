@@ -40,6 +40,10 @@ export const TECHNICAL_OBJECT_TYPE_IDS = [
   "PINTURA_VIARIA",
   "POSTE_LUZ",
   "LUMINARIA",
+  "CIRCUITO_ILUMINACAO",
+  "PONTO_APAGADO",
+  "OCORRENCIA_MANUTENCAO_ILUMINACAO",
+  "ITEM_VISTORIADO_ILUMINACAO",
   "ARVORE",
   "CANTEIRO_ARBORIZACAO",
   "LIXEIRA",
@@ -85,6 +89,16 @@ export const PAVEMENT_TECHNICAL_OBJECT_TYPE_IDS = [
 ] as const satisfies readonly TechnicalObjectTypeId[];
 export type PavementTechnicalObjectTypeId =
   (typeof PAVEMENT_TECHNICAL_OBJECT_TYPE_IDS)[number];
+export const LIGHTING_TECHNICAL_OBJECT_TYPE_IDS = [
+  "POSTE_LUZ",
+  "LUMINARIA",
+  "CIRCUITO_ILUMINACAO",
+  "PONTO_APAGADO",
+  "OCORRENCIA_MANUTENCAO_ILUMINACAO",
+  "ITEM_VISTORIADO_ILUMINACAO",
+] as const satisfies readonly TechnicalObjectTypeId[];
+export type LightingTechnicalObjectTypeId =
+  (typeof LIGHTING_TECHNICAL_OBJECT_TYPE_IDS)[number];
 export type TechnicalGeometryKind = "point" | "line" | "polygon";
 export type TechnicalFieldKind = "text" | "textarea" | "number" | "select" | "date";
 
@@ -630,18 +644,40 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
   POSTE_LUZ: {
     id: "POSTE_LUZ",
     area: "ILUMINACAO",
-    label: "Poste de luz",
-    helper: "Infraestrutura de iluminação",
+    label: "Poste",
+    helper: "Poste operacional vinculado ? infraestrutura importada quando houver.",
     geometry: "point",
     fields: [
       {
-        key: "luminaireType",
-        label: "Tipo de luminária",
+        key: "assetOrigin",
+        label: "Origem do dado",
         kind: "select",
         options: [
-          { value: "LED", label: "LED" },
-          { value: "VAPOR_SODIO", label: "Vapor de sódio" },
-          { value: "VAPOR_METALICO", label: "Vapor metálico" },
+          { value: "IMPORTADO_REFERENCIADO", label: "Referenciado na base importada" },
+          { value: "OPERACIONAL_NOVO", label: "Operacional do projeto" },
+        ],
+      },
+      {
+        key: "supportMaterial",
+        label: "Material do poste",
+        kind: "select",
+        options: [
+          { value: "CONCRETO", label: "Concreto" },
+          { value: "METALICO", label: "Met?lico" },
+          { value: "MADEIRA", label: "Madeira" },
+          { value: "FIBRA", label: "Fibra" },
+        ],
+      },
+      {
+        key: "operationalStatus",
+        label: "Status operacional",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "OPERANTE", label: "Operante" },
+          { value: "ATENCAO", label: "Em aten??o" },
+          { value: "DANIFICADO", label: "Danificado" },
+          { value: "DESATIVADO", label: "Desativado" },
         ],
       },
     ],
@@ -649,16 +685,204 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
   LUMINARIA: {
     id: "LUMINARIA",
     area: "ILUMINACAO",
-    label: "Luminária",
-    helper: "Ponto de iluminação",
+    label: "Ponto de ilumina??o",
+    helper: "Lumin?ria ou ponto operacional associado ? ilumina??o p?blica.",
     geometry: "point",
     fields: [
       {
+        key: "luminaireType",
+        label: "Tipo de lumin?ria",
+        kind: "select",
+        options: [
+          { value: "LED", label: "LED" },
+          { value: "VAPOR_SODIO", label: "Vapor de s?dio" },
+          { value: "VAPOR_METALICO", label: "Vapor met?lico" },
+          { value: "SOLAR", label: "Solar" },
+        ],
+      },
+      {
         key: "powerWatts",
-        label: "Potência (W)",
+        label: "Pot?ncia (W)",
         kind: "number",
         min: 1,
         max: 2000,
+      },
+      {
+        key: "operationalStatus",
+        label: "Status operacional",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "OPERANTE", label: "Operante" },
+          { value: "PARCIAL", label: "Parcial" },
+          { value: "APAGADO", label: "Apagado" },
+          { value: "MANUTENCAO", label: "Em manuten??o" },
+        ],
+      },
+    ],
+  },
+  CIRCUITO_ILUMINACAO: {
+    id: "CIRCUITO_ILUMINACAO",
+    area: "ILUMINACAO",
+    label: "Circuito de ilumina??o",
+    helper: "Trecho linear ou eixo operacional associado a um circuito, quando houver suporte.",
+    geometry: "line",
+    fields: [
+      {
+        key: "powerCircuit",
+        label: "Circuito",
+        kind: "text",
+        required: true,
+        placeholder: "Ex.: CIR-12",
+      },
+      {
+        key: "circuitPhase",
+        label: "Fase",
+        kind: "select",
+        options: [
+          { value: "MONOFASICO", label: "Monof?sico" },
+          { value: "BIFASICO", label: "Bif?sico" },
+          { value: "TRIFASICO", label: "Trif?sico" },
+        ],
+      },
+      {
+        key: "operationalStatus",
+        label: "Status operacional",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "OPERANTE", label: "Operante" },
+          { value: "ATENCAO", label: "Em aten??o" },
+          { value: "INTERMITENTE", label: "Intermitente" },
+          { value: "DESENERGIZADO", label: "Desenergizado" },
+        ],
+      },
+    ],
+  },
+  PONTO_APAGADO: {
+    id: "PONTO_APAGADO",
+    area: "ILUMINACAO",
+    label: "Ponto apagado",
+    helper: "Registro operacional de ponto sem ilumina??o ou com falha percebida.",
+    geometry: "point",
+    fields: [
+      {
+        key: "outageType",
+        label: "Tipo de falha",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "APAGADO_TOTAL", label: "Apagado total" },
+          { value: "INTERMITENTE", label: "Intermitente" },
+          { value: "PISCANDO", label: "Piscando" },
+          { value: "BAIXA_ILUMINACAO", label: "Baixa ilumina??o" },
+        ],
+      },
+      {
+        key: "maintenancePriority",
+        label: "Prioridade",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "BAIXA", label: "Baixa" },
+          { value: "MEDIA", label: "M?dia" },
+          { value: "ALTA", label: "Alta" },
+          { value: "CRITICA", label: "Cr?tica" },
+        ],
+      },
+      {
+        key: "operationalStatus",
+        label: "Status operacional",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "ABERTO", label: "Aberto" },
+          { value: "EM_ATENDIMENTO", label: "Em atendimento" },
+          { value: "PROGRAMADO", label: "Programado" },
+          { value: "NORMALIZADO", label: "Normalizado" },
+        ],
+      },
+    ],
+  },
+  OCORRENCIA_MANUTENCAO_ILUMINACAO: {
+    id: "OCORRENCIA_MANUTENCAO_ILUMINACAO",
+    area: "ILUMINACAO",
+    label: "Ocorr?ncia de manuten??o",
+    helper: "Chamado, manuten??o corretiva ou preventiva ligado ? ilumina??o.",
+    geometry: "point",
+    fields: [
+      {
+        key: "maintenanceType",
+        label: "Tipo de manuten??o",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "CORRETIVA", label: "Corretiva" },
+          { value: "PREVENTIVA", label: "Preventiva" },
+          { value: "INSPECAO", label: "Inspe??o" },
+          { value: "AMPLIACAO", label: "Amplia??o" },
+        ],
+      },
+      {
+        key: "occurrenceStatus",
+        label: "Status da ocorr?ncia",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "ABERTA", label: "Aberta" },
+          { value: "EM_TRATAMENTO", label: "Em tratamento" },
+          { value: "PROGRAMADA", label: "Programada" },
+          { value: "CONCLUIDA", label: "Conclu?da" },
+        ],
+      },
+      {
+        key: "maintenancePriority",
+        label: "Prioridade",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "BAIXA", label: "Baixa" },
+          { value: "MEDIA", label: "M?dia" },
+          { value: "ALTA", label: "Alta" },
+          { value: "CRITICA", label: "Cr?tica" },
+        ],
+      },
+    ],
+  },
+  ITEM_VISTORIADO_ILUMINACAO: {
+    id: "ITEM_VISTORIADO_ILUMINACAO",
+    area: "ILUMINACAO",
+    label: "Item vistoriado",
+    helper: "Vistoria t?cnica vinculada ? infraestrutura el?trica ou ao ativo operacional.",
+    geometry: "point",
+    fields: [
+      {
+        key: "inspectionResult",
+        label: "Resultado da vistoria",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "CONFORME", label: "Conforme" },
+          { value: "COM_RESTRICAO", label: "Com restri??o" },
+          { value: "NAO_CONFORME", label: "N?o conforme" },
+        ],
+      },
+      {
+        key: "inspectionTeam",
+        label: "Equipe respons?vel",
+        kind: "text",
+        placeholder: "Ex.: Fiscaliza??o de ilumina??o",
+      },
+      {
+        key: "operationalStatus",
+        label: "Status operacional",
+        kind: "select",
+        options: [
+          { value: "REGISTRADO", label: "Registrado" },
+          { value: "EM_ANALISE", label: "Em an?lise" },
+          { value: "ENCAMINHADO", label: "Encaminhado" },
+          { value: "CONCLUIDO", label: "Conclu?do" },
+        ],
       },
     ],
   },
@@ -1258,7 +1482,7 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
   ILUMINACAO: {
     id: "ILUMINACAO",
     label: DISCIPLINE_LABELS.ILUMINACAO,
-    description: "Pontos, luminárias e circuitos de iluminação pública.",
+    description: "Postes, pontos de ilumina??o, circuitos e gest?o operacional da ilumina??o p?blica.",
     accentClassName: "border-yellow-200 bg-yellow-50 text-yellow-700",
     commonFields: [
       {
@@ -1267,8 +1491,37 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
         kind: "text",
         placeholder: "Ex.: CIR-12",
       },
+      {
+        key: "lightingLifecycle",
+        label: "Ciclo do item",
+        kind: "select",
+        options: [
+          { value: "ATIVO", label: "Ativo" },
+          { value: "AMPLIACAO", label: "Amplia??o" },
+          { value: "SUBSTITUICAO", label: "Substitui??o" },
+          { value: "DESATIVACAO", label: "Desativa??o" },
+        ],
+      },
+      {
+        key: "operationalStatus",
+        label: "Status operacional",
+        kind: "select",
+        options: [
+          { value: "OPERANTE", label: "Operante" },
+          { value: "ATENCAO", label: "Em aten??o" },
+          { value: "EM_MANUTENCAO", label: "Em manuten??o" },
+          { value: "DESATIVADO", label: "Desativado" },
+        ],
+      },
     ],
-    objectTypes: ["POSTE_LUZ", "LUMINARIA"],
+    objectTypes: [
+      "POSTE_LUZ",
+      "LUMINARIA",
+      "CIRCUITO_ILUMINACAO",
+      "PONTO_APAGADO",
+      "OCORRENCIA_MANUTENCAO_ILUMINACAO",
+      "ITEM_VISTORIADO_ILUMINACAO",
+    ],
   },
   ARBORIZACAO: {
     id: "ARBORIZACAO",

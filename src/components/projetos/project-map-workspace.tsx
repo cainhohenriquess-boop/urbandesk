@@ -14,6 +14,10 @@ import {
 } from "@/components/projetos/project-detail-components";
 import { ProjectDrainageSegmentForm } from "@/components/projetos/project-drainage-segment-form";
 import { ProjectDrainageTechnicalPanel } from "@/components/projetos/project-drainage-technical-panel";
+import { ProjectLightingImportedPanel } from "@/components/projetos/project-lighting-imported-panel";
+import { ProjectLightingInfrastructureInspector } from "@/components/projetos/project-lighting-infrastructure-inspector";
+import { ProjectLightingPointForm } from "@/components/projetos/project-lighting-point-form";
+import { ProjectLightingTechnicalPanel } from "@/components/projetos/project-lighting-technical-panel";
 import { ProjectMapDisciplineToolset } from "@/components/projetos/project-map-discipline-toolset";
 import { ProjectMapGlobalToolbar } from "@/components/projetos/project-map-global-toolbar";
 import { ProjectPavementRoadForm } from "@/components/projetos/project-pavement-road-form";
@@ -38,6 +42,15 @@ import {
   mergePavementRoadSegmentDefaultValues,
   validatePavementRoadSegmentGeometry,
 } from "@/lib/pavement-segment";
+import {
+  buildLightingAssistAttributes,
+  buildLightingAutoContext,
+  buildLightingTechnicalDefaults,
+  buildLightingSuggestedName,
+  getLightingTechnicalPanelStats,
+  isLightingTechnicalObjectType,
+  type LightingTechnicalObjectTypeId,
+} from "@/lib/lighting-discipline";
 import {
   importGeoJsonFeatures,
   joinLineFeatures,
@@ -66,9 +79,13 @@ import {
   isInfrastructureLayerCode,
 } from "@/lib/infrastructure-layer-config";
 import {
+  collectInfrastructureLayerConditionOptions,
+  collectInfrastructureMunicipalityOptions,
   collectInfrastructureLayerStatusOptions,
   countInfrastructureLayerFeatures,
   EMPTY_INFRASTRUCTURE_LAYER_FILTERS,
+  listInfrastructureLayerFeatures,
+  type InfrastructureLayerFeatureRecord,
   type InfrastructureLayerFeatureFilters,
 } from "@/lib/infrastructure-layer-map";
 import { getProjectOperationalStatusLabel } from "@/lib/project-labels";
@@ -94,6 +111,7 @@ type DrainageFilterKey =
   | "riskLevel";
 
 type DrainageFilterState = Record<DrainageFilterKey, string>;
+type LightingProjectLinkFilter = "ALL" | "LINKED" | "UNLINKED";
 
 type ProjectMapWorkspaceProject = {
   id: string;
@@ -661,6 +679,10 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const [infrastructureFilters, setInfrastructureFilters] = useState<InfrastructureLayerFeatureFilters>(
     EMPTY_INFRASTRUCTURE_LAYER_FILTERS
   );
+  const [lightingProjectLinkFilter, setLightingProjectLinkFilter] =
+    useState<LightingProjectLinkFilter>("ALL");
+  const [selectedInfrastructureItem, setSelectedInfrastructureItem] =
+    useState<(InfrastructureLayerFeatureRecord & { linkedOperationalCount: number }) | null>(null);
   const [drainageCriticalityLocked, setDrainageCriticalityLocked] = useState(false);
   const [pavementWidthLocked, setPavementWidthLocked] = useState(false);
   const [pavementConditionLocked, setPavementConditionLocked] = useState(false);
@@ -722,6 +744,14 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     () => collectInfrastructureLayerStatusOptions(publishedBaseLayers),
     [publishedBaseLayers]
   );
+  const infrastructureConditionOptions = useMemo(
+    () => collectInfrastructureLayerConditionOptions(publishedBaseLayers),
+    [publishedBaseLayers]
+  );
+  const infrastructureMunicipalityOptions = useMemo(
+    () => collectInfrastructureMunicipalityOptions(publishedBaseLayers),
+    [publishedBaseLayers]
+  );
   const publishedBaseLayerSummaries = useMemo(
     () =>
       publishedBaseLayers.map((layer) => ({
@@ -754,6 +784,88 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         .filter((layer) => visibleBaseLayerIds.includes(layer.id))
         .reduce((total, layer) => total + layer.filteredFeatureCount, 0),
     [publishedBaseLayerSummaries, visibleBaseLayerIds]
+  );
+  const lightingInfrastructureItems = useMemo(() => {
+    return listInfrastructureLayerFeatures(publishedBaseLayers).map((item) => {
+      const linkedOperationalCount = features.filter((feature) => {
+        const attributes =
+          feature.attributes && typeof feature.attributes === "object"
+            ? (feature.attributes as Record<string, unknown>)
+            : {};
+        return (
+          attributes.referencePoleId === item.featureId ||
+          attributes.referenceLightingPointId === item.featureId ||
+          attributes.referenceInfrastructureKey === item.selectionKey
+        );
+      }).length;
+
+      return {
+        ...item,
+        linkedOperationalCount,
+      };
+    });
+  }, [features, publishedBaseLayers]);
+  const filteredLightingInfrastructureItems = useMemo(() => {
+    return lightingInfrastructureItems.filter((item) => {
+      if (
+        infrastructureFilters.code !== "ALL" &&
+        item.layerType !== infrastructureFilters.code
+      ) {
+        return false;
+      }
+
+      const normalizedSearch = infrastructureFilters.search.trim().toLowerCase();
+      if (normalizedSearch) {
+        const haystack = [
+          item.visibleLabel,
+          item.codId,
+          item.txtLum,
+          item.streetName,
+          item.circuit,
+          item.municipalityName,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        if (!haystack.includes(normalizedSearch)) return false;
+      }
+
+      if (
+        infrastructureFilters.operationalStatus !== "ALL" &&
+        item.operationalStatus !== infrastructureFilters.operationalStatus
+      ) {
+        return false;
+      }
+
+      if (
+        infrastructureFilters.condition !== "ALL" &&
+        (item.condition ?? "Não informada") !== infrastructureFilters.condition
+      ) {
+        return false;
+      }
+
+      if (
+        infrastructureFilters.municipalityName !== "ALL" &&
+        item.municipalityName !== infrastructureFilters.municipalityName
+      ) {
+        return false;
+      }
+
+      if (lightingProjectLinkFilter === "LINKED" && item.linkedOperationalCount === 0) {
+        return false;
+      }
+
+      if (lightingProjectLinkFilter === "UNLINKED" && item.linkedOperationalCount > 0) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [infrastructureFilters, lightingInfrastructureItems, lightingProjectLinkFilter]);
+  const visibleInfrastructureSelectionKeys = useMemo(
+    () => filteredLightingInfrastructureItems.map((item) => item.selectionKey),
+    [filteredLightingInfrastructureItems]
   );
 
   useEffect(() => {
@@ -928,6 +1040,64 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     return evaluatePavementRoadSegment(technicalFieldValues, pavementRoadSegmentAutoContext);
   }, [pavementRoadSegmentAutoContext, technicalFieldValues]);
 
+  const lightingAutoContext = useMemo(() => {
+    const source = pendingFeature ?? selectedFeature;
+    if (!source) return null;
+
+    const context = getFeatureTechnicalContext(source, effectiveTechnicalArea);
+    if (!isLightingTechnicalObjectType(context.technicalObjectType)) {
+      return null;
+    }
+
+    return buildLightingAutoContext({
+      feature: source,
+      baseLayersData,
+      project: {
+        id: project.id,
+        name: project.name,
+        code: project.code,
+        neighborhood: project.neighborhood,
+        district: project.district,
+        region: project.region,
+      },
+      currentUser,
+    });
+  }, [
+    baseLayersData,
+    currentUser,
+    effectiveTechnicalArea,
+    pendingFeature,
+    project.code,
+    project.district,
+    project.id,
+    project.name,
+    project.neighborhood,
+    project.region,
+    selectedFeature,
+  ]);
+  const lightingPointAssessment = useMemo(() => {
+    const source = pendingFeature ?? selectedFeature;
+    if (!source) return null;
+
+    const context = getFeatureTechnicalContext(source, effectiveTechnicalArea);
+    const lightingObjectType = isLightingTechnicalObjectType(context.technicalObjectType)
+      ? context.technicalObjectType
+      : null;
+    if (!lightingObjectType) return null;
+
+    return buildLightingTechnicalDefaults({
+      autoContext: lightingAutoContext,
+      technicalObjectType: lightingObjectType,
+      currentValues: technicalFieldValues,
+    });
+  }, [
+    effectiveTechnicalArea,
+    lightingAutoContext,
+    pendingFeature,
+    selectedFeature,
+    technicalFieldValues,
+  ]);
+
   useEffect(() => {
     const contextSource = pendingFeature ?? selectedFeature;
     if (!contextSource) return;
@@ -989,16 +1159,28 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   useEffect(() => {
     if (pendingFeature) {
       const context = getFeatureTechnicalContext(pendingFeature, effectiveTechnicalArea);
+      const lightingObjectType = isLightingTechnicalObjectType(context.technicalObjectType)
+        ? context.technicalObjectType
+        : null;
       const fields = getTechnicalFieldsForContext(
         context.technicalArea ?? effectiveTechnicalArea,
         context.technicalObjectType
       );
       const rawTechnicalValues = readTechnicalFieldValues(fields, pendingFeature.attributes);
+      const lightingDefaultState = lightingObjectType
+        ? buildLightingTechnicalDefaults({
+            autoContext: lightingAutoContext,
+            technicalObjectType: lightingObjectType,
+            currentValues: rawTechnicalValues,
+          })
+        : null;
       const nextTechnicalValues = isDrainageSegmentObjectType(context.technicalObjectType)
         ? mergeDrainageSegmentDefaultValues(rawTechnicalValues)
         : isPavementRoadSegmentObjectType(context.technicalObjectType)
           ? mergePavementRoadSegmentDefaultValues(rawTechnicalValues)
-          : rawTechnicalValues;
+          : lightingDefaultState
+            ? lightingDefaultState.suggestedValues
+            : rawTechnicalValues;
       const suggestedName =
         isDrainageSegmentObjectType(context.technicalObjectType) && drainageSegmentAutoContext
           ? buildDrainageSegmentSuggestedName(drainageSegmentAutoContext)
@@ -1008,7 +1190,13 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                 pavementRoadSegmentAutoContext,
                 nextTechnicalValues
               )
-            : "";
+            : lightingObjectType && lightingAutoContext
+              ? buildLightingSuggestedName(
+                  lightingAutoContext,
+                  lightingObjectType,
+                  nextTechnicalValues
+                )
+              : "";
 
       setInspectorForm({
         name: readStringAttribute(pendingFeature.attributes, ["name"]) || suggestedName,
@@ -1016,7 +1204,8 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         status:
           readStringAttribute(pendingFeature.attributes, ["status"]) ||
           (isDrainageSegmentObjectType(context.technicalObjectType) ||
-          isPavementRoadSegmentObjectType(context.technicalObjectType)
+          isPavementRoadSegmentObjectType(context.technicalObjectType) ||
+          isLightingTechnicalObjectType(context.technicalObjectType)
             ? nextTechnicalValues.operationalStatus ?? ""
             : ""),
         front:
@@ -1043,16 +1232,28 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       const preferLocalValues = !selectedFeature.synced || !selectedFeature.persistedId;
       const attributes = (selectedFeature.attributes ?? selectedDetail?.attributes ?? {}) as Record<string, unknown>;
       const context = getFeatureTechnicalContext(selectedFeature, effectiveTechnicalArea);
+      const lightingObjectType = isLightingTechnicalObjectType(context.technicalObjectType)
+        ? context.technicalObjectType
+        : null;
       const fields = getTechnicalFieldsForContext(
         context.technicalArea ?? effectiveTechnicalArea,
         context.technicalObjectType
       );
       const rawTechnicalValues = readTechnicalFieldValues(fields, attributes);
+      const lightingDefaultState = lightingObjectType
+        ? buildLightingTechnicalDefaults({
+            autoContext: lightingAutoContext,
+            technicalObjectType: lightingObjectType,
+            currentValues: rawTechnicalValues,
+          })
+        : null;
       const nextTechnicalValues = isDrainageSegmentObjectType(context.technicalObjectType)
         ? mergeDrainageSegmentDefaultValues(rawTechnicalValues)
         : isPavementRoadSegmentObjectType(context.technicalObjectType)
           ? mergePavementRoadSegmentDefaultValues(rawTechnicalValues)
-          : rawTechnicalValues;
+          : lightingDefaultState
+            ? lightingDefaultState.suggestedValues
+            : rawTechnicalValues;
       const suggestedName =
         isDrainageSegmentObjectType(context.technicalObjectType) && drainageSegmentAutoContext
           ? buildDrainageSegmentSuggestedName(drainageSegmentAutoContext)
@@ -1062,7 +1263,13 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                 pavementRoadSegmentAutoContext,
                 nextTechnicalValues
               )
-            : "";
+            : lightingObjectType && lightingAutoContext
+              ? buildLightingSuggestedName(
+                  lightingAutoContext,
+                  lightingObjectType,
+                  nextTechnicalValues
+                )
+              : "";
 
       setInspectorForm({
         name: preferLocalValues
@@ -1078,7 +1285,8 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         status:
           readStringAttribute(attributes, ["status"]) ||
           (isDrainageSegmentObjectType(context.technicalObjectType) ||
-          isPavementRoadSegmentObjectType(context.technicalObjectType)
+          isPavementRoadSegmentObjectType(context.technicalObjectType) ||
+          isLightingTechnicalObjectType(context.technicalObjectType)
             ? nextTechnicalValues.operationalStatus ?? ""
             : ""),
         front: readStringAttribute(attributes, ["frente", "area", "fase"]),
@@ -1106,6 +1314,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     currentUser.name,
     drainageSegmentAutoContext,
     effectiveTechnicalArea,
+    lightingAutoContext,
     pendingFeature,
     pavementRoadSegmentAutoContext,
     project.responsibleDepartment,
@@ -1185,6 +1394,20 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     setCommentDraft("");
     setCommentFiles([]);
   }, [selectedFeature?.id]);
+
+  useEffect(() => {
+    if (!selectedInfrastructureItem) return;
+    const stillExists = lightingInfrastructureItems.find(
+      (item) => item.selectionKey === selectedInfrastructureItem.selectionKey
+    );
+    if (!stillExists) {
+      setSelectedInfrastructureItem(null);
+      return;
+    }
+    if (stillExists !== selectedInfrastructureItem) {
+      setSelectedInfrastructureItem(stillExists);
+    }
+  }, [lightingInfrastructureItems, selectedInfrastructureItem]);
 
   const handleTechnicalFieldChange = useCallback((key: string, value: string) => {
     if (key === "criticality") {
@@ -1295,6 +1518,18 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const drainagePanelStats = useMemo(
     () => getDrainageTechnicalPanelStats(features),
     [features]
+  );
+  const lightingPanelStats = useMemo(
+    () => getLightingTechnicalPanelStats({ features, baseLayersData }),
+    [baseLayersData, features]
+  );
+  const hasPonnotLayer = useMemo(
+    () => publishedBaseLayers.some((layer) => layer.type === "PONNOT"),
+    [publishedBaseLayers]
+  );
+  const hasPontIlumLayer = useMemo(
+    () => publishedBaseLayers.some((layer) => layer.type === "PONT_ILUM"),
+    [publishedBaseLayers]
   );
 
   const persistedCount = useMemo(() => features.filter((feature) => feature.persistedId).length, [features]);
@@ -1530,6 +1765,102 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     }
   };
 
+  const handleSelectInfrastructureItem = useCallback(
+    (item: InfrastructureLayerFeatureRecord | null) => {
+      if (!item) {
+        setSelectedInfrastructureItem(null);
+        return;
+      }
+
+      const enriched =
+        lightingInfrastructureItems.find(
+          (candidate) => candidate.selectionKey === item.selectionKey
+        ) ?? { ...item, linkedOperationalCount: 0 };
+
+      setSelectedInfrastructureItem(enriched);
+      setSelectedId(null);
+      clearSelectionIds();
+
+      if (item.coordinates) {
+        flyToCity(item.coordinates.lng, item.coordinates.lat, 17);
+      }
+    },
+    [clearSelectionIds, flyToCity, lightingInfrastructureItems, setSelectedId]
+  );
+
+  const handleCreateLightingOperationalFromInfrastructure = useCallback(
+    (
+      source: InfrastructureLayerFeatureRecord & { linkedOperationalCount: number },
+      objectType:
+        | "POSTE_LUZ"
+        | "LUMINARIA"
+        | "PONTO_APAGADO"
+        | "OCORRENCIA_MANUTENCAO_ILUMINACAO"
+        | "ITEM_VISTORIADO_ILUMINACAO"
+    ) => {
+      if (!source.coordinates) {
+        window.alert("O item importado não possui coordenadas válidas para gerar o registro operacional.");
+        return;
+      }
+
+      const nextFeature: DrawnFeature = {
+        id: `feat-${crypto.randomUUID()}`,
+        type: objectType,
+        coords: [source.coordinates],
+        label:
+          source.layerType === "PONNOT"
+            ? `${getTechnicalObjectLabel(objectType)} · ${source.codId || source.visibleLabel}`
+            : `${getTechnicalObjectLabel(objectType)} · ${source.txtLum || source.visibleLabel}`,
+        description: null,
+        synced: false,
+        createdAt: Date.now(),
+        createdAtIso: new Date().toISOString(),
+        attributes: normalizeTechnicalAttributes(
+          compactAttributes({
+            technicalArea: "ILUMINACAO",
+            technicalObjectType: objectType,
+            subType: objectType,
+            originKind: "PROJECT_OPERATIONAL",
+            lightingDataSource: "INFRASTRUCTURE_REFERENCE",
+            referenceInfrastructureKey: source.selectionKey,
+            referenceLayerType: source.layerType,
+            referencePoleId: source.layerType === "PONNOT" ? source.featureId : undefined,
+            referencePoleIdentifier: source.layerType === "PONNOT" ? source.codId : undefined,
+            referencePoleLabel: source.layerType === "PONNOT" ? source.visibleLabel : undefined,
+            referenceLightingPointId:
+              source.layerType === "PONT_ILUM" ? source.featureId : undefined,
+            referenceLightingPointIdentifier:
+              source.layerType === "PONT_ILUM" ? source.txtLum || source.featureId : undefined,
+            referenceLightingPointLabel:
+              source.layerType === "PONT_ILUM" ? source.visibleLabel : undefined,
+            streetName: source.streetName,
+            neighborhood: source.neighborhood,
+            district: source.district,
+            region: source.region,
+            municipalityName: source.municipalityName,
+            municipalityState: source.municipalityState,
+            powerCircuit: source.circuit,
+            operationalStatus: source.operationalStatus,
+          })
+        ),
+      };
+
+      appendFeatures([nextFeature]);
+      setActiveTechnicalArea("ILUMINACAO");
+      setActiveTechnicalObjectType(objectType);
+      setWorkspaceTool("SELECT");
+      setSelectedId(nextFeature.id);
+      setSelectedInfrastructureItem(source);
+    },
+    [
+      appendFeatures,
+      setActiveTechnicalArea,
+      setActiveTechnicalObjectType,
+      setSelectedId,
+      setWorkspaceTool,
+    ]
+  );
+
   const handleInspectorSave = async () => {
     let nextAttributes: Record<string, unknown>;
     let normalizedDrainageCoords: DrawnFeature["coords"] | null = null;
@@ -1562,6 +1893,10 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       const isPavementRoadSegment = isPavementRoadSegmentObjectType(
         context.technicalObjectType
       );
+      const lightingObjectType = isLightingTechnicalObjectType(context.technicalObjectType)
+        ? context.technicalObjectType
+        : null;
+      const isLightingObject = lightingObjectType !== null;
       const assistedDrainageAttributes =
         isDrainageSegment && drainageSegmentAutoContext && drainageSegmentAssessment
           ? buildDrainageSegmentAssistAttributes(drainageSegmentAutoContext, drainageSegmentAssessment)
@@ -1571,6 +1906,14 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           ? buildPavementRoadSegmentAssistAttributes(
               pavementRoadSegmentAutoContext,
               pavementRoadSegmentAssessment,
+              technicalFieldValues
+            )
+          : {};
+      const assistedLightingAttributes =
+        isLightingObject && lightingAutoContext
+          ? buildLightingAssistAttributes(
+              lightingAutoContext,
+              lightingObjectType,
               technicalFieldValues
             )
           : {};
@@ -1637,6 +1980,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           description: inspectorForm.description,
           ...assistedDrainageAttributes,
           ...assistedPavementAttributes,
+          ...assistedLightingAttributes,
           ...(fieldArea ? { technicalArea: fieldArea } : {}),
           ...(context.technicalObjectType
             ? {
@@ -1667,7 +2011,14 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                 pavementRoadSegmentAutoContext,
                 technicalFieldValues
               )
-          : undefined;
+            : isLightingTechnicalObjectType(inspectorContext?.technicalObjectType ?? null) &&
+                lightingAutoContext
+              ? buildLightingSuggestedName(
+                  lightingAutoContext,
+                  lightingInspectorObjectType!,
+                  technicalFieldValues
+                )
+            : undefined;
       confirmPendingFeature(nextAttributes, inspectorForm.name.trim() || fallbackName || undefined);
       return;
     }
@@ -1690,6 +2041,13 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                 pavementRoadSegmentAutoContext,
                 technicalFieldValues
               )
+            : isLightingTechnicalObjectType(inspectorContext?.technicalObjectType ?? null) &&
+                lightingAutoContext
+              ? buildLightingSuggestedName(
+                  lightingAutoContext,
+                  lightingInspectorObjectType!,
+                  technicalFieldValues
+                )
           : "Ativo sem nome"),
       description: inspectorForm.description.trim() || null,
       attributes: nextAttributes,
@@ -1814,6 +2172,11 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const isPavementRoadSegmentInspector = isPavementRoadSegmentObjectType(
     inspectorContext?.technicalObjectType ?? null
   );
+  const lightingInspectorObjectType: LightingTechnicalObjectTypeId | null =
+    isLightingTechnicalObjectType(inspectorContext?.technicalObjectType ?? null)
+      ? (inspectorContext!.technicalObjectType as LightingTechnicalObjectTypeId)
+      : null;
+  const isLightingInspector = lightingInspectorObjectType !== null;
 
   const measurementLabel = useMemo(() => {
     if (workspaceTool === "MEASURE_DISTANCE" && measurementPoints.length >= 2) {
@@ -1989,6 +2352,28 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
               </PanelSection>
             ) : null}
 
+            {effectiveTechnicalArea === "ILUMINACAO" ? (
+              <PanelSection title="Painel técnico" eyebrow="Iluminação pública">
+                <ProjectLightingTechnicalPanel
+                  stats={lightingPanelStats}
+                  hasPonnotLayer={hasPonnotLayer}
+                  hasPontIlumLayer={hasPontIlumLayer}
+                />
+              </PanelSection>
+            ) : null}
+
+            {effectiveTechnicalArea === "ILUMINACAO" ? (
+              <PanelSection title="Base operacional importada" eyebrow="Iluminação pública">
+                <ProjectLightingImportedPanel
+                  items={filteredLightingInfrastructureItems}
+                  selectedSelectionKey={selectedInfrastructureItem?.selectionKey ?? null}
+                  projectLinkFilter={lightingProjectLinkFilter}
+                  onProjectLinkFilterChange={setLightingProjectLinkFilter}
+                  onSelect={handleSelectInfrastructureItem}
+                />
+              </PanelSection>
+            ) : null}
+
             <PanelSection title="Camadas e filtros" eyebrow="Controle visual">
               <div className="space-y-4">
                 <div>
@@ -2110,6 +2495,40 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                           {infrastructureStatusOptions.map((status) => (
                             <option key={status} value={status}>
                               {status}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={infrastructureFilters.condition}
+                          onChange={(event) =>
+                            setInfrastructureFilters((current) => ({
+                              ...current,
+                              condition: event.target.value,
+                            }))
+                          }
+                          className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+                        >
+                          <option value="ALL">Todas as condições</option>
+                          {infrastructureConditionOptions.map((condition) => (
+                            <option key={condition} value={condition}>
+                              {condition}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={infrastructureFilters.municipalityName}
+                          onChange={(event) =>
+                            setInfrastructureFilters((current) => ({
+                              ...current,
+                              municipalityName: event.target.value,
+                            }))
+                          }
+                          className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+                        >
+                          <option value="ALL">Todos os municípios</option>
+                          {infrastructureMunicipalityOptions.map((municipality) => (
+                            <option key={municipality} value={municipality}>
+                              {municipality}
                             </option>
                           ))}
                         </select>
@@ -2416,6 +2835,15 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
               showDrawHint={false}
               visibleFeatureIds={visibleFeatureIds}
               infrastructureFilters={infrastructureFilters}
+              visibleInfrastructureSelectionKeys={
+                effectiveTechnicalArea === "ILUMINACAO"
+                  ? visibleInfrastructureSelectionKeys
+                  : null
+              }
+              selectedInfrastructureSelectionKey={
+                selectedInfrastructureItem?.selectionKey ?? null
+              }
+              onInfrastructureFeatureSelect={handleSelectInfrastructureItem}
             />
           </div>
         </section>
@@ -2469,6 +2897,22 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                       <ProjectPavementRoadForm
                         autoContext={pavementRoadSegmentAutoContext}
                         assessment={pavementRoadSegmentAssessment}
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={handleTechnicalFieldChange}
+                      />
+                    </>
+                  ) : isLightingInspector ? (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome sugerido do item de iluminação" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição técnica, vínculo com poste, ponto de luz ou circuito" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações operacionais da iluminação pública" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectLightingPointForm
+                        autoContext={lightingAutoContext}
+                        technicalObjectType={lightingInspectorObjectType!}
+                        assessment={lightingPointAssessment}
                         fields={activeTechnicalFields}
                         values={technicalFieldValues}
                         onChange={handleTechnicalFieldChange}
@@ -2541,6 +2985,22 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                       <ProjectPavementRoadForm
                         autoContext={pavementRoadSegmentAutoContext}
                         assessment={pavementRoadSegmentAssessment}
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={handleTechnicalFieldChange}
+                      />
+                    </>
+                  ) : isLightingInspector ? (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome do item de iluminação" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição técnica e operacional do item de iluminação" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações, vistoria ou manutenção associada" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectLightingPointForm
+                        autoContext={lightingAutoContext}
+                        technicalObjectType={lightingInspectorObjectType!}
+                        assessment={lightingPointAssessment}
                         fields={activeTechnicalFields}
                         values={technicalFieldValues}
                         onChange={handleTechnicalFieldChange}
@@ -2686,6 +3146,17 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                     ) : null}
                   </div>
                 </div>
+              ) : selectedInfrastructureItem && effectiveTechnicalArea === "ILUMINACAO" ? (
+                <ProjectLightingInfrastructureInspector
+                  item={selectedInfrastructureItem}
+                  onCreateOperationalItem={(action) =>
+                    handleCreateLightingOperationalFromInfrastructure(
+                      selectedInfrastructureItem,
+                      action
+                    )
+                  }
+                  onClose={() => setSelectedInfrastructureItem(null)}
+                />
               ) : (
                 <ProjectEmptyBlock title="Selecione ou desenhe um item" description="Use o painel esquerdo para localizar itens existentes, desenhar novos ativos ou editar geometrias já publicadas no projeto." />
               )}

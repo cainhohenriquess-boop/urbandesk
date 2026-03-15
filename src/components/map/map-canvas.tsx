@@ -20,6 +20,7 @@ import {
 import {
   EMPTY_INFRASTRUCTURE_LAYER_FILTERS,
   filterInfrastructureLayerCollection,
+  getInfrastructureFeatureVisibleLabel,
   type InfrastructureLayerFeatureFilters,
 } from "@/lib/infrastructure-layer-map";
 import { readDrainageSegmentFieldValue } from "@/lib/drainage-segment";
@@ -207,7 +208,28 @@ const ASSET_STYLES = {
     hex: "#eab308",
     ring: "ring-yellow-500/50",
     icon: "*",
-    label: "Lumin?ria",
+    label: "Ponto de iluminação",
+  },
+  PONTO_APAGADO: {
+    color: "bg-amber-700",
+    hex: "#b45309",
+    ring: "ring-amber-700/50",
+    icon: "AP",
+    label: "Ponto apagado",
+  },
+  OCORRENCIA_MANUTENCAO_ILUMINACAO: {
+    color: "bg-orange-600",
+    hex: "#ea580c",
+    ring: "ring-orange-600/50",
+    icon: "MT",
+    label: "Ocorrência de manutenção",
+  },
+  ITEM_VISTORIADO_ILUMINACAO: {
+    color: "bg-lime-600",
+    hex: "#65a30d",
+    ring: "ring-lime-600/50",
+    icon: "VS",
+    label: "Item vistoriado",
   },
   PONTO_FISCALIZACAO: {
     color: "bg-violet-500",
@@ -247,11 +269,35 @@ function getDrainageLineStyle(feature: { attributes?: Record<string, unknown>; c
     technicalObjectType === "SARJETA" ||
     technicalObjectType === "CANAL";
   const isPavementLine = technicalObjectType === "TRECHO_PAVIMENTO";
-  if (!isDrainageLine && !isPavementLine) {
+  const isLightingLine = technicalObjectType === "CIRCUITO_ILUMINACAO";
+  if (!isDrainageLine && !isPavementLine && !isLightingLine) {
     return {
       lineColor: feature.color || "#3b82f6",
       lineWidth: 4,
       lineOpacity: 0.94,
+    };
+  }
+  if (isLightingLine) {
+    let lineColor = feature.color || "#eab308";
+    if (
+      operationalStatus === "DESENERGIZADO" ||
+      operationalStatus === "DESATIVADO" ||
+      riskLevel === "CRITICA" ||
+      riskLevel === "CRITICO"
+    ) {
+      lineColor = "#dc2626";
+    } else if (
+      operationalStatus === "INTERMITENTE" ||
+      operationalStatus === "ATENCAO" ||
+      operationalStatus === "EM_MANUTENCAO"
+    ) {
+      lineColor = "#f97316";
+    }
+
+    return {
+      lineColor,
+      lineWidth: 4.5,
+      lineOpacity: operationalStatus === "DESENERGIZADO" ? 0.72 : 0.96,
     };
   }
   if (isPavementLine) {
@@ -337,6 +383,12 @@ function getPointVisualStyle(feature: { type: string; attributes?: Record<string
     technicalObjectType === "DEFEITO_PAVIMENTO" ||
     technicalObjectType === "BURACO" ||
     technicalObjectType === "AFUNDAMENTO_VIARIO";
+  const isLightingPoint =
+    technicalObjectType === "POSTE_LUZ" ||
+    technicalObjectType === "LUMINARIA" ||
+    technicalObjectType === "PONTO_APAGADO" ||
+    technicalObjectType === "OCORRENCIA_MANUTENCAO_ILUMINACAO" ||
+    technicalObjectType === "ITEM_VISTORIADO_ILUMINACAO";
   const assetCondition = readFeatureString(feature.attributes, "assetCondition");
   const operationalStatus = readFeatureString(feature.attributes, "operationalStatus");
   const surfaceCondition = readFeatureString(feature.attributes, "surfaceCondition");
@@ -345,7 +397,31 @@ function getPointVisualStyle(feature: { type: string; attributes?: Record<string
     readFeatureString(feature.attributes, "criticality") ??
     readFeatureString(feature.attributes, "severity");
   let hex = baseStyle?.hex || "#ffffff";
-  if (!isDrainagePoint && !isPavementPoint) {
+  if (!isDrainagePoint && !isPavementPoint && !isLightingPoint) {
+    return {
+      ...(baseStyle ?? {}),
+      hex,
+    };
+  }
+  if (isLightingPoint) {
+    if (
+      technicalObjectType === "PONTO_APAGADO" ||
+      operationalStatus === "APAGADO" ||
+      operationalStatus === "DESATIVADO"
+    ) {
+      hex = "#dc2626";
+    } else if (
+      technicalObjectType === "OCORRENCIA_MANUTENCAO_ILUMINACAO" ||
+      operationalStatus === "EM_MANUTENCAO" ||
+      operationalStatus === "ATENCAO"
+    ) {
+      hex = "#f97316";
+    } else if (technicalObjectType === "ITEM_VISTORIADO_ILUMINACAO") {
+      hex = "#65a30d";
+    } else {
+      hex = "#eab308";
+    }
+
     return {
       ...(baseStyle ?? {}),
       hex,
@@ -537,6 +613,37 @@ type MapCanvasProps = {
   showDrawHint?: boolean;
   visibleFeatureIds?: string[];
   infrastructureFilters?: InfrastructureLayerFeatureFilters;
+  visibleInfrastructureSelectionKeys?: string[] | null;
+  selectedInfrastructureSelectionKey?: string | null;
+  onInfrastructureFeatureSelect?: (
+    item: {
+      selectionKey: string;
+      layerId: string;
+      layerName: string;
+      layerType: "PONNOT" | "PONT_ILUM";
+      featureId: string;
+      label: string;
+      visibleLabel: string;
+      municipalityName: string | null;
+      municipalityState: string | null;
+      streetName: string | null;
+      neighborhood: string | null;
+      district: string | null;
+      region: string | null;
+      operationalStatus: string | null;
+      condition: string | null;
+      circuit: string | null;
+      txtLum: string | null;
+      codId: string | null;
+      qtdUcs: number | null;
+      supportType: string | null;
+      lampType: string | null;
+      powerWatts: number | null;
+      reference: string | null;
+      coordinates: { lng: number; lat: number } | null;
+      properties: Record<string, unknown>;
+    } | null
+  ) => void;
 };
 
 export function MapCanvas(props: MapCanvasProps) {
@@ -551,6 +658,9 @@ function MapCanvasInner({
   showDrawHint = true,
   visibleFeatureIds,
   infrastructureFilters = EMPTY_INFRASTRUCTURE_LAYER_FILTERS,
+  visibleInfrastructureSelectionKeys,
+  selectedInfrastructureSelectionKey,
+  onInfrastructureFeatureSelect,
 }: MapCanvasProps = {}) {
   const {
     features,
@@ -594,6 +704,13 @@ function MapCanvasInner({
     () => new Set(visibleBaseLayerIds),
     [visibleBaseLayerIds]
   );
+  const visibleInfrastructureSelectionKeySet = useMemo(
+    () =>
+      Array.isArray(visibleInfrastructureSelectionKeys)
+        ? new Set(visibleInfrastructureSelectionKeys)
+        : null,
+    [visibleInfrastructureSelectionKeys]
+  );
 
   const baseLayersSafe = useMemo(() => {
     return baseLayersData.map((layer) => ({
@@ -601,14 +718,53 @@ function MapCanvasInner({
       name: layer.name,
       type: layer.type,
       data: isInfrastructureLayerCode(layer.type)
-        ? filterInfrastructureLayerCollection(
-            layer.geoJsonData,
-            layer.type,
-            infrastructureFilters
-          )
+        ? {
+            type: "FeatureCollection" as const,
+            features: filterInfrastructureLayerCollection(
+              layer.geoJsonData,
+              layer.type,
+              infrastructureFilters
+            ).features
+              .map((feature, index) => {
+                const properties =
+                  feature.properties && typeof feature.properties === "object"
+                    ? (feature.properties as Record<string, unknown>)
+                    : {};
+                const featureId =
+                  (typeof properties.id === "string" && properties.id.trim()) ||
+                  (typeof properties.identifier === "string" && properties.identifier.trim()) ||
+                  (typeof properties.COD_ID === "string" && properties.COD_ID.trim()) ||
+                  (typeof properties.TXT_LUM === "string" && properties.TXT_LUM.trim()) ||
+                  `${layer.type}-${index + 1}`;
+                const selectionKey = `${layer.type}:${featureId}`;
+                if (
+                  visibleInfrastructureSelectionKeySet &&
+                  !visibleInfrastructureSelectionKeySet.has(selectionKey)
+                ) {
+                  return null;
+                }
+
+                return {
+                  ...feature,
+                  properties: {
+                    ...properties,
+                    infrastructureLayerId: layer.id,
+                    infrastructureLayerName: layer.name,
+                    infrastructureLayerType: layer.type,
+                    infrastructureFeatureId: featureId,
+                    infrastructureSelectionKey: selectionKey,
+                    infrastructureVisibleLabel: getInfrastructureFeatureVisibleLabel(
+                      properties,
+                      layer.type as "PONNOT" | "PONT_ILUM"
+                    ),
+                  },
+                };
+              })
+              .filter(Boolean) as Array<Record<string, unknown>>,
+          }
         : parseBaseLayerGeoJson(layer.geoJsonData),
     }));
-  }, [baseLayersData, infrastructureFilters]);
+  }, [baseLayersData, infrastructureFilters, visibleInfrastructureSelectionKeySet]);
 
   useEffect(() => {
     setUtmWarning(detectPotentialUtm(baseLayersSafe.map((layer) => layer.data)));
@@ -706,6 +862,99 @@ function MapCanvasInner({
   }, [spatialSearch.center, spatialSearch.radiusMeters]);
 
   const handleMapClick = (event: MapLayerMouseEvent) => {
+    const clickedInfrastructureFeature =
+      event.features?.find((feature) => {
+        const props =
+          feature.properties && typeof feature.properties === "object"
+            ? (feature.properties as Record<string, unknown>)
+            : {};
+        return typeof props.infrastructureSelectionKey === "string";
+      }) ?? null;
+
+    if (clickedInfrastructureFeature) {
+      const properties =
+        clickedInfrastructureFeature.properties &&
+        typeof clickedInfrastructureFeature.properties === "object"
+          ? (clickedInfrastructureFeature.properties as Record<string, unknown>)
+          : {};
+      const coordinates =
+        clickedInfrastructureFeature.geometry?.type === "Point" &&
+        Array.isArray(clickedInfrastructureFeature.geometry.coordinates)
+          ? {
+              lng: Number(clickedInfrastructureFeature.geometry.coordinates[0]),
+              lat: Number(clickedInfrastructureFeature.geometry.coordinates[1]),
+            }
+          : null;
+
+      onInfrastructureFeatureSelect?.({
+        selectionKey: String(properties.infrastructureSelectionKey),
+        layerId: String(properties.infrastructureLayerId ?? ""),
+        layerName: String(properties.infrastructureLayerName ?? ""),
+        layerType: String(properties.infrastructureLayerType) as "PONNOT" | "PONT_ILUM",
+        featureId: String(properties.infrastructureFeatureId ?? ""),
+        label:
+          typeof properties.label === "string"
+            ? properties.label
+            : typeof properties.identifier === "string"
+              ? properties.identifier
+              : "",
+        visibleLabel:
+          typeof properties.infrastructureVisibleLabel === "string"
+            ? properties.infrastructureVisibleLabel
+            : "",
+        municipalityName:
+          typeof properties.municipalityName === "string" ? properties.municipalityName : null,
+        municipalityState:
+          typeof properties.municipalityState === "string"
+            ? properties.municipalityState
+            : null,
+        streetName: typeof properties.streetName === "string" ? properties.streetName : null,
+        neighborhood:
+          typeof properties.neighborhood === "string" ? properties.neighborhood : null,
+        district: typeof properties.district === "string" ? properties.district : null,
+        region: typeof properties.region === "string" ? properties.region : null,
+        operationalStatus:
+          typeof properties.operationalStatus === "string"
+            ? properties.operationalStatus
+            : null,
+        condition:
+          typeof properties.condition === "string"
+            ? properties.condition
+            : typeof properties.assetCondition === "string"
+              ? properties.assetCondition
+              : typeof properties.supportType === "string"
+                ? properties.supportType
+                : null,
+        circuit: typeof properties.circuit === "string" ? properties.circuit : null,
+        txtLum: typeof properties.TXT_LUM === "string" ? properties.TXT_LUM : null,
+        codId: typeof properties.COD_ID === "string" ? properties.COD_ID : null,
+        qtdUcs:
+          typeof properties.QTD_UCS === "number"
+            ? properties.QTD_UCS
+            : typeof properties.QTD_UCS === "string"
+              ? Number(properties.QTD_UCS)
+              : null,
+        supportType:
+          typeof properties.supportType === "string" ? properties.supportType : null,
+        lampType: typeof properties.lampType === "string" ? properties.lampType : null,
+        powerWatts:
+          typeof properties.powerWatts === "number"
+            ? properties.powerWatts
+            : typeof properties.powerWatts === "string"
+              ? Number(properties.powerWatts)
+              : null,
+        reference: typeof properties.reference === "string" ? properties.reference : null,
+        coordinates:
+          coordinates && Number.isFinite(coordinates.lng) && Number.isFinite(coordinates.lat)
+            ? coordinates
+            : null,
+        properties,
+      });
+      setSelectedId(null);
+      clearSelectionIds();
+      return;
+    }
+
     const clickedId = event.features?.find((feature) => {
       const id = (feature.properties as { id?: unknown } | undefined)?.id;
       return typeof id === "string";
@@ -781,6 +1030,7 @@ function MapCanvasInner({
 
     setSelectedId(clickedFeature?.id ?? null);
     clearSelectionIds();
+    onInfrastructureFeatureSelect?.(null);
   };
 
   const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -1044,7 +1294,19 @@ function MapCanvasInner({
         onMove={(evt) => setViewState(evt.viewState)}
         mapStyle={activeMapStyle as never}
         onClick={handleMapClick}
-        interactiveLayerIds={["geom-lines", "geom-polygons-fill", "geom-polygons-stroke", "assets-circle"]}
+        interactiveLayerIds={[
+          "geom-lines",
+          "geom-polygons-fill",
+          "geom-polygons-stroke",
+          "assets-circle",
+          ...baseLayersSafe.flatMap((layer) =>
+            layer.type === "PONNOT"
+              ? [`infra-ponnot-circle-${layer.id}`]
+              : layer.type === "PONT_ILUM"
+                ? [`infra-pont-ilum-circle-${layer.id}`]
+                : []
+          ),
+        ]}
         cursor={
           drawMode !== "SELECT"
             ? "crosshair"
@@ -1183,8 +1445,26 @@ function MapCanvasInner({
                         "circle-color": ["coalesce", ["get", "renderColor"], "#0f766e"],
                         "circle-radius": 5.5,
                         "circle-opacity": 0.9,
-                        "circle-stroke-color": "#ecfeff",
-                        "circle-stroke-width": 1.5,
+                        "circle-stroke-color": [
+                          "case",
+                          [
+                            "==",
+                            ["get", "infrastructureSelectionKey"],
+                            selectedInfrastructureSelectionKey ?? "",
+                          ],
+                          "#0f172a",
+                          "#ecfeff",
+                        ],
+                        "circle-stroke-width": [
+                          "case",
+                          [
+                            "==",
+                            ["get", "infrastructureSelectionKey"],
+                            selectedInfrastructureSelectionKey ?? "",
+                          ],
+                          3,
+                          1.5,
+                        ],
                       }}
                     />
                     <Layer
@@ -1225,8 +1505,26 @@ function MapCanvasInner({
                         "circle-color": ["coalesce", ["get", "renderColor"], "#ca8a04"],
                         "circle-radius": 6,
                         "circle-opacity": 0.92,
-                        "circle-stroke-color": "#fffbeb",
-                        "circle-stroke-width": 1.5,
+                        "circle-stroke-color": [
+                          "case",
+                          [
+                            "==",
+                            ["get", "infrastructureSelectionKey"],
+                            selectedInfrastructureSelectionKey ?? "",
+                          ],
+                          "#0f172a",
+                          "#fffbeb",
+                        ],
+                        "circle-stroke-width": [
+                          "case",
+                          [
+                            "==",
+                            ["get", "infrastructureSelectionKey"],
+                            selectedInfrastructureSelectionKey ?? "",
+                          ],
+                          3,
+                          1.5,
+                        ],
                       }}
                     />
                     <Layer
