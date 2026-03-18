@@ -14,6 +14,7 @@ import {
   PROJECT_STATUS_VALUES,
   PROJECT_TYPE_VALUES,
 } from "@/lib/project-portfolio";
+import { PRISMA_PROJECT_TECHNICAL_AREAS } from "@/lib/project-disciplines";
 import { getProjectSchemaCompatibility } from "@/lib/project-schema-compat";
 
 const ALLOWED_ROLES = new Set(["SUPERADMIN", "SECRETARIO", "ENGENHEIRO"]);
@@ -51,6 +52,7 @@ const updateProjectSchema = z
     ).optional(),
     responsibleDepartment: nullableTrimmedString(120).optional(),
     neighborhood: nullableTrimmedString(120).optional(),
+    technicalAreas: z.array(z.enum(PRISMA_PROJECT_TECHNICAL_AREAS)).optional(),
     priority: z.enum(PROJECT_PRIORITY_VALUES).optional(),
     estimatedBudget: nullableNumberSchema.optional(),
     plannedStartDate: nullableDateSchema.optional(),
@@ -74,6 +76,7 @@ function serializeProject(project: {
   neighborhood: string | null;
   district: string | null;
   region: string | null;
+  technicalAreas: readonly (typeof PRISMA_PROJECT_TECHNICAL_AREAS)[number][];
   priority: string;
   budget: Prisma.Decimal | null;
   estimatedBudget: Prisma.Decimal | null;
@@ -355,6 +358,9 @@ export async function PATCH(req: NextRequest, context: ProjectRouteContext) {
           ? { responsibleDepartment: payload.responsibleDepartment }
           : {}),
         ...(payload.neighborhood !== undefined ? { neighborhood: payload.neighborhood } : {}),
+        ...(payload.technicalAreas !== undefined
+          ? { technicalAreas: payload.technicalAreas }
+          : {}),
         ...(payload.priority !== undefined ? { priority: payload.priority } : {}),
         ...(estimatedBudget !== undefined
           ? { estimatedBudget, budget: estimatedBudget }

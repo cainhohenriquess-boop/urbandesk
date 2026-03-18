@@ -145,14 +145,14 @@ export type ProjectDisciplineDefinition = {
 
 const DISCIPLINE_LABELS: Record<ProjectDisciplineId, string> = {
   DRENAGEM: "Drenagem",
-  PAVIMENTACAO: "PavimentaÃ§Ã£o",
-  ILUMINACAO: "IluminaÃ§Ã£o pÃºblica",
+  PAVIMENTACAO: "Pavimentação",
+  ILUMINACAO: "Iluminação pública",
   ARBORIZACAO: "Arborização",
-  SINALIZACAO: "SinalizaÃ§Ã£o",
-  FISCALIZACAO: "FiscalizaÃ§Ã£o",
+  SINALIZACAO: "Sinalização",
+  FISCALIZACAO: "Fiscalização",
   MOBILIDADE: "Mobilidade",
   SANEAMENTO: "Saneamento",
-  EDIFICACOES: "EdificaÃ§Ãµes",
+  EDIFICACOES: "Edificações",
   ZELADORIA: "Zeladoria",
   OBRAS: "Obras",
 };
@@ -2054,6 +2054,64 @@ function titleCase(value: string) {
     .join(" ");
 }
 
+function normalizeDisciplineText(value: string) {
+  if (!/[ÃÂâ]/.test(value)) return value;
+
+  try {
+    const bytes = Uint8Array.from(Array.from(value), (char) => char.charCodeAt(0) & 0xff);
+    return new TextDecoder("utf-8").decode(bytes);
+  } catch {
+    return value;
+  }
+}
+
+function sanitizeTechnicalFieldOption(option: TechnicalFieldOption): TechnicalFieldOption {
+  return {
+    ...option,
+    label: normalizeDisciplineText(option.label),
+  };
+}
+
+function sanitizeTechnicalFieldDefinition(
+  field: TechnicalFieldDefinition
+): TechnicalFieldDefinition {
+  return {
+    ...field,
+    label: normalizeDisciplineText(field.label),
+    placeholder: field.placeholder
+      ? normalizeDisciplineText(field.placeholder)
+      : field.placeholder,
+    helper: field.helper ? normalizeDisciplineText(field.helper) : field.helper,
+    options: field.options?.map(sanitizeTechnicalFieldOption),
+  };
+}
+
+function sanitizeTechnicalObjectDefinition(
+  definition: TechnicalObjectDefinition | undefined
+): TechnicalObjectDefinition | undefined {
+  if (!definition) return definition;
+
+  return {
+    ...definition,
+    label: normalizeDisciplineText(definition.label),
+    helper: normalizeDisciplineText(definition.helper),
+    fields: definition.fields?.map(sanitizeTechnicalFieldDefinition),
+  };
+}
+
+function sanitizeProjectDisciplineDefinition(
+  definition: ProjectDisciplineDefinition | undefined
+): ProjectDisciplineDefinition | undefined {
+  if (!definition) return definition;
+
+  return {
+    ...definition,
+    label: normalizeDisciplineText(definition.label),
+    description: normalizeDisciplineText(definition.description),
+    commonFields: definition.commonFields?.map(sanitizeTechnicalFieldDefinition),
+  };
+}
+
 export function isProjectDisciplineId(value: string): value is ProjectDisciplineId {
   return (PROJECT_DISCIPLINE_IDS as readonly string[]).includes(value);
 }
@@ -2063,19 +2121,19 @@ export function isTechnicalObjectType(value: string): value is TechnicalObjectTy
 }
 
 export function getProjectDisciplineLabel(value: ProjectDisciplineId) {
-  return DISCIPLINE_LABELS[value] ?? titleCase(value);
+  return normalizeDisciplineText(DISCIPLINE_LABELS[value] ?? titleCase(value));
 }
 
 export function getProjectDisciplineDefinition(value: ProjectDisciplineId) {
-  return PROJECT_DISCIPLINE_DEFINITIONS[value];
+  return sanitizeProjectDisciplineDefinition(PROJECT_DISCIPLINE_DEFINITIONS[value]);
 }
 
 export function getTechnicalObjectDefinition(value: TechnicalObjectTypeId) {
-  return TECHNICAL_OBJECT_DEFINITIONS[value];
+  return sanitizeTechnicalObjectDefinition(TECHNICAL_OBJECT_DEFINITIONS[value]);
 }
 
 export function getTechnicalObjectLabel(value: TechnicalObjectTypeId) {
-  return getTechnicalObjectDefinition(value)?.label ?? titleCase(value);
+  return getTechnicalObjectDefinition(value)?.label ?? normalizeDisciplineText(titleCase(value));
 }
 
 export function getEnabledProjectDisciplines(projectAreas: ProjectTechnicalArea[]) {
@@ -2092,7 +2150,7 @@ export function getEnabledProjectDisciplines(projectAreas: ProjectTechnicalArea[
 
 export function getDisciplineObjectTypes(discipline: ProjectDisciplineId) {
   return PROJECT_DISCIPLINE_DEFINITIONS[discipline]?.objectTypes.map(
-    (objectType) => TECHNICAL_OBJECT_DEFINITIONS[objectType]
+    (objectType) => sanitizeTechnicalObjectDefinition(TECHNICAL_OBJECT_DEFINITIONS[objectType])
   ) ?? [];
 }
 
@@ -2109,7 +2167,7 @@ export function getTechnicalFieldsForContext(
 
   const unique = new Map<string, TechnicalFieldDefinition>();
   for (const field of [...disciplineFields, ...objectFields]) {
-    unique.set(field.key, field);
+    unique.set(field.key, sanitizeTechnicalFieldDefinition(field));
   }
 
   return Array.from(unique.values());
@@ -2175,9 +2233,10 @@ export function validateTechnicalFieldValues(
   for (const field of fields) {
     const rawValue = values[field.key] ?? "";
     const trimmed = rawValue.trim();
+    const label = normalizeDisciplineText(field.label);
 
     if (field.required && trimmed.length === 0) {
-      errors.push(`${field.label} Ã© obrigatÃ³rio.`);
+      errors.push(`${label} é obrigatório.`);
       continue;
     }
 
@@ -2186,14 +2245,14 @@ export function validateTechnicalFieldValues(
     if (field.kind === "number") {
       const parsed = Number(trimmed.replace(",", "."));
       if (!Number.isFinite(parsed)) {
-        errors.push(`${field.label} deve ser numÃ©rico.`);
+        errors.push(`${label} deve ser numérico.`);
         continue;
       }
       if (field.min !== undefined && parsed < field.min) {
-        errors.push(`${field.label} deve ser maior ou igual a ${field.min}.`);
+        errors.push(`${label} deve ser maior ou igual a ${field.min}.`);
       }
       if (field.max !== undefined && parsed > field.max) {
-        errors.push(`${field.label} deve ser menor ou igual a ${field.max}.`);
+        errors.push(`${label} deve ser menor ou igual a ${field.max}.`);
       }
     }
   }
@@ -2250,7 +2309,7 @@ export function normalizeTechnicalAttributes(attributes: Record<string, unknown>
     typeof nextAttributes.technicalArea === "string" &&
     !isProjectDisciplineId(nextAttributes.technicalArea)
   ) {
-    throw new Error("Ãrea tÃ©cnica invÃ¡lida.");
+    throw new Error("Área técnica inválida.");
   }
 
   if (
@@ -2258,7 +2317,7 @@ export function normalizeTechnicalAttributes(attributes: Record<string, unknown>
     typeof nextAttributes.technicalObjectType === "string" &&
     !isTechnicalObjectType(nextAttributes.technicalObjectType)
   ) {
-    throw new Error("Tipo de objeto tÃ©cnico invÃ¡lido.");
+    throw new Error("Tipo de objeto técnico inválido.");
   }
 
   if (technicalObjectType) {
@@ -2268,7 +2327,7 @@ export function normalizeTechnicalAttributes(attributes: Record<string, unknown>
       objectDefinition &&
       objectDefinition.area !== technicalArea
     ) {
-      throw new Error("O tipo de objeto nÃ£o pertence Ã  Ã¡rea tÃ©cnica informada.");
+      throw new Error("O tipo de objeto não pertence à área técnica informada.");
     }
 
     nextAttributes.technicalObjectType = technicalObjectType;

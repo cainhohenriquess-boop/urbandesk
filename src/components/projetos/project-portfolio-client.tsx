@@ -62,6 +62,7 @@ const EMPTY_FORM: ProjectPortfolioFormState = {
   projectType: "",
   responsibleDepartment: "",
   neighborhood: "",
+  technicalAreas: [],
   priority: "MEDIA",
   estimatedBudget: "",
   plannedStartDate: "",
@@ -114,6 +115,7 @@ function toForm(project: ProjectPortfolioItem): ProjectPortfolioFormState {
     projectType: project.projectType ?? "",
     responsibleDepartment: project.responsibleDepartment ?? "",
     neighborhood: project.neighborhood ?? "",
+    technicalAreas: project.technicalAreas ?? [],
     priority: project.priority,
     estimatedBudget:
       project.estimatedBudget === null && project.budget === null
@@ -278,6 +280,7 @@ export function ProjectPortfolioClient() {
         projectType: form.projectType || null,
         responsibleDepartment: form.responsibleDepartment.trim() || null,
         neighborhood: form.neighborhood.trim() || null,
+        technicalAreas: form.technicalAreas,
         priority: form.priority,
         estimatedBudget: form.estimatedBudget.trim() ? Number(form.estimatedBudget) : null,
         plannedStartDate: form.plannedStartDate || null,
@@ -299,7 +302,18 @@ export function ProjectPortfolioClient() {
         throw new Error(payload?.error ?? "Falha ao salvar projeto.");
       }
 
+      const savedProjectId =
+        payload && typeof payload === "object" && "data" in payload
+          ? (payload.data as { id?: string } | undefined)?.id
+          : undefined;
+
       setForm(EMPTY_FORM);
+
+      if (!form.id && savedProjectId) {
+        router.push(`/app/projetos/${savedProjectId}/mapa`);
+        return;
+      }
+
       if (urlState.page !== 1) {
         patchUrlState({ page: 1 });
       } else {

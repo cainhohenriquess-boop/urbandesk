@@ -23,6 +23,7 @@ import {
   type ProjectSortBy,
   type ProjectSortOrder,
 } from "@/lib/project-portfolio-query";
+import { PRISMA_PROJECT_TECHNICAL_AREAS } from "@/lib/project-disciplines";
 import { getProjectSchemaCompatibility } from "@/lib/project-schema-compat";
 
 const tenantIdSchema = z.string().cuid();
@@ -60,6 +61,10 @@ const createProjectSchema = z
     ).optional(),
     responsibleDepartment: nullableTrimmedString(120).optional(),
     neighborhood: nullableTrimmedString(120).optional(),
+    technicalAreas: z
+      .array(z.enum(PRISMA_PROJECT_TECHNICAL_AREAS))
+      .optional()
+      .default([]),
     priority: z.enum(PROJECT_PRIORITY_VALUES).optional().default("MEDIA"),
     estimatedBudget: nullableNumberSchema.optional(),
     plannedStartDate: nullableDateSchema.optional(),
@@ -80,6 +85,7 @@ function serializeProject(project: {
   neighborhood: string | null;
   district: string | null;
   region: string | null;
+  technicalAreas: readonly (typeof PRISMA_PROJECT_TECHNICAL_AREAS)[number][];
   priority: (typeof PROJECT_PRIORITY_VALUES)[number];
   budget: Prisma.Decimal | null;
   estimatedBudget: Prisma.Decimal | null;
@@ -711,6 +717,7 @@ export async function POST(req: NextRequest) {
         projectType: payload.projectType ?? null,
         responsibleDepartment: payload.responsibleDepartment ?? null,
         neighborhood: payload.neighborhood ?? null,
+        technicalAreas: payload.technicalAreas,
         priority: payload.priority,
         budget: estimatedBudget,
         estimatedBudget,

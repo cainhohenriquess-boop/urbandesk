@@ -4,6 +4,7 @@ import type {
   ProjectStatusValue,
   ProjectTypeValue,
 } from "@/lib/project-portfolio";
+import type { ProjectTechnicalArea } from "@prisma/client";
 import type {
   PortfolioViewMode,
   ProjectSortBy,
@@ -22,6 +23,7 @@ export interface ProjectPortfolioItem {
   neighborhood: string | null;
   district: string | null;
   region: string | null;
+  technicalAreas: ProjectTechnicalArea[];
   priority: ProjectPriorityValue;
   budget: number | null;
   estimatedBudget: number | null;
@@ -90,6 +92,7 @@ export interface ProjectPortfolioFormState {
   projectType: "" | ProjectTypeValue;
   responsibleDepartment: string;
   neighborhood: string;
+  technicalAreas: ProjectTechnicalArea[];
   priority: ProjectPriorityValue;
   estimatedBudget: string;
   plannedStartDate: string;

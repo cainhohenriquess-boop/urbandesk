@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   ProjectContractStatus,
   ProjectDocumentType,
   ProjectInspectionStatus,
@@ -20,6 +20,17 @@ function titleCase(value: string) {
     .split("_")
     .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
     .join(" ");
+}
+
+function normalizeProjectLabelText(value: string) {
+  if (!/[ÃÂâ]/.test(value)) return value;
+
+  try {
+    const bytes = Uint8Array.from(Array.from(value), (char) => char.charCodeAt(0) & 0xff);
+    return new TextDecoder("utf-8").decode(bytes);
+  } catch {
+    return value;
+  }
 }
 
 const PROJECT_OPERATIONAL_STATUS_LABELS: Record<ProjectOperationalStatus, string> = {
@@ -58,18 +69,18 @@ const PROJECT_CONTRACT_STATUS_LABELS: Record<ProjectContractStatus, string> = {
 };
 
 const PROJECT_DOCUMENT_TYPE_LABELS: Record<ProjectDocumentType, string> = {
-  TERMO_REFERENCIA: "Termo de referência",
-  PROJETO_BASICO: "Projeto básico",
+  TERMO_REFERENCIA: "Termo de referÃªncia",
+  PROJETO_BASICO: "Projeto bÃ¡sico",
   PROJETO_EXECUTIVO: "Projeto executivo",
   MEMORIAL: "Memorial",
-  ORCAMENTO: "Orçamento",
+  ORCAMENTO: "OrÃ§amento",
   CRONOGRAMA: "Cronograma",
-  LICITACAO: "Licitação",
+  LICITACAO: "LicitaÃ§Ã£o",
   CONTRATO: "Contrato",
   ADITIVO: "Aditivo",
-  MEDICAO: "Medição",
-  RELATORIO: "Relatório",
-  LICENCA: "Licença",
+  MEDICAO: "MediÃ§Ã£o",
+  RELATORIO: "RelatÃ³rio",
+  LICENCA: "LicenÃ§a",
   MAPA: "Mapa",
   FOTO: "Foto",
   OUTRO: "Outro",
@@ -85,11 +96,11 @@ const PROJECT_MEASUREMENT_STATUS_LABELS: Record<ProjectMeasurementStatus, string
 
 const PROJECT_INSPECTION_TYPE_LABELS: Record<ProjectInspectionType, string> = {
   ROTINA: "Rotina",
-  MEDICAO: "Medição",
+  MEDICAO: "MediÃ§Ã£o",
   QUALIDADE: "Qualidade",
-  SEGURANCA: "Segurança",
+  SEGURANCA: "SeguranÃ§a",
   RECEBIMENTO: "Recebimento",
-  EXTRAORDINARIA: "Extraordinária",
+  EXTRAORDINARIA: "ExtraordinÃ¡ria",
 };
 
 const PROJECT_INSPECTION_STATUS_LABELS: Record<ProjectInspectionStatus, string> = {
@@ -100,14 +111,14 @@ const PROJECT_INSPECTION_STATUS_LABELS: Record<ProjectInspectionStatus, string> 
 
 const PROJECT_ISSUE_TYPE_LABELS: Record<ProjectIssueType, string> = {
   BLOQUEIO: "Bloqueio",
-  NAO_CONFORMIDADE: "Não conformidade",
-  SEGURANCA: "Segurança",
+  NAO_CONFORMIDADE: "NÃ£o conformidade",
+  SEGURANCA: "SeguranÃ§a",
   AMBIENTAL: "Ambiental",
   PRAZO: "Prazo",
   FINANCEIRO: "Financeiro",
   DOCUMENTAL: "Documental",
-  COMUNITARIO: "Comunitário",
-  TECNICO: "Técnico",
+  COMUNITARIO: "ComunitÃ¡rio",
+  TECNICO: "TÃ©cnico",
   OUTRO: "Outro",
 };
 
@@ -122,13 +133,13 @@ const PROJECT_ISSUE_STATUS_LABELS: Record<ProjectIssueStatus, string> = {
 const PROJECT_RISK_CATEGORY_LABELS: Record<ProjectRiskCategory, string> = {
   PRAZO: "Prazo",
   FINANCEIRO: "Financeiro",
-  TECNICO: "Técnico",
+  TECNICO: "TÃ©cnico",
   AMBIENTAL: "Ambiental",
-  JURIDICO: "Jurídico",
+  JURIDICO: "JurÃ­dico",
   OPERACIONAL: "Operacional",
   SOCIAL: "Social",
-  SEGURANCA: "Segurança",
-  CLIMATICO: "Climático",
+  SEGURANCA: "SeguranÃ§a",
+  CLIMATICO: "ClimÃ¡tico",
   OUTRO: "Outro",
 };
 
@@ -142,69 +153,77 @@ const PROJECT_RISK_STATUS_LABELS: Record<ProjectRiskStatus, string> = {
 
 const PROJECT_RISK_PROBABILITY_LABELS: Record<ProjectRiskProbability, string> = {
   BAIXA: "Baixa",
-  MEDIA: "Média",
+  MEDIA: "MÃ©dia",
   ALTA: "Alta",
 };
 
 const PROJECT_RISK_IMPACT_LABELS: Record<ProjectRiskImpact, string> = {
   BAIXO: "Baixo",
-  MEDIO: "Médio",
+  MEDIO: "MÃ©dio",
   ALTO: "Alto",
-  CRITICO: "Crítico",
+  CRITICO: "CrÃ­tico",
 };
 
 export function getProjectOperationalStatusLabel(
   value: ProjectOperationalStatus | null | undefined
 ) {
-  return value ? PROJECT_OPERATIONAL_STATUS_LABELS[value] ?? titleCase(value) : "Não informado";
+  return value
+    ? normalizeProjectLabelText(PROJECT_OPERATIONAL_STATUS_LABELS[value] ?? titleCase(value))
+    : "Não informado";
 }
 
 export function getProjectTechnicalAreaLabel(value: ProjectTechnicalArea) {
-  return PROJECT_TECHNICAL_AREA_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(PROJECT_TECHNICAL_AREA_LABELS[value] ?? titleCase(value));
 }
 
 export function getProjectContractStatusLabel(value: ProjectContractStatus) {
-  return PROJECT_CONTRACT_STATUS_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(PROJECT_CONTRACT_STATUS_LABELS[value] ?? titleCase(value));
 }
 
 export function getProjectDocumentTypeLabel(value: ProjectDocumentType) {
-  return PROJECT_DOCUMENT_TYPE_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(PROJECT_DOCUMENT_TYPE_LABELS[value] ?? titleCase(value));
 }
 
 export function getProjectMeasurementStatusLabel(value: ProjectMeasurementStatus) {
-  return PROJECT_MEASUREMENT_STATUS_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(
+    PROJECT_MEASUREMENT_STATUS_LABELS[value] ?? titleCase(value)
+  );
 }
 
 export function getProjectInspectionTypeLabel(value: ProjectInspectionType) {
-  return PROJECT_INSPECTION_TYPE_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(PROJECT_INSPECTION_TYPE_LABELS[value] ?? titleCase(value));
 }
 
 export function getProjectInspectionStatusLabel(value: ProjectInspectionStatus) {
-  return PROJECT_INSPECTION_STATUS_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(
+    PROJECT_INSPECTION_STATUS_LABELS[value] ?? titleCase(value)
+  );
 }
 
 export function getProjectIssueTypeLabel(value: ProjectIssueType) {
-  return PROJECT_ISSUE_TYPE_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(PROJECT_ISSUE_TYPE_LABELS[value] ?? titleCase(value));
 }
 
 export function getProjectIssueStatusLabel(value: ProjectIssueStatus) {
-  return PROJECT_ISSUE_STATUS_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(PROJECT_ISSUE_STATUS_LABELS[value] ?? titleCase(value));
 }
 
 export function getProjectRiskCategoryLabel(value: ProjectRiskCategory) {
-  return PROJECT_RISK_CATEGORY_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(PROJECT_RISK_CATEGORY_LABELS[value] ?? titleCase(value));
 }
 
 export function getProjectRiskStatusLabel(value: ProjectRiskStatus) {
-  return PROJECT_RISK_STATUS_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(PROJECT_RISK_STATUS_LABELS[value] ?? titleCase(value));
 }
 
 export function getProjectRiskProbabilityLabel(value: ProjectRiskProbability) {
-  return PROJECT_RISK_PROBABILITY_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(
+    PROJECT_RISK_PROBABILITY_LABELS[value] ?? titleCase(value)
+  );
 }
 
 export function getProjectRiskImpactLabel(value: ProjectRiskImpact) {
-  return PROJECT_RISK_IMPACT_LABELS[value] ?? titleCase(value);
+  return normalizeProjectLabelText(PROJECT_RISK_IMPACT_LABELS[value] ?? titleCase(value));
 }
 
 export function getGovernanceTone(status: string | null | undefined) {
@@ -248,3 +267,4 @@ export function getGovernanceTone(status: string | null | undefined) {
       return "neutral" as const;
   }
 }
+

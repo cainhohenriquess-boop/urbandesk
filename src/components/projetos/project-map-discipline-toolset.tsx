@@ -60,6 +60,7 @@ export function ProjectMapDisciplineToolset({
           items: group.items.filter((toolId) => {
             if (!normalizedFilter) return true;
             const objectDefinition = getTechnicalObjectDefinition(toolId);
+            if (!objectDefinition) return false;
             return `${objectDefinition.label} ${objectDefinition.helper}`
               .toLowerCase()
               .includes(normalizedFilter);
@@ -92,7 +93,8 @@ export function ProjectMapDisciplineToolset({
                 <div>
                   <p className="text-sm font-semibold">{getProjectDisciplineLabel(discipline)}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {getProjectDisciplineDefinition(discipline).description}
+                    {getProjectDisciplineDefinition(discipline)?.description ??
+                      "Disciplina técnica do projeto."}
                   </p>
                 </div>
                 <ProjectBadge
@@ -164,7 +166,9 @@ export function ProjectMapDisciplineToolset({
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Toolsets de {getProjectDisciplineLabel(activeDiscipline)}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">{activeDefinition.description}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {activeDefinition?.description ?? "Ferramentas da disciplina ativa."}
+              </p>
             </div>
             <ProjectBadge
               label={`${formatNumber(
@@ -193,6 +197,7 @@ export function ProjectMapDisciplineToolset({
                 <div className="grid gap-2 p-3">
                   {group.items.map((toolId) => {
                     const objectDefinition = getTechnicalObjectDefinition(toolId);
+                    if (!objectDefinition) return null;
                     const isActive = activeTechnicalObjectType === toolId;
                     return (
                       <button

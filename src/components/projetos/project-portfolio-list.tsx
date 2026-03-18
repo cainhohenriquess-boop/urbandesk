@@ -8,6 +8,7 @@ import {
   getProjectStatusTone,
   getProjectTypeLabel,
 } from "@/lib/project-portfolio";
+import { getProjectTechnicalAreaLabel } from "@/lib/project-labels";
 import { PROJECT_SORT_BY_OPTIONS } from "@/lib/project-portfolio-query";
 import { formatBRL, formatDate, formatNumber } from "@/lib/utils";
 import type {
@@ -208,6 +209,24 @@ export function ProjectPortfolioList({
                 {project.description || "Projeto sem descrição cadastrada."}
               </p>
 
+              {project.technicalAreas.length > 0 ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {project.technicalAreas.slice(0, 3).map((area) => (
+                    <span
+                      key={area}
+                      className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-200"
+                    >
+                      {getProjectTechnicalAreaLabel(area)}
+                    </span>
+                  ))}
+                  {project.technicalAreas.length > 3 ? (
+                    <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+                      +{project.technicalAreas.length - 3}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+
               <dl className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div>
                   <dt className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
@@ -318,6 +337,23 @@ export function ProjectPortfolioList({
                       <p className="line-clamp-2 max-w-sm text-xs text-muted-foreground">
                         {project.description || "Projeto sem descrição cadastrada."}
                       </p>
+                      {project.technicalAreas.length > 0 ? (
+                        <div className="flex max-w-sm flex-wrap gap-1 pt-1">
+                          {project.technicalAreas.slice(0, 2).map((area) => (
+                            <span
+                              key={area}
+                              className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 ring-1 ring-brand-200"
+                            >
+                              {getProjectTechnicalAreaLabel(area)}
+                            </span>
+                          ))}
+                          {project.technicalAreas.length > 2 ? (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                              +{project.technicalAreas.length - 2}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-4 py-4 text-foreground">

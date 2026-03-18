@@ -78,9 +78,7 @@ export const PROJECT_DEADLINE_FILTER_OPTIONS: Array<{
 ];
 
 export function getProjectStatusLabel(status: ProjectStatusValue): string {
-  return (
-    PROJECT_STATUS_OPTIONS.find((item) => item.value === status)?.label ?? status
-  );
+  return PROJECT_STATUS_OPTIONS.find((item) => item.value === status)?.label ?? status;
 }
 
 export function getProjectStatusTone(status: ProjectStatusValue): string {
@@ -103,20 +101,14 @@ export function getProjectTypeLabel(
   projectType: ProjectTypeValue | null | undefined
 ): string {
   if (!projectType) return "Não informado";
-  return (
-    PROJECT_TYPE_OPTIONS.find((item) => item.value === projectType)?.label ??
-    projectType
-  );
+  return PROJECT_TYPE_OPTIONS.find((item) => item.value === projectType)?.label ?? projectType;
 }
 
 export function getProjectPriorityLabel(
   priority: ProjectPriorityValue | null | undefined
 ): string {
   if (!priority) return "Não definida";
-  return (
-    PROJECT_PRIORITY_OPTIONS.find((item) => item.value === priority)?.label ??
-    priority
-  );
+  return PROJECT_PRIORITY_OPTIONS.find((item) => item.value === priority)?.label ?? priority;
 }
 
 export function getProjectPriorityTone(
