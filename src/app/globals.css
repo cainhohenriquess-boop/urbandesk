@@ -293,3 +293,29 @@
   body { @apply bg-white text-black; }
   .app-shell { display: block; height: auto; overflow: visible; }
 }
+
+body[data-map-route="true"] .app-shell {
+  display: block;
+  height: 100vh;
+  overflow: hidden;
+}
+
+body[data-map-route="true"] .app-shell > aside {
+  display: none;
+}
+
+body[data-map-route="true"] .app-shell > .app-content {
+  display: block;
+  height: 100vh;
+  overflow: hidden;
+}
+
+body[data-map-route="true"] .app-shell > .app-content > header {
+  display: none;
+}
+
+body[data-map-route="true"] .app-shell > .app-content > main {
+  height: 100vh;
+  padding: 0;
+  overflow: hidden;
+}

@@ -2338,90 +2338,6 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         onChange={handleImportGeoJson}
       />
 
-      <header className="shrink-0 border-b border-border bg-white/95 px-5 py-4 backdrop-blur">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-brand-600">
-              Workspace cartográfico do projeto
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <h2 className="truncate font-display text-2xl font-800 text-foreground">
-                {project.code ? `${project.code} · ${project.name}` : project.name}
-              </h2>
-              <ProjectBadge label={getProjectStatusLabel(project.status)} tone="brand" />
-              <ProjectBadge
-                label={getProjectOperationalStatusLabel(project.operationalStatus)}
-                tone="neutral"
-              />
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {project.responsibleDepartment || "Secretaria não informada"}
-              {project.neighborhood || project.region
-                ? ` · ${[project.neighborhood, project.region].filter(Boolean).join(" · ")}`
-                : ""}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={`/app/projetos/${project.id}`}
-              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
-            >
-              Voltar à ficha
-            </Link>
-            <Link
-              href={`/app/projetos/${project.id}/fiscalizacao`}
-              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
-            >
-              Fiscalização
-            </Link>
-            <button
-              onClick={() => setRefreshTick((tick) => tick + 1)}
-              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
-            >
-              Recarregar
-            </button>
-            <button
-              onClick={handleExportGeoJson}
-              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
-            >
-              Exportar GeoJSON
-            </button>
-            <button
-              onClick={handleSync}
-              disabled={syncDisabled}
-              className={cn(
-                "rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors",
-                syncDisabled ? "cursor-not-allowed bg-slate-400" : "bg-brand-600 hover:bg-brand-500"
-              )}
-            >
-              {isSyncing ? "Sincronizando..." : `Salvar alterações${pendingCount > 0 ? ` (${pendingCount})` : ""}`}
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <ProjectBadge label={`${formatNumber(persistedCount)} item(ns) no mapa`} tone="neutral" />
-          <ProjectBadge label={`${formatNumber(baseLayersData.length)} baselayer(s)`} tone="neutral" />
-          <ProjectBadge label={`${formatNumber(project._count.documents)} documento(s)`} tone="success" />
-          <ProjectBadge label={`${formatNumber(project._count.measurements)} medição(ões)`} tone="warning" />
-          <ProjectBadge
-            label={`Disciplina ativa · ${getProjectDisciplineLabel(effectiveTechnicalArea)}`}
-            tone="brand"
-          />
-          {availableDisciplines
-            .filter((discipline) => discipline !== effectiveTechnicalArea)
-            .slice(0, 4)
-            .map((discipline) => (
-              <ProjectBadge
-                key={discipline}
-                label={getProjectDisciplineLabel(discipline)}
-                tone="neutral"
-              />
-            ))}
-        </div>
-      </header>
-
       <ProjectMapGlobalToolbar
         activeTool={workspaceTool}
         onToolChange={handleToolbarToolChange}
@@ -2456,8 +2372,96 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-              
-            <PanelSection title="Toolsets por área" eyebrow="Contexto técnico">
+              <PanelSection
+                title={project.code ? `${project.code} · ${project.name}` : project.name}
+                eyebrow="Projeto atual"
+              >
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {project.responsibleDepartment || "Secretaria não informada"}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {[project.neighborhood, project.region].filter(Boolean).join(" · ") ||
+                        "Território não informado"}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <ProjectBadge label={getProjectStatusLabel(project.status)} tone="brand" />
+                    <ProjectBadge
+                      label={getProjectOperationalStatusLabel(project.operationalStatus)}
+                      tone="neutral"
+                    />
+                    <ProjectBadge
+                      label={`Disciplina ativa · ${getProjectDisciplineLabel(effectiveTechnicalArea)}`}
+                      tone="brand"
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Link
+                      href={`/app/projetos/${project.id}`}
+                      className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                    >
+                      Voltar à ficha
+                    </Link>
+                    <Link
+                      href={`/app/projetos/${project.id}/fiscalizacao`}
+                      className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                    >
+                      Fiscalização
+                    </Link>
+                    <button
+                      onClick={() => setRefreshTick((tick) => tick + 1)}
+                      className="rounded-lg border border-border bg-background px-4 py-2 text-left text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                    >
+                      Recarregar
+                    </button>
+                    <button
+                      onClick={handleExportGeoJson}
+                      className="rounded-lg border border-border bg-background px-4 py-2 text-left text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                    >
+                      Exportar GeoJSON
+                    </button>
+                    <button
+                      onClick={handleSync}
+                      disabled={syncDisabled}
+                      className={cn(
+                        "rounded-lg px-4 py-2 text-left text-sm font-semibold text-white transition-colors",
+                        syncDisabled
+                          ? "cursor-not-allowed bg-slate-400"
+                          : "bg-brand-600 hover:bg-brand-500"
+                      )}
+                    >
+                      {isSyncing
+                        ? "Sincronizando..."
+                        : `Salvar alterações${pendingCount > 0 ? ` (${pendingCount})` : ""}`}
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <ProjectBadge
+                      label={`${formatNumber(persistedCount)} item(ns) no mapa`}
+                      tone="neutral"
+                    />
+                    <ProjectBadge
+                      label={`${formatNumber(baseLayersData.length)} baselayer(s)`}
+                      tone="neutral"
+                    />
+                    <ProjectBadge
+                      label={`${formatNumber(project._count.documents)} documento(s)`}
+                      tone="success"
+                    />
+                    <ProjectBadge
+                      label={`${formatNumber(project._count.measurements)} medição(ões)`}
+                      tone="warning"
+                    />
+                  </div>
+                </div>
+              </PanelSection>
+
+              <PanelSection title="Toolsets por área" eyebrow="Contexto técnico">
               <ProjectMapDisciplineToolset
                 availableDisciplines={availableDisciplines}
                 activeDiscipline={effectiveTechnicalArea}

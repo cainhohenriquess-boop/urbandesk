@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -9,7 +10,21 @@ type AppMainFrameProps = {
 
 export function AppMainFrame({ children }: AppMainFrameProps) {
   const pathname = usePathname();
-  const isDedicatedProjectMap = /^\/app\/projetos\/[^/]+\/mapa(?:\/|$)/.test(pathname);
+  const isDedicatedProjectMap = /^\/app\/projetos\/(?:[^/]+\/mapa|mapa)(?:\/|$)/.test(
+    pathname
+  );
+
+  useEffect(() => {
+    if (isDedicatedProjectMap) {
+      document.body.dataset.mapRoute = "true";
+      return () => {
+        delete document.body.dataset.mapRoute;
+      };
+    }
+
+    delete document.body.dataset.mapRoute;
+    return undefined;
+  }, [isDedicatedProjectMap]);
 
   return (
     <main
