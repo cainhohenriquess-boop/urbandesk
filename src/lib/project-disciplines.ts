@@ -1,4 +1,4 @@
-import type { ProjectTechnicalArea } from "@prisma/client";
+﻿import type { ProjectTechnicalArea } from "@prisma/client";
 
 export const PRISMA_PROJECT_TECHNICAL_AREAS = [
   "DRENAGEM",
@@ -45,7 +45,13 @@ export const TECHNICAL_OBJECT_TYPE_IDS = [
   "OCORRENCIA_MANUTENCAO_ILUMINACAO",
   "ITEM_VISTORIADO_ILUMINACAO",
   "ARVORE",
+  "AGRUPAMENTO_ARBOREO",
   "CANTEIRO_ARBORIZACAO",
+  "AREA_VERDE",
+  "OCORRENCIA_PODA",
+  "SUPRESSAO_ARBORIZACAO",
+  "RISCO_QUEDA_ARBORIZACAO",
+  "CONFLITO_REDE_ARBORIZACAO",
   "LIXEIRA",
   "BURACO",
   "REMENDO_PAVIMENTO",
@@ -139,14 +145,14 @@ export type ProjectDisciplineDefinition = {
 
 const DISCIPLINE_LABELS: Record<ProjectDisciplineId, string> = {
   DRENAGEM: "Drenagem",
-  PAVIMENTACAO: "Pavimentação",
-  ILUMINACAO: "Iluminação pública",
+  PAVIMENTACAO: "PavimentaÃ§Ã£o",
+  ILUMINACAO: "IluminaÃ§Ã£o pÃºblica",
   ARBORIZACAO: "Arborização",
-  SINALIZACAO: "Sinalização",
-  FISCALIZACAO: "Fiscalização",
+  SINALIZACAO: "SinalizaÃ§Ã£o",
+  FISCALIZACAO: "FiscalizaÃ§Ã£o",
   MOBILIDADE: "Mobilidade",
   SANEAMENTO: "Saneamento",
-  EDIFICACOES: "Edificações",
+  EDIFICACOES: "EdificaÃ§Ãµes",
   ZELADORIA: "Zeladoria",
   OBRAS: "Obras",
 };
@@ -268,7 +274,7 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
     id: "BOCA_LOBO",
     area: "DRENAGEM",
     label: "Boca de lobo",
-    helper: "Captação superficial",
+    helper: "CaptaÃ§Ã£o superficial",
     geometry: "point",
     fields: [
       {
@@ -276,14 +282,14 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         label: "Estado da grelha",
         kind: "select",
         options: [
-          { value: "INTEGRA", label: "Íntegra" },
+          { value: "INTEGRA", label: "Ãntegra" },
           { value: "DANIFICADA", label: "Danificada" },
           { value: "AUSENTE", label: "Ausente" },
         ],
       },
       {
         key: "inletType",
-        label: "Tipo de captação",
+        label: "Tipo de captaÃ§Ã£o",
         kind: "select",
         options: [
           { value: "GUIA", label: "Guia" },
@@ -296,8 +302,8 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
   POCO_VISITA: {
     id: "POCO_VISITA",
     area: "DRENAGEM",
-    label: "Poço de visita",
-    helper: "Acesso à rede subterrânea",
+    label: "PoÃ§o de visita",
+    helper: "Acesso Ã  rede subterrÃ¢nea",
     geometry: "point",
     fields: [
       {
@@ -312,7 +318,7 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         label: "Estado da tampa",
         kind: "select",
         options: [
-          { value: "INTEGRA", label: "Íntegra" },
+          { value: "INTEGRA", label: "Ãntegra" },
           { value: "TRINCADA", label: "Trincada" },
           { value: "AUSENTE", label: "Ausente" },
         ],
@@ -322,8 +328,8 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
   CAIXA_LIGACAO: {
     id: "CAIXA_LIGACAO",
     area: "DRENAGEM",
-    label: "Caixa de ligação",
-    helper: "Caixa de inspeção ou interligação da rede",
+    label: "Caixa de ligaÃ§Ã£o",
+    helper: "Caixa de inspeÃ§Ã£o ou interligaÃ§Ã£o da rede",
     geometry: "point",
     fields: [
       {
@@ -332,8 +338,8 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         kind: "select",
         options: [
           { value: "PASSAGEM", label: "Passagem" },
-          { value: "INSPECAO", label: "Inspeção" },
-          { value: "LIGACAO", label: "Ligação" },
+          { value: "INSPECAO", label: "InspeÃ§Ã£o" },
+          { value: "LIGACAO", label: "LigaÃ§Ã£o" },
         ],
       },
       {
@@ -352,7 +358,7 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
     id: "HIDRANTE",
     area: "SANEAMENTO",
     label: "Hidrante",
-    helper: "Combate a incêndio",
+    helper: "Combate a incÃªndio",
     geometry: "point",
   },
   GALERIA_PLUVIAL: {
@@ -364,7 +370,7 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
     fields: [
       {
         key: "gallerySection",
-        label: "Seção da galeria",
+        label: "SeÃ§Ã£o da galeria",
         kind: "select",
         options: [
           { value: "TUBULAR", label: "Tubular" },
@@ -407,7 +413,7 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
       },
       {
         key: "widthMeters",
-        label: "Largura média (m)",
+        label: "Largura mÃ©dia (m)",
         kind: "number",
         min: 0,
         max: 10,
@@ -452,7 +458,7 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
     id: "DISSIPADOR",
     area: "DRENAGEM",
     label: "Dissipador",
-    helper: "Estrutura de dissipação de energia hidráulica",
+    helper: "Estrutura de dissipaÃ§Ã£o de energia hidrÃ¡ulica",
     geometry: "point",
     fields: [
       {
@@ -460,19 +466,19 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         label: "Tipo",
         kind: "select",
         options: [
-          { value: "ESCADA_HIDRAULICA", label: "Escada hidráulica" },
+          { value: "ESCADA_HIDRAULICA", label: "Escada hidrÃ¡ulica" },
           { value: "BLOCO_DISSIPADOR", label: "Bloco dissipador" },
-          { value: "BACIA_DISSIPACAO", label: "Bacia de dissipação" },
+          { value: "BACIA_DISSIPACAO", label: "Bacia de dissipaÃ§Ã£o" },
         ],
       },
       {
         key: "structureCondition",
-        label: "Condição estrutural",
+        label: "CondiÃ§Ã£o estrutural",
         kind: "select",
         options: [
           { value: "BOA", label: "Boa" },
           { value: "REGULAR", label: "Regular" },
-          { value: "CRITICA", label: "Crítica" },
+          { value: "CRITICA", label: "CrÃ­tica" },
         ],
       },
     ],
@@ -481,24 +487,24 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
     id: "PONTO_ALAGAMENTO",
     area: "DRENAGEM",
     label: "Ponto de alagamento",
-    helper: "Ponto recorrente de acúmulo de água",
+    helper: "Ponto recorrente de acÃºmulo de Ã¡gua",
     geometry: "point",
     fields: [
       {
         key: "recurrence",
-        label: "Recorrência",
+        label: "RecorrÃªncia",
         kind: "select",
         required: true,
         options: [
           { value: "BAIXA", label: "Baixa" },
-          { value: "MEDIA", label: "Média" },
+          { value: "MEDIA", label: "MÃ©dia" },
           { value: "ALTA", label: "Alta" },
-          { value: "CRITICA", label: "Crítica" },
+          { value: "CRITICA", label: "CrÃ­tica" },
         ],
       },
       {
         key: "floodDepthCm",
-        label: "Lâmina d'água (cm)",
+        label: "LÃ¢mina d'Ã¡gua (cm)",
         kind: "number",
         min: 0,
         max: 500,
@@ -509,8 +515,8 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         kind: "select",
         options: [
           { value: "LOCAL", label: "Local" },
-          { value: "VIARIO", label: "Viário" },
-          { value: "EDIFICACOES", label: "Edificações" },
+          { value: "VIARIO", label: "ViÃ¡rio" },
+          { value: "EDIFICACOES", label: "EdificaÃ§Ãµes" },
           { value: "GENERALIZADO", label: "Generalizado" },
         ],
       },
@@ -519,17 +525,17 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
   OCORRENCIA_DRENAGEM: {
     id: "OCORRENCIA_DRENAGEM",
     area: "DRENAGEM",
-    label: "Ocorrência de obstrução/manutenção",
-    helper: "Registro operacional de manutenção na rede de drenagem",
+    label: "OcorrÃªncia de obstruÃ§Ã£o/manutenÃ§Ã£o",
+    helper: "Registro operacional de manutenÃ§Ã£o na rede de drenagem",
     geometry: "point",
     fields: [
       {
         key: "maintenanceType",
-        label: "Tipo de ocorrência",
+        label: "Tipo de ocorrÃªncia",
         kind: "select",
         required: true,
         options: [
-          { value: "OBSTRUCAO", label: "Obstrução" },
+          { value: "OBSTRUCAO", label: "ObstruÃ§Ã£o" },
           { value: "LIMPEZA", label: "Limpeza" },
           { value: "DESASSOREAMENTO", label: "Desassoreamento" },
           { value: "REPARO", label: "Reparo" },
@@ -541,8 +547,8 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         kind: "select",
         options: [
           { value: "ABERTA", label: "Aberta" },
-          { value: "EM_EXECUCAO", label: "Em execução" },
-          { value: "CONCLUIDA", label: "Concluída" },
+          { value: "EM_EXECUCAO", label: "Em execuÃ§Ã£o" },
+          { value: "CONCLUIDA", label: "ConcluÃ­da" },
         ],
       },
       {
@@ -551,14 +557,14 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         kind: "select",
         options: [
           { value: "BAIXA", label: "Baixa" },
-          { value: "MEDIA", label: "Média" },
+          { value: "MEDIA", label: "MÃ©dia" },
           { value: "ALTA", label: "Alta" },
-          { value: "CRITICA", label: "Crítica" },
+          { value: "CRITICA", label: "CrÃ­tica" },
         ],
       },
       {
         key: "openedAt",
-        label: "Data da ocorrência",
+        label: "Data da ocorrÃªncia",
         kind: "date",
       },
     ],
@@ -566,8 +572,8 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
   SEMAFORO: {
     id: "SEMAFORO",
     area: "SINALIZACAO",
-    label: "Semáforo",
-    helper: "Controle semafórico",
+    label: "SemÃ¡foro",
+    helper: "Controle semafÃ³rico",
     geometry: "point",
     fields: [
       {
@@ -585,8 +591,8 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
   PLACA_TRANSITO: {
     id: "PLACA_TRANSITO",
     area: "SINALIZACAO",
-    label: "Placa de trânsito",
-    helper: "Sinalização vertical",
+    label: "Placa de trÃ¢nsito",
+    helper: "SinalizaÃ§Ã£o vertical",
     geometry: "point",
     fields: [
       {
@@ -594,9 +600,9 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         label: "Categoria",
         kind: "select",
         options: [
-          { value: "REGULAMENTACAO", label: "Regulamentação" },
-          { value: "ADVERTENCIA", label: "Advertência" },
-          { value: "INDICACAO", label: "Indicação" },
+          { value: "REGULAMENTACAO", label: "RegulamentaÃ§Ã£o" },
+          { value: "ADVERTENCIA", label: "AdvertÃªncia" },
+          { value: "INDICACAO", label: "IndicaÃ§Ã£o" },
         ],
       },
     ],
@@ -605,13 +611,13 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
     id: "LOMBADA",
     area: "SINALIZACAO",
     label: "Lombada",
-    helper: "Moderação de tráfego",
+    helper: "ModeraÃ§Ã£o de trÃ¡fego",
     geometry: "point",
   },
   PONTO_ONIBUS: {
     id: "PONTO_ONIBUS",
     area: "MOBILIDADE",
-    label: "Ponto de ônibus",
+    label: "Ponto de Ã´nibus",
     helper: "Equipamento de mobilidade",
     geometry: "point",
   },
@@ -619,13 +625,13 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
     id: "RADAR",
     area: "MOBILIDADE",
     label: "Radar",
-    helper: "Fiscalização eletrônica",
+    helper: "FiscalizaÃ§Ã£o eletrÃ´nica",
     geometry: "point",
   },
   PINTURA_VIARIA: {
     id: "PINTURA_VIARIA",
     area: "SINALIZACAO",
-    label: "Pintura viária",
+    label: "Pintura viÃ¡ria",
     helper: "Faixas e marcas horizontais",
     geometry: "line",
     fields: [
@@ -890,9 +896,104 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
     id: "ARVORE",
     area: "ARBORIZACAO",
     label: "Árvore",
-    helper: "Elemento arbóreo",
+    helper: "Elemento arbóreo individual com cadastro técnico e operacional.",
     geometry: "point",
     fields: [
+      {
+        key: "botanicalName",
+        label: "Nome botânico",
+        kind: "text",
+        placeholder: "Ex.: Handroanthus impetiginosus",
+      },
+      {
+        key: "treeCondition",
+        label: "Condição",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "SAUDAVEL", label: "Saudável" },
+          { value: "PRECISA_PODA", label: "Precisa de poda" },
+          { value: "EM_RISCO", label: "Em risco" },
+        ],
+      },
+      {
+        key: "riskLevel",
+        label: "Risco",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "BAIXO", label: "Baixo" },
+          { value: "MEDIO", label: "Médio" },
+          { value: "ALTO", label: "Alto" },
+          { value: "CRITICO", label: "Crítico" },
+        ],
+      },
+      {
+        key: "trunkDiameterCm",
+        label: "DAP aproximado (cm)",
+        kind: "number",
+        min: 0,
+        max: 500,
+      },
+    ],
+  },
+  AGRUPAMENTO_ARBOREO: {
+    id: "AGRUPAMENTO_ARBOREO",
+    area: "ARBORIZACAO",
+    label: "Agrupamento arbóreo",
+    helper: "Conjunto de árvores com leitura espacial e manejo em grupo.",
+    geometry: "polygon",
+    fields: [
+      {
+        key: "treeCountEstimate",
+        label: "Quantidade estimada",
+        kind: "number",
+        min: 0,
+        max: 10000,
+      },
+      {
+        key: "treeCondition",
+        label: "Condição predominante",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "SAUDAVEL", label: "Saudável" },
+          { value: "PRECISA_PODA", label: "Precisa de poda" },
+          { value: "EM_RISCO", label: "Em risco" },
+        ],
+      },
+      {
+        key: "riskLevel",
+        label: "Risco predominante",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "BAIXO", label: "Baixo" },
+          { value: "MEDIO", label: "Médio" },
+          { value: "ALTO", label: "Alto" },
+          { value: "CRITICO", label: "Crítico" },
+        ],
+      },
+    ],
+  },
+  CANTEIRO_ARBORIZACAO: {
+    id: "CANTEIRO_ARBORIZACAO",
+    area: "ARBORIZACAO",
+    label: "Canteiro",
+    helper: "Área de plantio, recomposição ou apoio à arborização urbana.",
+    geometry: "polygon",
+    fields: [
+      {
+        key: "bedType",
+        label: "Tipo de canteiro",
+        kind: "select",
+        options: [
+          { value: "VIARIO", label: "Viário" },
+          { value: "PRACA", label: "Praça" },
+          { value: "CALCADA", label: "Calçada" },
+          { value: "PARQUE", label: "Parque" },
+        ],
+      },
       {
         key: "treeCondition",
         label: "Condição",
@@ -903,14 +1004,236 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
           { value: "EM_RISCO", label: "Em risco" },
         ],
       },
+      {
+        key: "riskLevel",
+        label: "Risco",
+        kind: "select",
+        options: [
+          { value: "BAIXO", label: "Baixo" },
+          { value: "MEDIO", label: "Médio" },
+          { value: "ALTO", label: "Alto" },
+          { value: "CRITICO", label: "Crítico" },
+        ],
+      },
     ],
   },
-  CANTEIRO_ARBORIZACAO: {
-    id: "CANTEIRO_ARBORIZACAO",
+  AREA_VERDE: {
+    id: "AREA_VERDE",
     area: "ARBORIZACAO",
-    label: "Canteiro de arborização",
-    helper: "Área de plantio ou recomposição",
+    label: "Área verde",
+    helper: "Perímetro de cobertura vegetal ou área ambiental associada ao projeto.",
     geometry: "polygon",
+    fields: [
+      {
+        key: "greenAreaType",
+        label: "Tipo de área",
+        kind: "select",
+        options: [
+          { value: "PRACA", label: "Praça" },
+          { value: "PARQUE", label: "Parque" },
+          { value: "CORREDOR_VERDE", label: "Corredor verde" },
+          { value: "APP", label: "Área protegida" },
+        ],
+      },
+      {
+        key: "treeCondition",
+        label: "Condição predominante",
+        kind: "select",
+        options: [
+          { value: "SAUDAVEL", label: "Saudável" },
+          { value: "PRECISA_PODA", label: "Precisa de poda" },
+          { value: "EM_RISCO", label: "Em risco" },
+        ],
+      },
+      {
+        key: "riskLevel",
+        label: "Risco predominante",
+        kind: "select",
+        options: [
+          { value: "BAIXO", label: "Baixo" },
+          { value: "MEDIO", label: "Médio" },
+          { value: "ALTO", label: "Alto" },
+          { value: "CRITICO", label: "Crítico" },
+        ],
+      },
+    ],
+  },
+  OCORRENCIA_PODA: {
+    id: "OCORRENCIA_PODA",
+    area: "ARBORIZACAO",
+    label: "Ocorrência de poda",
+    helper: "Registro operacional de poda corretiva, preventiva ou emergencial.",
+    geometry: "point",
+    fields: [
+      {
+        key: "pruningType",
+        label: "Tipo de poda",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "FORMACAO", label: "Formação" },
+          { value: "LIMPEZA", label: "Limpeza" },
+          { value: "CORRETIVA", label: "Corretiva" },
+          { value: "EMERGENCIAL", label: "Emergencial" },
+        ],
+      },
+      {
+        key: "occurrenceStatus",
+        label: "Status da ocorrência",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "ABERTA", label: "Aberta" },
+          { value: "EM_TRATAMENTO", label: "Em tratamento" },
+          { value: "PROGRAMADA", label: "Programada" },
+          { value: "CONCLUIDA", label: "Concluída" },
+        ],
+      },
+      {
+        key: "riskLevel",
+        label: "Risco",
+        kind: "select",
+        options: [
+          { value: "BAIXO", label: "Baixo" },
+          { value: "MEDIO", label: "Médio" },
+          { value: "ALTO", label: "Alto" },
+          { value: "CRITICO", label: "Crítico" },
+        ],
+      },
+    ],
+  },
+  SUPRESSAO_ARBORIZACAO: {
+    id: "SUPRESSAO_ARBORIZACAO",
+    area: "ARBORIZACAO",
+    label: "Supressão",
+    helper: "Solicitação ou execução de supressão de elemento arbóreo.",
+    geometry: "point",
+    fields: [
+      {
+        key: "suppressionReason",
+        label: "Motivo da supressão",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "DOENCA", label: "Doença" },
+          { value: "RISCO", label: "Risco" },
+          { value: "OBRA", label: "Obra" },
+          { value: "CONFLITO_REDE", label: "Conflito com rede" },
+        ],
+      },
+      {
+        key: "occurrenceStatus",
+        label: "Status da supressão",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "ABERTA", label: "Aberta" },
+          { value: "PROGRAMADA", label: "Programada" },
+          { value: "AUTORIZADA", label: "Autorizada" },
+          { value: "CONCLUIDA", label: "Concluída" },
+        ],
+      },
+      {
+        key: "riskLevel",
+        label: "Risco",
+        kind: "select",
+        options: [
+          { value: "BAIXO", label: "Baixo" },
+          { value: "MEDIO", label: "Médio" },
+          { value: "ALTO", label: "Alto" },
+          { value: "CRITICO", label: "Crítico" },
+        ],
+      },
+    ],
+  },
+  RISCO_QUEDA_ARBORIZACAO: {
+    id: "RISCO_QUEDA_ARBORIZACAO",
+    area: "ARBORIZACAO",
+    label: "Risco de queda",
+    helper: "Registro de risco estrutural, tombamento ou queda de árvore.",
+    geometry: "point",
+    fields: [
+      {
+        key: "riskTarget",
+        label: "Alvo em risco",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "PEDESTRE", label: "Pedestre" },
+          { value: "IMOVEL", label: "Imóvel" },
+          { value: "VIARIO", label: "Viário" },
+          { value: "REDE", label: "Rede" },
+        ],
+      },
+      {
+        key: "occurrenceStatus",
+        label: "Status do risco",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "ABERTA", label: "Aberta" },
+          { value: "EM_TRATAMENTO", label: "Em tratamento" },
+          { value: "PROGRAMADA", label: "Programada" },
+          { value: "CONCLUIDA", label: "Concluída" },
+        ],
+      },
+      {
+        key: "riskLevel",
+        label: "Nível de risco",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "BAIXO", label: "Baixo" },
+          { value: "MEDIO", label: "Médio" },
+          { value: "ALTO", label: "Alto" },
+          { value: "CRITICO", label: "Crítico" },
+        ],
+      },
+    ],
+  },
+  CONFLITO_REDE_ARBORIZACAO: {
+    id: "CONFLITO_REDE_ARBORIZACAO",
+    area: "ARBORIZACAO",
+    label: "Conflito com rede",
+    helper: "Interferência entre arborização e rede elétrica, telecom ou iluminação.",
+    geometry: "point",
+    fields: [
+      {
+        key: "networkConflictType",
+        label: "Tipo de conflito",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "ELETRICA", label: "Rede elétrica" },
+          { value: "TELECOM", label: "Telecom" },
+          { value: "ILUMINACAO", label: "Iluminação pública" },
+          { value: "SINALIZACAO", label: "Sinalização" },
+        ],
+      },
+      {
+        key: "occurrenceStatus",
+        label: "Status do conflito",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "ABERTA", label: "Aberta" },
+          { value: "EM_TRATAMENTO", label: "Em tratamento" },
+          { value: "PROGRAMADA", label: "Programada" },
+          { value: "CONCLUIDA", label: "Concluída" },
+        ],
+      },
+      {
+        key: "riskLevel",
+        label: "Risco",
+        kind: "select",
+        options: [
+          { value: "BAIXO", label: "Baixo" },
+          { value: "MEDIO", label: "Médio" },
+          { value: "ALTO", label: "Alto" },
+          { value: "CRITICO", label: "Crítico" },
+        ],
+      },
+    ],
   },
   LIXEIRA: {
     id: "LIXEIRA",
@@ -1316,18 +1639,18 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
   PONTO_FISCALIZACAO: {
     id: "PONTO_FISCALIZACAO",
     area: "FISCALIZACAO",
-    label: "Ponto de fiscalização",
-    helper: "Registro pontual de inspeção",
+    label: "Ponto de fiscalizaÃ§Ã£o",
+    helper: "Registro pontual de inspeÃ§Ã£o",
     geometry: "point",
     fields: [
       {
         key: "occurrenceType",
-        label: "Ocorrência",
+        label: "OcorrÃªncia",
         kind: "select",
         options: [
           { value: "ROTINA", label: "Rotina" },
-          { value: "MEDICAO", label: "Medição" },
-          { value: "NOTIFICACAO", label: "Notificação" },
+          { value: "MEDICAO", label: "MediÃ§Ã£o" },
+          { value: "NOTIFICACAO", label: "NotificaÃ§Ã£o" },
         ],
       },
     ],
@@ -1335,15 +1658,15 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
   AREA_FISCALIZADA: {
     id: "AREA_FISCALIZADA",
     area: "FISCALIZACAO",
-    label: "Área fiscalizada",
-    helper: "Polígono de interdição ou vistoria",
+    label: "Ãrea fiscalizada",
+    helper: "PolÃ­gono de interdiÃ§Ã£o ou vistoria",
     geometry: "polygon",
   },
   EQUIPAMENTO_OBRA: {
     id: "EQUIPAMENTO_OBRA",
     area: "OBRAS",
     label: "Equipamento de obra",
-    helper: "Canteiro, máquina ou apoio",
+    helper: "Canteiro, mÃ¡quina ou apoio",
     geometry: "point",
     fields: [
       {
@@ -1358,7 +1681,7 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
     id: "FRENTE_OBRA",
     area: "OBRAS",
     label: "Frente de obra",
-    helper: "Área principal de execução",
+    helper: "Ãrea principal de execuÃ§Ã£o",
     geometry: "polygon",
     fields: [
       {
@@ -1366,8 +1689,8 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         label: "Etapa da frente",
         kind: "select",
         options: [
-          { value: "MOBILIZACAO", label: "Mobilização" },
-          { value: "EXECUCAO", label: "Execução" },
+          { value: "MOBILIZACAO", label: "MobilizaÃ§Ã£o" },
+          { value: "EXECUCAO", label: "ExecuÃ§Ã£o" },
           { value: "ACABAMENTO", label: "Acabamento" },
           { value: "ENTREGA", label: "Entrega" },
         ],
@@ -1377,7 +1700,7 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
   EDIFICACAO_PUBLICA: {
     id: "EDIFICACAO_PUBLICA",
     area: "EDIFICACOES",
-    label: "Edificação pública",
+    label: "EdificaÃ§Ã£o pÃºblica",
     helper: "Equipamento edificado",
     geometry: "polygon",
   },
@@ -1390,7 +1713,7 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
   DRENAGEM: {
     id: "DRENAGEM",
     label: DISCIPLINE_LABELS.DRENAGEM,
-    description: "Rede pluvial, dispositivos de captação, pontos críticos e manutenção operacional.",
+    description: "Rede pluvial, dispositivos de captaÃ§Ã£o, pontos crÃ­ticos e manutenÃ§Ã£o operacional.",
     accentClassName: "border-sky-200 bg-sky-50 text-sky-700",
     commonFields: [
       {
@@ -1411,18 +1734,18 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
         options: [
           { value: "MONTANTE_JUSANTE", label: "Montante -> jusante" },
           { value: "JUSANTE_MONTANTE", label: "Jusante -> montante" },
-          { value: "NAO_IDENTIFICADO", label: "Não identificado" },
+          { value: "NAO_IDENTIFICADO", label: "NÃ£o identificado" },
         ],
       },
       {
         key: "hydraulicCondition",
-        label: "Situação hidráulica",
+        label: "SituaÃ§Ã£o hidrÃ¡ulica",
         kind: "select",
         options: [
           { value: "OPERANTE", label: "Operante" },
           { value: "ASSOREADA", label: "Assoreada" },
-          { value: "OBSTRUIDA", label: "Obstruída" },
-          { value: "MANUTENCAO", label: "Em manutenção" },
+          { value: "OBSTRUIDA", label: "ObstruÃ­da" },
+          { value: "MANUTENCAO", label: "Em manutenÃ§Ã£o" },
         ],
       },
     ],
@@ -1526,7 +1849,7 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
   ARBORIZACAO: {
     id: "ARBORIZACAO",
     label: DISCIPLINE_LABELS.ARBORIZACAO,
-    description: "Árvores, canteiros e manejo urbano.",
+    description: "Patrimônio arbóreo, áreas verdes e ocorrências de manejo urbano.",
     accentClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
     commonFields: [
       {
@@ -1545,24 +1868,54 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
           { value: "GRANDE", label: "Grande" },
         ],
       },
+      {
+        key: "treeCondition",
+        label: "Condição",
+        kind: "select",
+        options: [
+          { value: "SAUDAVEL", label: "Saudável" },
+          { value: "PRECISA_PODA", label: "Precisa de poda" },
+          { value: "EM_RISCO", label: "Em risco" },
+        ],
+      },
+      {
+        key: "riskLevel",
+        label: "Risco",
+        kind: "select",
+        options: [
+          { value: "BAIXO", label: "Baixo" },
+          { value: "MEDIO", label: "Médio" },
+          { value: "ALTO", label: "Alto" },
+          { value: "CRITICO", label: "Crítico" },
+        ],
+      },
     ],
-    objectTypes: ["ARVORE", "CANTEIRO_ARBORIZACAO"],
+    objectTypes: [
+      "ARVORE",
+      "AGRUPAMENTO_ARBOREO",
+      "CANTEIRO_ARBORIZACAO",
+      "AREA_VERDE",
+      "OCORRENCIA_PODA",
+      "SUPRESSAO_ARBORIZACAO",
+      "RISCO_QUEDA_ARBORIZACAO",
+      "CONFLITO_REDE_ARBORIZACAO"
+    ],
   },
   SINALIZACAO: {
     id: "SINALIZACAO",
     label: DISCIPLINE_LABELS.SINALIZACAO,
-    description: "Sinalização vertical, horizontal e semafórica.",
+    description: "SinalizaÃ§Ã£o vertical, horizontal e semafÃ³rica.",
     accentClassName: "border-rose-200 bg-rose-50 text-rose-700",
     commonFields: [
       {
         key: "signCode",
-        label: "Código técnico",
+        label: "CÃ³digo tÃ©cnico",
         kind: "text",
         placeholder: "Ex.: R-1, A-2b, FAIXA-01...",
       },
       {
         key: "operationCondition",
-        label: "Condição operacional",
+        label: "CondiÃ§Ã£o operacional",
         kind: "select",
         options: [
           { value: "OPERANTE", label: "Operante" },
@@ -1585,14 +1938,14 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
         kind: "select",
         options: [
           { value: "BAIXA", label: "Baixa" },
-          { value: "MEDIA", label: "Média" },
+          { value: "MEDIA", label: "MÃ©dia" },
           { value: "ALTA", label: "Alta" },
-          { value: "CRITICA", label: "Crítica" },
+          { value: "CRITICA", label: "CrÃ­tica" },
         ],
       },
       {
         key: "correctionDeadline",
-        label: "Prazo de correção",
+        label: "Prazo de correÃ§Ã£o",
         kind: "date",
       },
     ],
@@ -1606,7 +1959,7 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
     commonFields: [
       {
         key: "mobilityStatus",
-        label: "Situação operacional",
+        label: "SituaÃ§Ã£o operacional",
         kind: "select",
         options: [
           { value: "OPERANTE", label: "Operante" },
@@ -1620,7 +1973,7 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
   SANEAMENTO: {
     id: "SANEAMENTO",
     label: DISCIPLINE_LABELS.SANEAMENTO,
-    description: "Ativos de água, esgoto e apoio hidráulico.",
+    description: "Ativos de Ã¡gua, esgoto e apoio hidrÃ¡ulico.",
     accentClassName: "border-blue-200 bg-blue-50 text-blue-700",
     commonFields: [
       {
@@ -1628,9 +1981,9 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
         label: "Rede associada",
         kind: "select",
         options: [
-          { value: "AGUA", label: "Água" },
+          { value: "AGUA", label: "Ãgua" },
           { value: "ESGOTO", label: "Esgoto" },
-          { value: "INCENDIO", label: "Incêndio" },
+          { value: "INCENDIO", label: "IncÃªndio" },
         ],
       },
     ],
@@ -1639,7 +1992,7 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
   EDIFICACOES: {
     id: "EDIFICACOES",
     label: DISCIPLINE_LABELS.EDIFICACOES,
-    description: "Equipamentos públicos e perímetros edificados.",
+    description: "Equipamentos pÃºblicos e perÃ­metros edificados.",
     accentClassName: "border-slate-200 bg-slate-100 text-slate-700",
     commonFields: [
       {
@@ -1654,12 +2007,12 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
   ZELADORIA: {
     id: "ZELADORIA",
     label: DISCIPLINE_LABELS.ZELADORIA,
-    description: "Equipamentos de apoio urbano e manutenção cotidiana.",
+    description: "Equipamentos de apoio urbano e manutenÃ§Ã£o cotidiana.",
     accentClassName: "border-zinc-200 bg-zinc-100 text-zinc-700",
     commonFields: [
       {
         key: "maintenanceStatus",
-        label: "Situação",
+        label: "SituaÃ§Ã£o",
         kind: "select",
         options: [
           { value: "ATIVA", label: "Ativa" },
@@ -1824,7 +2177,7 @@ export function validateTechnicalFieldValues(
     const trimmed = rawValue.trim();
 
     if (field.required && trimmed.length === 0) {
-      errors.push(`${field.label} é obrigatório.`);
+      errors.push(`${field.label} Ã© obrigatÃ³rio.`);
       continue;
     }
 
@@ -1833,7 +2186,7 @@ export function validateTechnicalFieldValues(
     if (field.kind === "number") {
       const parsed = Number(trimmed.replace(",", "."));
       if (!Number.isFinite(parsed)) {
-        errors.push(`${field.label} deve ser numérico.`);
+        errors.push(`${field.label} deve ser numÃ©rico.`);
         continue;
       }
       if (field.min !== undefined && parsed < field.min) {
@@ -1897,7 +2250,7 @@ export function normalizeTechnicalAttributes(attributes: Record<string, unknown>
     typeof nextAttributes.technicalArea === "string" &&
     !isProjectDisciplineId(nextAttributes.technicalArea)
   ) {
-    throw new Error("Área técnica inválida.");
+    throw new Error("Ãrea tÃ©cnica invÃ¡lida.");
   }
 
   if (
@@ -1905,7 +2258,7 @@ export function normalizeTechnicalAttributes(attributes: Record<string, unknown>
     typeof nextAttributes.technicalObjectType === "string" &&
     !isTechnicalObjectType(nextAttributes.technicalObjectType)
   ) {
-    throw new Error("Tipo de objeto técnico inválido.");
+    throw new Error("Tipo de objeto tÃ©cnico invÃ¡lido.");
   }
 
   if (technicalObjectType) {
@@ -1915,7 +2268,7 @@ export function normalizeTechnicalAttributes(attributes: Record<string, unknown>
       objectDefinition &&
       objectDefinition.area !== technicalArea
     ) {
-      throw new Error("O tipo de objeto não pertence à área técnica informada.");
+      throw new Error("O tipo de objeto nÃ£o pertence Ã  Ã¡rea tÃ©cnica informada.");
     }
 
     nextAttributes.technicalObjectType = technicalObjectType;
@@ -1939,3 +2292,6 @@ export function normalizeTechnicalAttributes(attributes: Record<string, unknown>
 
   return nextAttributes;
 }
+
+
+

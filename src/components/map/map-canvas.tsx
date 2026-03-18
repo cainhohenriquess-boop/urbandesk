@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import Map, {
@@ -38,7 +38,7 @@ const GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf"
 
 const BLANK_STYLE = {
   version: 8,
-  name: "Base Cartográfica",
+  name: "Base CartogrÃ¡fica",
   glyphs: GLYPHS_URL,
   sources: {},
   layers: [{ id: "background", type: "background", paint: { "background-color": "#ffffff" } }],
@@ -54,7 +54,7 @@ const SATELLITE_STYLE = {
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       ],
       tileSize: 256,
-      attribution: "Tiles © Esri",
+      attribution: "Tiles Â© Esri",
     },
   },
   layers: [
@@ -70,7 +70,7 @@ const TOPO_STYLE = {
       type: "raster",
       tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
       tileSize: 256,
-      attribution: "© OpenTopoMap",
+      attribution: "Â© OpenTopoMap",
     },
   },
   layers: [{ id: "topo-layer", type: "raster", source: "topo", minzoom: 0, maxzoom: 17 }],
@@ -81,7 +81,7 @@ const ASSET_STYLES = {
     color: "bg-blue-500",
     hex: "#3b82f6",
     ring: "ring-blue-500/50",
-    icon: "💧",
+    icon: "ðŸ’§",
     label: "Boca de Lobo",
   },
   POCO_VISITA: {
@@ -89,14 +89,14 @@ const ASSET_STYLES = {
     hex: "#475569",
     ring: "ring-slate-600/50",
     icon: "PV",
-    label: "Poço de Visita",
+    label: "PoÃ§o de Visita",
   },
   CAIXA_LIGACAO: {
     color: "bg-indigo-500",
     hex: "#6366f1",
     ring: "ring-indigo-500/50",
     icon: "CL",
-    label: "Caixa de Ligação",
+    label: "Caixa de LigaÃ§Ã£o",
   },
   DISSIPADOR: {
     color: "bg-teal-500",
@@ -117,69 +117,97 @@ const ASSET_STYLES = {
     hex: "#0e7490",
     ring: "ring-cyan-700/50",
     icon: "MT",
-    label: "Ocorrência",
+    label: "OcorrÃªncia",
   },
   HIDRANTE: {
     color: "bg-red-500",
     hex: "#ef4444",
     ring: "ring-red-500/50",
-    icon: "🚒",
+    icon: "ðŸš’",
     label: "Hidrante",
   },
   SEMAFORO: {
     color: "bg-amber-500",
     hex: "#f59e0b",
     ring: "ring-amber-500/50",
-    icon: "🚦",
-    label: "Semáforo",
+    icon: "ðŸš¦",
+    label: "SemÃ¡foro",
   },
   PLACA_TRANSITO: {
     color: "bg-red-600",
     hex: "#dc2626",
     ring: "ring-red-600/50",
-    icon: "🛑",
+    icon: "ðŸ›‘",
     label: "Placa",
   },
   LOMBADA: {
     color: "bg-orange-500",
     hex: "#f97316",
     ring: "ring-orange-500/50",
-    icon: "〰️",
+    icon: "ã€°ï¸",
     label: "Lombada",
   },
   PONTO_ONIBUS: {
     color: "bg-cyan-500",
     hex: "#06b6d4",
     ring: "ring-cyan-500/50",
-    icon: "🚏",
-    label: "Ponto de Ônibus",
+    icon: "ðŸš",
+    label: "Ponto de Ã”nibus",
   },
   RADAR: {
     color: "bg-slate-700",
     hex: "#334155",
     ring: "ring-slate-700/50",
-    icon: "📸",
+    icon: "ðŸ“¸",
     label: "Radar",
   },
   POSTE_LUZ: {
     color: "bg-yellow-400",
     hex: "#facc15",
     ring: "ring-yellow-400/50",
-    icon: "💡",
+    icon: "ðŸ’¡",
     label: "Poste",
   },
   ARVORE: {
     color: "bg-emerald-500",
     hex: "#10b981",
     ring: "ring-emerald-500/50",
-    icon: "🌳",
+    icon: "ðŸŒ³",
     label: "Árvore",
+  },
+  OCORRENCIA_PODA: {
+    color: "bg-emerald-700",
+    hex: "#047857",
+    ring: "ring-emerald-700/50",
+    icon: "PD",
+    label: "Ocorrência de poda",
+  },
+  SUPRESSAO_ARBORIZACAO: {
+    color: "bg-stone-600",
+    hex: "#57534e",
+    ring: "ring-stone-600/50",
+    icon: "SP",
+    label: "Supressão",
+  },
+  RISCO_QUEDA_ARBORIZACAO: {
+    color: "bg-red-600",
+    hex: "#dc2626",
+    ring: "ring-red-600/50",
+    icon: "RQ",
+    label: "Risco de queda",
+  },
+  CONFLITO_REDE_ARBORIZACAO: {
+    color: "bg-lime-600",
+    hex: "#65a30d",
+    ring: "ring-lime-600/50",
+    icon: "CR",
+    label: "Conflito com rede",
   },
   LIXEIRA: {
     color: "bg-zinc-500",
     hex: "#71717a",
     ring: "ring-zinc-500/50",
-    icon: "🗑️",
+    icon: "ðŸ—‘ï¸",
     label: "Lixeira",
   },
   BURACO: {
@@ -208,7 +236,7 @@ const ASSET_STYLES = {
     hex: "#eab308",
     ring: "ring-yellow-500/50",
     icon: "*",
-    label: "Ponto de iluminação",
+    label: "Ponto de iluminaÃ§Ã£o",
   },
   PONTO_APAGADO: {
     color: "bg-amber-700",
@@ -222,7 +250,7 @@ const ASSET_STYLES = {
     hex: "#ea580c",
     ring: "ring-orange-600/50",
     icon: "MT",
-    label: "Ocorrência de manutenção",
+    label: "OcorrÃªncia de manutenÃ§Ã£o",
   },
   ITEM_VISTORIADO_ILUMINACAO: {
     color: "bg-lime-600",
@@ -389,15 +417,49 @@ function getPointVisualStyle(feature: { type: string; attributes?: Record<string
     technicalObjectType === "PONTO_APAGADO" ||
     technicalObjectType === "OCORRENCIA_MANUTENCAO_ILUMINACAO" ||
     technicalObjectType === "ITEM_VISTORIADO_ILUMINACAO";
+  const isArborizationPoint =
+    technicalObjectType === "ARVORE" ||
+    technicalObjectType === "OCORRENCIA_PODA" ||
+    technicalObjectType === "SUPRESSAO_ARBORIZACAO" ||
+    technicalObjectType === "RISCO_QUEDA_ARBORIZACAO" ||
+    technicalObjectType === "CONFLITO_REDE_ARBORIZACAO";
   const assetCondition = readFeatureString(feature.attributes, "assetCondition");
   const operationalStatus = readFeatureString(feature.attributes, "operationalStatus");
   const surfaceCondition = readFeatureString(feature.attributes, "surfaceCondition");
+  const treeCondition = readFeatureString(feature.attributes, "treeCondition");
   const riskLevel =
     readFeatureString(feature.attributes, "riskLevel") ??
     readFeatureString(feature.attributes, "criticality") ??
     readFeatureString(feature.attributes, "severity");
-  let hex = baseStyle?.hex || "#ffffff";
-  if (!isDrainagePoint && !isPavementPoint && !isLightingPoint) {
+  let hex: string = baseStyle?.hex || "#ffffff";
+  if (!isDrainagePoint && !isPavementPoint && !isLightingPoint && !isArborizationPoint) {
+    return {
+      ...(baseStyle ?? {}),
+      hex,
+    };
+  }
+  if (isArborizationPoint) {
+    if (
+      technicalObjectType === "RISCO_QUEDA_ARBORIZACAO" ||
+      riskLevel === "CRITICO" ||
+      riskLevel === "ALTO" ||
+      treeCondition === "EM_RISCO"
+    ) {
+      hex = "#dc2626";
+    } else if (
+      technicalObjectType === "SUPRESSAO_ARBORIZACAO" ||
+      technicalObjectType === "CONFLITO_REDE_ARBORIZACAO"
+    ) {
+      hex = "#a16207";
+    } else if (
+      technicalObjectType === "OCORRENCIA_PODA" ||
+      treeCondition === "PRECISA_PODA"
+    ) {
+      hex = "#d97706";
+    } else {
+      hex = "#10b981";
+    }
+
     return {
       ...(baseStyle ?? {}),
       hex,
@@ -460,7 +522,25 @@ function getPointVisualStyle(feature: { type: string; attributes?: Record<string
     ...(baseStyle ?? {}),
     hex,
   };
-}function hasValidPoint(coords: { lng: number; lat: number }[] | undefined): boolean {
+}
+
+function getGeometryColor(feature: { color?: string; attributes?: Record<string, unknown> }) {
+  if (feature.color) return feature.color;
+
+  const technicalObjectType =
+    readFeatureString(feature.attributes, "technicalObjectType") ??
+    readFeatureString(feature.attributes, "subType");
+  const technicalArea = readFeatureString(feature.attributes, "technicalArea");
+
+  if (technicalObjectType === "AREA_VERDE") return "#15803d";
+  if (technicalObjectType === "CANTEIRO_ARBORIZACAO") return "#10b981";
+  if (technicalObjectType === "AGRUPAMENTO_ARBOREO") return "#22c55e";
+  if (technicalArea === "ARBORIZACAO") return "#22c55e";
+
+  return "#3b82f6";
+}
+
+function hasValidPoint(coords: { lng: number; lat: number }[] | undefined): boolean {
   if (!coords || coords.length === 0) return false;
   return Number.isFinite(coords[0]?.lng) && Number.isFinite(coords[0]?.lat);
 }
@@ -481,7 +561,7 @@ function parseBaseLayerGeoJson(raw: unknown): GeoJsonFeatureCollection {
       return { type: "FeatureCollection", features };
     }
   } catch (error) {
-    console.error("GeoJSON de baselayer inválido", error);
+    console.error("GeoJSON de baselayer invÃ¡lido", error);
   }
 
   return { type: "FeatureCollection", features: [] };
@@ -550,7 +630,7 @@ function EngineeringPanel() {
   const title = isGeometry
     ? pendingFeature.type === "line"
       ? "Nova Rede/Trecho"
-      : "Nova Área/Lote"
+      : "Nova Ãrea/Lote"
     : ASSET_STYLES[pendingFeature.type as keyof typeof ASSET_STYLES]?.label || pendingFeature.type;
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -574,7 +654,7 @@ function EngineeringPanel() {
             Modo Projeto
           </span>
           <button onClick={cancelPendingFeature} className="text-muted-foreground hover:text-danger-500">
-            ×
+            Ã—
           </button>
         </div>
         <h2 className="font-display text-lg font-bold text-foreground">{title}</h2>
@@ -1114,8 +1194,8 @@ function MapCanvasInner({
           },
           properties: {
             id: feature.id,
-            color: feature.color || "#3b82f6",
-            lineColor: lineStyle?.lineColor ?? feature.color ?? "#3b82f6",
+            color: getGeometryColor(feature),
+            lineColor: lineStyle?.lineColor ?? getGeometryColor(feature),
             lineWidth: lineStyle?.lineWidth ?? 4,
             lineOpacity: lineStyle?.lineOpacity ?? 0.94,
             selectionState,
@@ -1177,7 +1257,7 @@ function MapCanvasInner({
             properties: {
               id: feature.id,
               type: feature.type,
-              icon: style?.icon || "📍",
+              icon: style?.icon || "ðŸ“",
               color: style?.hex || "#ffffff",
               selectionState,
             },
@@ -1254,10 +1334,10 @@ function MapCanvasInner({
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
             {workspaceTool === "EDIT_GEOMETRY" && selectedGeometry
-              ? "Arraste os vértices para editar geometria."
+              ? "Arraste os vÃ©rtices para editar geometria."
               : workspaceTool === "MOVE"
-                ? "Arraste a alça vermelha para mover o item."
-                : "Ativo selecionado para inspeção técnica."}
+                ? "Arraste a alÃ§a vermelha para mover o item."
+                : "Ativo selecionado para inspeÃ§Ã£o tÃ©cnica."}
           </p>
           <div className="mt-3 flex gap-2">
             <button
@@ -1285,7 +1365,7 @@ function MapCanvasInner({
           onClick={toggleFullscreen}
           className="absolute right-14 top-4 z-40 rounded-lg border border-border bg-card/90 p-2 text-foreground shadow-md backdrop-blur-md transition-colors hover:bg-muted"
         >
-          {isFullscreen ? "⤢" : "⤢"}
+          {isFullscreen ? "â¤¢" : "â¤¢"}
         </button>
       ) : null}
 
@@ -1871,3 +1951,5 @@ function MapCanvasInner({
     </div>
   );
 }
+
+

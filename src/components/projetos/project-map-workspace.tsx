@@ -12,6 +12,7 @@ import {
   ProjectBadge,
   ProjectEmptyBlock,
 } from "@/components/projetos/project-detail-components";
+import { ProjectArborizationTechnicalPanel } from "@/components/projetos/project-arborization-technical-panel";
 import { ProjectDrainageSegmentForm } from "@/components/projetos/project-drainage-segment-form";
 import { ProjectDrainageTechnicalPanel } from "@/components/projetos/project-drainage-technical-panel";
 import { ProjectLightingImportedPanel } from "@/components/projetos/project-lighting-imported-panel";
@@ -22,6 +23,15 @@ import { ProjectMapDisciplineToolset } from "@/components/projetos/project-map-d
 import { ProjectMapGlobalToolbar } from "@/components/projetos/project-map-global-toolbar";
 import { ProjectPavementRoadForm } from "@/components/projetos/project-pavement-road-form";
 import { ProjectMapTechnicalForm } from "@/components/projetos/project-map-technical-form";
+import {
+  ARBORIZATION_FILTER_LABELS,
+  EMPTY_ARBORIZATION_FILTERS,
+  getArborizationFilterOptions,
+  getArborizationTechnicalPanelStats,
+  readArborizationFilterValue,
+  type ArborizationFilterKey,
+  type ArborizationFilterState,
+} from "@/lib/arborization-technical-panel";
 import {
   assessDrainageSegment,
   buildDrainageSegmentAssistAttributes,
@@ -509,7 +519,7 @@ function featureTypeLabel(
     case "line":
       return "Trecho / rede";
     case "polygon":
-      return "?rea / pol?gono";
+      return "Área / polígono";
     default:
       return getTechnicalObjectLabel(type);
   }
@@ -595,13 +605,19 @@ function PanelSection({
   action,
   children,
   className,
+  contentClassName,
+  defaultOpen = true,
 }: {
   title: string;
   eyebrow?: string;
   action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  contentClassName?: string;
+  defaultOpen?: boolean;
 }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
   return (
     <section className={cn("rounded-2xl border border-border bg-white p-4 shadow-sm", className)}>
       <div className="flex items-start justify-between gap-3">
@@ -613,10 +629,59 @@ function PanelSection({
           ) : null}
           <h3 className="mt-1 text-sm font-semibold text-foreground">{title}</h3>
         </div>
-        {action}
+        <div className="flex items-center gap-2">
+          {action}
+          <button
+            type="button"
+            onClick={() => setIsOpen((current) => !current)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label={isOpen ? `Recolher ${title}` : `Expandir ${title}`}
+            aria-expanded={isOpen}
+          >
+            <svg
+              className={cn("h-4 w-4 transition-transform", isOpen ? "rotate-180" : "rotate-0")}
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="m5 8 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
       </div>
-      <div className="mt-4">{children}</div>
+      {isOpen ? <div className={cn("mt-4", contentClassName)}>{children}</div> : null}
     </section>
+  );
+}
+
+function WorkspaceRailToggle({
+  side,
+  label,
+  onClick,
+}: {
+  side: "left" | "right";
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex w-12 items-stretch bg-white",
+        side === "left" ? "border-r border-border" : "border-l border-border"
+      )}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex flex-1 items-center justify-center bg-white text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        aria-label={`Abrir ${label}`}
+      >
+        <span className={cn("[writing-mode:vertical-rl]", side === "left" ? "rotate-180" : "")}>
+          {label}
+        </span>
+      </button>
+    </div>
   );
 }
 export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspaceProps) {
@@ -668,6 +733,8 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
   const [assetTypeFilter, setAssetTypeFilter] = useState<AssetTypeFilter>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -677,6 +744,8 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const [selectedDetail, setSelectedDetail] = useState<AssetDetailRecord | null>(null);
   const [inspectorForm, setInspectorForm] = useState<InspectorFormState>(EMPTY_FORM);
   const [technicalFieldValues, setTechnicalFieldValues] = useState<Record<string, string>>({});
+  const [arborizationFilters, setArborizationFilters] =
+    useState<ArborizationFilterState>(EMPTY_ARBORIZATION_FILTERS);
   const [drainageFilters, setDrainageFilters] = useState<DrainageFilterState>(EMPTY_DRAINAGE_FILTERS);
   const [infrastructureFilters, setInfrastructureFilters] = useState<InfrastructureLayerFeatureFilters>(
     EMPTY_INFRASTRUCTURE_LAYER_FILTERS
@@ -1456,6 +1525,21 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     }));
   }, []);
 
+  const handleArborizationFilterChange = useCallback(
+    (key: ArborizationFilterKey, value: string) => {
+      setArborizationFilters((current) => ({
+        ...current,
+        [key]: value,
+      }));
+    },
+    []
+  );
+
+  const arborizationFilterOptions = useMemo(
+    () => getArborizationFilterOptions(features),
+    [features]
+  );
+
   const filteredFeatures = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
     return features.filter((feature) => {
@@ -1484,6 +1568,18 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         if (!matchesDrainageFilters) return false;
       }
 
+      if (effectiveTechnicalArea === "ARBORIZACAO") {
+        const matchesArborizationFilters = (
+          Object.keys(arborizationFilters) as ArborizationFilterKey[]
+        ).every((key) => {
+          const expectedValue = arborizationFilters[key];
+          if (expectedValue === "ALL") return true;
+          return readArborizationFilterValue(feature, key) === expectedValue;
+        });
+
+        if (!matchesArborizationFilters) return false;
+      }
+
       if (!normalizedSearch) return true;
 
       const haystack = [
@@ -1501,7 +1597,15 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
 
       return haystack.includes(normalizedSearch);
     });
-  }, [assetTypeFilter, drainageFilters, effectiveTechnicalArea, features, pendingOnly, searchQuery]);
+  }, [
+    arborizationFilters,
+    assetTypeFilter,
+    drainageFilters,
+    effectiveTechnicalArea,
+    features,
+    pendingOnly,
+    searchQuery,
+  ]);
 
   const disciplineCounts = useMemo(() => {
     return availableDisciplines.reduce<Record<ProjectDisciplineId, number>>((acc, discipline) => {
@@ -1519,6 +1623,10 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   );
   const drainagePanelStats = useMemo(
     () => getDrainageTechnicalPanelStats(features),
+    [features]
+  );
+  const arborizationPanelStats = useMemo(
+    () => getArborizationTechnicalPanelStats(features),
     [features]
   );
   const lightingPanelStats = useMemo(
@@ -2221,7 +2329,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   }, [selectedFeature]);
 
   return (
-    <div className="overflow-hidden rounded-[30px] border border-border bg-slate-50 shadow-card">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
       <input
         ref={importInputRef}
         type="file"
@@ -2230,7 +2338,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         onChange={handleImportGeoJson}
       />
 
-      <header className="border-b border-border bg-white/95 px-5 py-4 backdrop-blur">
+      <header className="shrink-0 border-b border-border bg-white/95 px-5 py-4 backdrop-blur">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-brand-600">
@@ -2329,9 +2437,26 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         canJoinSelected={canJoinSelected}
       />
 
-      <div className="grid h-[calc(100vh-15.5rem)] min-h-[820px] grid-cols-[320px_minmax(0,1fr)_360px]">
-        <aside className="border-r border-border bg-white">
-          <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
+      <div className="flex min-h-0 flex-1">
+        {isLeftPanelOpen ? (
+          <aside className="flex h-full w-[360px] min-w-[320px] flex-col border-r border-border bg-white">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-brand-600">
+                  Navegação técnica
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">Painel lateral</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLeftPanelOpen(false)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                Recolher
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+              
             <PanelSection title="Toolsets por área" eyebrow="Contexto técnico">
               <ProjectMapDisciplineToolset
                 availableDisciplines={availableDisciplines}
@@ -2357,6 +2482,12 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                     }))
                   }
                 />
+              </PanelSection>
+            ) : null}
+
+            {effectiveTechnicalArea === "ARBORIZACAO" ? (
+              <PanelSection title="Painel técnico" eyebrow="Arborização">
+                <ProjectArborizationTechnicalPanel stats={arborizationPanelStats} />
               </PanelSection>
             ) : null}
 
@@ -2390,7 +2521,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
 
             {effectiveTechnicalArea === "ILUMINACAO" ? (
               <PanelSection title="Base operacional importada" eyebrow="Iluminação pública">
-                <ProjectLightingImportedPanel
+              <ProjectLightingImportedPanel
                   items={filteredLightingInfrastructureItems}
                   selectedSelectionKey={selectedInfrastructureItem?.selectionKey ?? null}
                   projectLinkFilter={lightingProjectLinkFilter}
@@ -2398,7 +2529,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                   onSelect={handleSelectInfrastructureItem}
                 />
               </PanelSection>
-            ) : null}
+              ) : null}
 
             <PanelSection title="Camadas e filtros" eyebrow="Controle visual">
               <div className="space-y-4">
@@ -2746,6 +2877,50 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                   </div>
                 ) : null}
 
+                {effectiveTechnicalArea === "ARBORIZACAO" ? (
+                  <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                          Filtros da arborização
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          Espécie, porte, condição e risco dos elementos arbóreos.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setArborizationFilters(EMPTY_ARBORIZATION_FILTERS)}
+                        className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-600"
+                      >
+                        Limpar
+                      </button>
+                    </div>
+                    <div className="grid gap-3">
+                      {(Object.keys(ARBORIZATION_FILTER_LABELS) as ArborizationFilterKey[]).map((key) => (
+                        <label key={key} className="grid gap-1.5">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            {ARBORIZATION_FILTER_LABELS[key]}
+                          </span>
+                          <select
+                            value={arborizationFilters[key]}
+                            onChange={(event) =>
+                              handleArborizationFilterChange(key, event.target.value)
+                            }
+                            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-brand-500"
+                          >
+                            <option value="ALL">Todos</option>
+                            {arborizationFilterOptions[key].map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 <label className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3 text-sm">
                   <span className="font-medium text-foreground">Mostrar apenas pendentes locais</span>
                   <input
@@ -2833,11 +3008,18 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                 />
               )}
             </PanelSection>
-          </div>
-        </aside>
+            </div>
+          </aside>
+        ) : (
+          <WorkspaceRailToggle
+            side="left"
+            label="Painel lateral"
+            onClick={() => setIsLeftPanelOpen(true)}
+          />
+        )}
 
-        <section className="min-w-0 bg-slate-100 p-4">
-          <div className="relative h-full overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
+        <section className="min-h-0 min-w-0 flex-1 bg-slate-100 p-3 xl:p-4">
+          <div className="relative h-full min-h-[560px] overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
             {isLoading ? (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/90">
                 <div className="rounded-2xl border border-border bg-card px-6 py-5 text-center shadow-card">
@@ -2874,8 +3056,24 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           </div>
         </section>
 
-        <aside className="border-l border-border bg-white">
-          <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
+        {isRightPanelOpen ? (
+          <aside className="flex h-full w-[400px] min-w-[360px] flex-col border-l border-border bg-white">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-brand-600">
+                  Ficha técnica
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">Inspector do item</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRightPanelOpen(false)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                Recolher
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
             <PanelSection title="Inspector técnico" eyebrow="Item selecionado">
               {pendingFeature ? (
                 <div className="space-y-4">
@@ -3187,11 +3385,18 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                 <ProjectEmptyBlock title="Selecione ou desenhe um item" description="Use o painel esquerdo para localizar itens existentes, desenhar novos ativos ou editar geometrias já publicadas no projeto." />
               )}
             </PanelSection>
-          </div>
-        </aside>
+            </div>
+          </aside>
+        ) : (
+          <WorkspaceRailToggle
+            side="right"
+            label="Inspector"
+            onClick={() => setIsRightPanelOpen(true)}
+          />
+        )}
       </div>
 
-      <footer className="border-t border-slate-800 bg-slate-950 px-5 py-3 text-slate-100">
+      <footer className="shrink-0 border-t border-slate-800 bg-slate-950 px-5 py-3 text-slate-100">
         <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
           <div className="flex flex-wrap items-center gap-4">
             <span>Centro {formatCoords(viewState.latitude, viewState.longitude)}</span>
@@ -3220,3 +3425,4 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     </div>
   );
 }
+

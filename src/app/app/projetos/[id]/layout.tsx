@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { ProjectShellNav } from "@/components/projetos/project-shell-nav";
 import { ProjectShellHeader } from "@/components/projetos/project-shell-header";
+import { ProjectRouteLayoutFrame } from "@/components/projetos/project-route-layout-frame";
 import { ProjectSchemaWarning } from "@/components/projetos/project-schema-warning";
 import { getProjectShellData } from "@/lib/project-pages";
 
@@ -25,10 +26,11 @@ export default async function ProjetoLayout({
   }
 
   return (
-    <div className="space-y-6">
-      <ProjectShellHeader project={project} />
-      <ProjectShellNav projectId={project.id} />
+    <ProjectRouteLayoutFrame
+      header={<ProjectShellHeader project={project} />}
+      nav={<ProjectShellNav projectId={project.id} />}
+    >
       {children}
-    </div>
+    </ProjectRouteLayoutFrame>
   );
 }

@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { cn, formatDate } from "@/lib/utils";
 import { getAccessBlockReason, type AppRole } from "@/lib/auth-shared";
+import { AppMainFrame } from "@/components/layout/app-main-frame";
 
 type Role = AppRole;
 
@@ -245,9 +246,7 @@ export default async function AppLayout({
         </header>
 
         {/* Conteúdo da página */}
-        <main className="app-main animate-fade-in relative z-10">
-          {children}
-        </main>
+        <AppMainFrame>{children}</AppMainFrame>
       </div>
     </div>
   );
