@@ -12,6 +12,7 @@ import {
   ProjectBadge,
   ProjectEmptyBlock,
 } from "@/components/projetos/project-detail-components";
+import { ProjectArborizationTreeForm } from "@/components/projetos/project-arborization-tree-form";
 import { ProjectArborizationTechnicalPanel } from "@/components/projetos/project-arborization-technical-panel";
 import { ProjectDrainageSegmentForm } from "@/components/projetos/project-drainage-segment-form";
 import { ProjectDrainageTechnicalPanel } from "@/components/projetos/project-drainage-technical-panel";
@@ -32,6 +33,15 @@ import {
   type ArborizationFilterKey,
   type ArborizationFilterState,
 } from "@/lib/arborization-technical-panel";
+import {
+  assessArborizationTree,
+  buildArborizationTreeAssistAttributes,
+  buildArborizationTreeAutoContext,
+  buildArborizationTreeSuggestedName,
+  buildArborizationTreeTechnicalDefaults,
+  isArborizationTreeObjectType,
+  validateArborizationTreeGeometry,
+} from "@/lib/arborization-tree";
 import {
   assessDrainageSegment,
   buildDrainageSegmentAssistAttributes,
@@ -754,6 +764,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     useState<LightingProjectLinkFilter>("ALL");
   const [selectedInfrastructureItem, setSelectedInfrastructureItem] =
     useState<(InfrastructureLayerFeatureRecord & { linkedOperationalCount: number }) | null>(null);
+  const [arborizationRiskLocked, setArborizationRiskLocked] = useState(false);
   const [drainageCriticalityLocked, setDrainageCriticalityLocked] = useState(false);
   const [pavementWidthLocked, setPavementWidthLocked] = useState(false);
   const [pavementConditionLocked, setPavementConditionLocked] = useState(false);
@@ -1111,6 +1122,49 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     return evaluatePavementRoadSegment(technicalFieldValues, pavementRoadSegmentAutoContext);
   }, [pavementRoadSegmentAutoContext, technicalFieldValues]);
 
+  const arborizationTreeAutoContext = useMemo(() => {
+    const source = pendingFeature ?? selectedFeature;
+    if (!source) return null;
+
+    const context = getFeatureTechnicalContext(source, effectiveTechnicalArea);
+    if (!isArborizationTreeObjectType(context.technicalObjectType)) {
+      return null;
+    }
+
+    return buildArborizationTreeAutoContext({
+      feature: source,
+      baseLayersData,
+      project: {
+        id: project.id,
+        name: project.name,
+        code: project.code,
+        neighborhood: project.neighborhood,
+        district: project.district,
+        region: project.region,
+      },
+      currentUser,
+      availableFeatures: features,
+    });
+  }, [
+    baseLayersData,
+    currentUser,
+    effectiveTechnicalArea,
+    features,
+    pendingFeature,
+    project.code,
+    project.district,
+    project.id,
+    project.name,
+    project.neighborhood,
+    project.region,
+    selectedFeature,
+  ]);
+
+  const arborizationTreeAssessment = useMemo(() => {
+    if (!arborizationTreeAutoContext) return null;
+    return assessArborizationTree(technicalFieldValues, arborizationTreeAutoContext);
+  }, [arborizationTreeAutoContext, technicalFieldValues]);
+
   const lightingAutoContext = useMemo(() => {
     const source = pendingFeature ?? selectedFeature;
     if (!source) return null;
@@ -1230,6 +1284,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   useEffect(() => {
     if (pendingFeature) {
       const context = getFeatureTechnicalContext(pendingFeature, effectiveTechnicalArea);
+      const isArborizationTree = isArborizationTreeObjectType(context.technicalObjectType);
       const lightingObjectType = isLightingTechnicalObjectType(context.technicalObjectType)
         ? context.technicalObjectType
         : null;
@@ -1238,6 +1293,12 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         context.technicalObjectType
       );
       const rawTechnicalValues = readTechnicalFieldValues(fields, pendingFeature.attributes);
+      const arborizationDefaultState = isArborizationTree
+        ? buildArborizationTreeTechnicalDefaults({
+            autoContext: arborizationTreeAutoContext,
+            currentValues: rawTechnicalValues,
+          })
+        : null;
       const lightingDefaultState = lightingObjectType
         ? buildLightingTechnicalDefaults({
             autoContext: lightingAutoContext,
@@ -1249,6 +1310,8 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         ? mergeDrainageSegmentDefaultValues(rawTechnicalValues)
         : isPavementRoadSegmentObjectType(context.technicalObjectType)
           ? mergePavementRoadSegmentDefaultValues(rawTechnicalValues)
+          : arborizationDefaultState
+            ? arborizationDefaultState.suggestedValues
           : lightingDefaultState
             ? lightingDefaultState.suggestedValues
             : rawTechnicalValues;
@@ -1267,6 +1330,11 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                   lightingObjectType,
                   nextTechnicalValues
                 )
+              : isArborizationTree && arborizationTreeAutoContext
+                ? buildArborizationTreeSuggestedName(
+                    arborizationTreeAutoContext,
+                    nextTechnicalValues
+                  )
               : "";
 
       setInspectorForm({
@@ -1291,6 +1359,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         notes: readStringAttribute(pendingFeature.attributes, ["notes", "obs"]),
       });
       setTechnicalFieldValues(nextTechnicalValues);
+      setArborizationRiskLocked(false);
       setDrainageCriticalityLocked(false);
       setPavementWidthLocked(rawTechnicalValues.widthSource === "INFORMADA");
       setPavementConditionLocked(Boolean(rawTechnicalValues.surfaceCondition));
@@ -1303,6 +1372,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       const preferLocalValues = !selectedFeature.synced || !selectedFeature.persistedId;
       const attributes = (selectedFeature.attributes ?? selectedDetail?.attributes ?? {}) as Record<string, unknown>;
       const context = getFeatureTechnicalContext(selectedFeature, effectiveTechnicalArea);
+      const isArborizationTree = isArborizationTreeObjectType(context.technicalObjectType);
       const lightingObjectType = isLightingTechnicalObjectType(context.technicalObjectType)
         ? context.technicalObjectType
         : null;
@@ -1311,6 +1381,12 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         context.technicalObjectType
       );
       const rawTechnicalValues = readTechnicalFieldValues(fields, attributes);
+      const arborizationDefaultState = isArborizationTree
+        ? buildArborizationTreeTechnicalDefaults({
+            autoContext: arborizationTreeAutoContext,
+            currentValues: rawTechnicalValues,
+          })
+        : null;
       const lightingDefaultState = lightingObjectType
         ? buildLightingTechnicalDefaults({
             autoContext: lightingAutoContext,
@@ -1322,6 +1398,8 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         ? mergeDrainageSegmentDefaultValues(rawTechnicalValues)
         : isPavementRoadSegmentObjectType(context.technicalObjectType)
           ? mergePavementRoadSegmentDefaultValues(rawTechnicalValues)
+          : arborizationDefaultState
+            ? arborizationDefaultState.suggestedValues
           : lightingDefaultState
             ? lightingDefaultState.suggestedValues
             : rawTechnicalValues;
@@ -1340,6 +1418,11 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                   lightingObjectType,
                   nextTechnicalValues
                 )
+              : isArborizationTree && arborizationTreeAutoContext
+                ? buildArborizationTreeSuggestedName(
+                    arborizationTreeAutoContext,
+                    nextTechnicalValues
+                  )
               : "";
 
       setInspectorForm({
@@ -1365,6 +1448,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         notes: readStringAttribute(attributes, ["notes", "obs"]),
       });
       setTechnicalFieldValues(nextTechnicalValues);
+      setArborizationRiskLocked(false);
       setDrainageCriticalityLocked(false);
       setPavementWidthLocked(rawTechnicalValues.widthSource === "INFORMADA");
       setPavementConditionLocked(Boolean(rawTechnicalValues.surfaceCondition));
@@ -1375,12 +1459,14 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
 
     setInspectorForm(EMPTY_FORM);
     setTechnicalFieldValues({});
+    setArborizationRiskLocked(false);
     setDrainageCriticalityLocked(false);
     setPavementWidthLocked(false);
     setPavementConditionLocked(false);
     setPavementPriorityLocked(false);
     setPavementCostLocked(false);
   }, [
+    arborizationTreeAutoContext,
     currentUser.email,
     currentUser.name,
     drainageSegmentAutoContext,
@@ -1407,6 +1493,21 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       };
     });
   }, [drainageCriticalityLocked, drainageSegmentAssessment]);
+
+  useEffect(() => {
+    if (!arborizationTreeAssessment || arborizationRiskLocked) return;
+
+    setTechnicalFieldValues((current) => {
+      if (current.riskLevel === arborizationTreeAssessment.suggestedRiskLevel) {
+        return current;
+      }
+
+      return {
+        ...current,
+        riskLevel: arborizationTreeAssessment.suggestedRiskLevel,
+      };
+    });
+  }, [arborizationRiskLocked, arborizationTreeAssessment]);
 
   useEffect(() => {
     if (!pavementRoadSegmentAssessment) return;
@@ -1481,6 +1582,10 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   }, [lightingInfrastructureItems, selectedInfrastructureItem]);
 
   const handleTechnicalFieldChange = useCallback((key: string, value: string) => {
+    if (key === "riskLevel") {
+      setArborizationRiskLocked(true);
+    }
+
     if (key === "criticality") {
       setDrainageCriticalityLocked(true);
     }
@@ -1510,6 +1615,15 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
 
     if (key === "widthMeters") {
       setPavementWidthLocked(true);
+    }
+
+    if (key === "species" && value !== "OUTRA") {
+      setTechnicalFieldValues((current) => ({
+        ...current,
+        species: value,
+        speciesOther: "",
+      }));
+      return;
     }
 
     setTechnicalFieldValues((current) => ({
@@ -2002,9 +2116,21 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         return;
       }
 
+      if (
+        isArborizationTreeObjectType(context.technicalObjectType) &&
+        technicalFieldValues.species === "OUTRA" &&
+        !(technicalFieldValues.speciesOther ?? "").trim()
+      ) {
+        window.alert("Informe a espécie complementar quando selecionar 'Outra espécie'.");
+        return;
+      }
+
       const technicalData = {
         ...buildTechnicalDataPayload(fieldDefinitions, technicalFieldValues),
       };
+      const isArborizationTree = isArborizationTreeObjectType(
+        context.technicalObjectType
+      );
       const isDrainageSegment = isDrainageSegmentObjectType(context.technicalObjectType);
       const isPavementRoadSegment = isPavementRoadSegmentObjectType(
         context.technicalObjectType
@@ -2022,6 +2148,14 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           ? buildPavementRoadSegmentAssistAttributes(
               pavementRoadSegmentAutoContext,
               pavementRoadSegmentAssessment,
+              technicalFieldValues
+            )
+          : {};
+      const assistedArborizationAttributes =
+        isArborizationTree && arborizationTreeAutoContext && arborizationTreeAssessment
+          ? buildArborizationTreeAssistAttributes(
+              arborizationTreeAutoContext,
+              arborizationTreeAssessment,
               technicalFieldValues
             )
           : {};
@@ -2079,6 +2213,26 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         normalizedPavementCoords = geometryValidation.normalizedCoords;
       }
 
+      if (isArborizationTree) {
+        if (!arborizationTreeAutoContext) {
+          window.alert("Não foi possível montar o contexto assistido da árvore.");
+          return;
+        }
+
+        const geometryValidation = validateArborizationTreeGeometry(contextSource ?? { coords: [] });
+        if (geometryValidation.errors.length > 0) {
+          window.alert(geometryValidation.errors.join("\n"));
+          return;
+        }
+
+        if (
+          arborizationTreeAssessment?.suggestedRiskLevel &&
+          typeof technicalData.riskLevel !== "string"
+        ) {
+          technicalData.riskLevel = arborizationTreeAssessment.suggestedRiskLevel;
+        }
+      }
+
       nextAttributes = normalizeTechnicalAttributes(
         compactAttributes({
           ...((selectedFeature?.attributes ?? pendingFeature?.attributes ?? {}) as Record<
@@ -2096,6 +2250,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           description: inspectorForm.description,
           ...assistedDrainageAttributes,
           ...assistedPavementAttributes,
+          ...assistedArborizationAttributes,
           ...assistedLightingAttributes,
           ...(fieldArea ? { technicalArea: fieldArea } : {}),
           ...(context.technicalObjectType
@@ -2134,6 +2289,12 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                   lightingInspectorObjectType!,
                   technicalFieldValues
                 )
+            : isArborizationTreeObjectType(inspectorContext?.technicalObjectType ?? null) &&
+                arborizationTreeAutoContext
+              ? buildArborizationTreeSuggestedName(
+                  arborizationTreeAutoContext,
+                  technicalFieldValues
+                )
             : undefined;
       confirmPendingFeature(nextAttributes, inspectorForm.name.trim() || fallbackName || undefined);
       return;
@@ -2162,6 +2323,12 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
               ? buildLightingSuggestedName(
                   lightingAutoContext,
                   lightingInspectorObjectType!,
+                  technicalFieldValues
+                )
+            : isArborizationTreeObjectType(inspectorContext?.technicalObjectType ?? null) &&
+                arborizationTreeAutoContext
+              ? buildArborizationTreeSuggestedName(
+                  arborizationTreeAutoContext,
                   technicalFieldValues
                 )
           : "Ativo sem nome"),
@@ -2286,6 +2453,9 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     inspectorContext?.technicalObjectType ?? null
   );
   const isPavementRoadSegmentInspector = isPavementRoadSegmentObjectType(
+    inspectorContext?.technicalObjectType ?? null
+  );
+  const isArborizationTreeInspector = isArborizationTreeObjectType(
     inspectorContext?.technicalObjectType ?? null
   );
   const lightingInspectorObjectType: LightingTechnicalObjectTypeId | null =
@@ -3130,6 +3300,21 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                         onChange={handleTechnicalFieldChange}
                       />
                     </>
+                  ) : isArborizationTreeInspector ? (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome sugerido da árvore" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição técnica, contexto do plantio ou observação inicial" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações operacionais de poda, manejo ou risco" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectArborizationTreeForm
+                        autoContext={arborizationTreeAutoContext}
+                        assessment={arborizationTreeAssessment}
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={handleTechnicalFieldChange}
+                      />
+                    </>
                   ) : isLightingInspector ? (
                     <>
                       <div className="grid gap-3">
@@ -3213,6 +3398,21 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                       <ProjectPavementRoadForm
                         autoContext={pavementRoadSegmentAutoContext}
                         assessment={pavementRoadSegmentAssessment}
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={handleTechnicalFieldChange}
+                      />
+                    </>
+                  ) : isArborizationTreeInspector ? (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome da árvore" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição técnica, espécie ou contexto da arborização" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações de manejo, poda, risco ou conflito" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectArborizationTreeForm
+                        autoContext={arborizationTreeAutoContext}
+                        assessment={arborizationTreeAssessment}
                         fields={activeTechnicalFields}
                         values={technicalFieldValues}
                         onChange={handleTechnicalFieldChange}

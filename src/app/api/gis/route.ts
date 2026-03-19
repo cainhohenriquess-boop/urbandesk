@@ -20,6 +20,10 @@ import {
 } from "@/lib/pavement-segment";
 import { assessPavementRoadSegment } from "@/lib/pavement-technical";
 import {
+  isArborizationTreeObjectType,
+  validateArborizationTreeGeometry,
+} from "@/lib/arborization-tree";
+import {
   getTechnicalFieldsForContext,
   normalizeTechnicalAttributes,
   readTechnicalFieldValues,
@@ -181,6 +185,19 @@ function extractLineCoordsFromGeometry(geometry: Record<string, unknown> | null)
     );
 }
 
+function extractPointFromGeometry(geometry: Record<string, unknown> | null) {
+  if (!geometry || geometry.type !== "Point" || !Array.isArray(geometry.coordinates)) {
+    return null;
+  }
+
+  const [lngRaw, latRaw] = geometry.coordinates;
+  const lng = Number(lngRaw);
+  const lat = Number(latRaw);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+
+  return { lng, lat };
+}
+
 function enrichDrainageAttributes(
   normalizedAttributes: Record<string, unknown>,
   geomWkt: string | null
@@ -290,6 +307,39 @@ function enrichPavementAttributes(
       suggestedSurfaceCondition: assessment.suggestedSurfaceCondition,
       suggestedPriority: assessment.suggestedPriority,
       technicalData,
+    },
+    errors: [] as string[],
+  };
+}
+
+function enrichArborizationAttributes(
+  normalizedAttributes: Record<string, unknown>,
+  geomWkt: string | null
+) {
+  const technicalObjectType = resolveTechnicalObjectType(null, normalizedAttributes);
+  if (!isArborizationTreeObjectType(technicalObjectType)) {
+    return { attributes: normalizedAttributes, errors: [] as string[] };
+  }
+
+  const geometry = parseWktGeometry(geomWkt);
+  const point = extractPointFromGeometry(geometry);
+  const geometryValidation = validateArborizationTreeGeometry({
+    coords: point ? [{ lng: point.lng, lat: point.lat }] : [],
+  });
+
+  if (geometryValidation.errors.length > 0) {
+    return {
+      attributes: normalizedAttributes,
+      errors: geometryValidation.errors,
+    };
+  }
+
+  return {
+    attributes: {
+      ...normalizedAttributes,
+      latitude: point?.lat ?? undefined,
+      longitude: point?.lng ?? undefined,
+      geometryWarnings: geometryValidation.warnings,
     },
     errors: [] as string[],
   };
@@ -586,6 +636,17 @@ export async function POST(req: NextRequest) {
       );
     }
     normalizedAttributes = enrichedPavementCreate.attributes;
+    const enrichedArborizationCreate = enrichArborizationAttributes(
+      normalizedAttributes,
+      geomWkt
+    );
+    if (enrichedArborizationCreate.errors.length > 0) {
+      return NextResponse.json(
+        { error: "Geometria pontual inválida para arborização.", details: enrichedArborizationCreate.errors },
+        { status: 400 }
+      );
+    }
+    normalizedAttributes = enrichedArborizationCreate.attributes;
     const requestPhotos = sanitizePhotoArray(body.photos);
     const attributePhotos = sanitizePhotoArray(normalizedAttributes.photos);
     const photos = requestPhotos.length > 0 ? requestPhotos : attributePhotos;
@@ -854,6 +915,17 @@ export async function PATCH(req: NextRequest) {
         );
       }
       normalizedAttributes = enrichedPavementUpdate.attributes;
+      const enrichedArborizationUpdate = enrichArborizationAttributes(
+        normalizedAttributes,
+        body.geomWkt !== undefined ? sanitizeOptionalString(body.geomWkt) : existing.geomWkt
+      );
+      if (enrichedArborizationUpdate.errors.length > 0) {
+        return NextResponse.json(
+          { error: "Geometria pontual inválida para arborização.", details: enrichedArborizationUpdate.errors },
+          { status: 400 }
+        );
+      }
+      normalizedAttributes = enrichedArborizationUpdate.attributes;
       updateData.attributes = normalizedAttributes as Prisma.InputJsonValue;
       changedFields.push("attributes");
     }
@@ -895,6 +967,29 @@ export async function PATCH(req: NextRequest) {
 
       if (JSON.stringify(enrichedPavementUpdate.attributes) !== JSON.stringify(baseAttributes)) {
         updateData.attributes = enrichedPavementUpdate.attributes as Prisma.InputJsonValue;
+        if (!changedFields.includes("attributes")) changedFields.push("attributes");
+      }
+
+      const arborizationBaseAttributes = toPlainObject(
+        updateData.attributes ?? existing.attributes
+      );
+      const enrichedArborizationUpdate = enrichArborizationAttributes(
+        arborizationBaseAttributes,
+        sanitizeOptionalString(body.geomWkt)
+      );
+      if (enrichedArborizationUpdate.errors.length > 0) {
+        return NextResponse.json(
+          { error: "Geometria pontual inválida para arborização.", details: enrichedArborizationUpdate.errors },
+          { status: 400 }
+        );
+      }
+
+      if (
+        JSON.stringify(enrichedArborizationUpdate.attributes) !==
+        JSON.stringify(arborizationBaseAttributes)
+      ) {
+        updateData.attributes =
+          enrichedArborizationUpdate.attributes as Prisma.InputJsonValue;
         if (!changedFields.includes("attributes")) changedFields.push("attributes");
       }
     }
