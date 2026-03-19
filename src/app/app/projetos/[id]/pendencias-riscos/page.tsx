@@ -24,11 +24,11 @@ type ProjetoPendenciasRiscosPageProps = {
 };
 
 function getTechnicalObjectSummary(value: string | null | undefined) {
-  return value && isTechnicalObjectType(value) ? getTechnicalObjectLabel(value) : "N\u00e3o informado";
+  return value && isTechnicalObjectType(value) ? getTechnicalObjectLabel(value) : "Não informado";
 }
 
 function getIssueSource(issue: { metadata?: unknown; inspection?: { id: string } | null }) {
-  if (issue.inspection) return "Fiscaliza\u00e7\u00e3o";
+  if (issue.inspection) return "Fiscalização";
   if (!issue.metadata || typeof issue.metadata !== "object" || Array.isArray(issue.metadata)) {
     return "Projeto";
   }
@@ -49,17 +49,17 @@ export default async function ProjetoPendenciasRiscosPage({ params }: ProjetoPen
   return (
     <div className="space-y-6">
       <section className="grid gap-4 xl:grid-cols-5">
-        <ProjectMetricCard label="Pend\u00eancias" value={formatNumber(issues.length)} helper="Todas as pend\u00eancias registradas no projeto." />
-        <ProjectMetricCard label="Abertas" value={formatNumber(openIssues.length)} helper="Pend\u00eancias ainda em tratamento." />
-        <ProjectMetricCard label="Vindas do campo" value={formatNumber(fieldIssues)} helper="Ocorr\u00eancias registradas no app de campo." />
+        <ProjectMetricCard label="Pendências" value={formatNumber(issues.length)} helper="Todas as pendências registradas no projeto." />
+        <ProjectMetricCard label="Abertas" value={formatNumber(openIssues.length)} helper="Pendências ainda em tratamento." />
+        <ProjectMetricCard label="Vindas do campo" value={formatNumber(fieldIssues)} helper="Ocorrências registradas no app de campo." />
         <ProjectMetricCard label="Riscos" value={formatNumber(risks.length)} helper="Riscos mapeados no projeto." />
         <ProjectMetricCard label="Riscos ativos" value={formatNumber(activeRisks.length)} helper="Riscos ainda sob monitoramento." />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <ProjectSectionCard eyebrow="Pend\u00eancias" title="Pend\u00eancias e bloqueios" description="Itens de prazo, qualidade, documenta\u00e7\u00e3o ou execu\u00e7\u00e3o que exigem tratamento.">
+        <ProjectSectionCard eyebrow="Pendências" title="Pendências e bloqueios" description="Itens de prazo, qualidade, documentação ou execução que exigem tratamento.">
           {issues.length === 0 ? (
-            <ProjectEmptyBlock title="Sem pend\u00eancias registradas" description="As pend\u00eancias do projeto aparecer\u00e3o aqui com prioridade, \u00e1rea t\u00e9cnica, ativo relacionado e prazo." />
+            <ProjectEmptyBlock title="Sem pendências registradas" description="As pendências do projeto aparecerão aqui com prioridade, área técnica, ativo relacionado e prazo." />
           ) : (
             <div className="space-y-3">
               {issues.map((issue) => (
@@ -70,7 +70,7 @@ export default async function ProjetoPendenciasRiscosPage({ params }: ProjetoPen
                         <p className="text-sm font-semibold text-foreground">{issue.title}</p>
                         {issue.technicalArea && <ProjectBadge label={getProjectTechnicalAreaLabel(issue.technicalArea)} tone="neutral" />}
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{getProjectIssueTypeLabel(issue.issueType)} \u00b7 {issue.priority.toLowerCase()}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{getProjectIssueTypeLabel(issue.issueType)} · {issue.priority.toLowerCase()}</p>
                     </div>
                     <ProjectBadge label={getProjectIssueStatusLabel(issue.status)} tone={getGovernanceTone(issue.status)} />
                   </div>
@@ -78,11 +78,11 @@ export default async function ProjetoPendenciasRiscosPage({ params }: ProjetoPen
                   <div className="mt-4 grid gap-4 text-sm md:grid-cols-4">
                     <div>
                       <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Prazo</p>
-                      <p className="mt-1 font-medium text-foreground">{issue.dueDate ? formatDate(issue.dueDate) : "N\u00e3o informado"}</p>
+                      <p className="mt-1 font-medium text-foreground">{issue.dueDate ? formatDate(issue.dueDate) : "Não informado"}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Respons\u00e1vel</p>
-                      <p className="mt-1 font-medium text-foreground">{issue.assignedTo?.name || "N\u00e3o definido"}</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Responsável</p>
+                      <p className="mt-1 font-medium text-foreground">{issue.assignedTo?.name || "Não definido"}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Origem</p>
@@ -90,22 +90,22 @@ export default async function ProjetoPendenciasRiscosPage({ params }: ProjetoPen
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Reportado por</p>
-                      <p className="mt-1 font-medium text-foreground">{issue.reportedBy?.name || "N\u00e3o informado"}</p>
+                      <p className="mt-1 font-medium text-foreground">{issue.reportedBy?.name || "Não informado"}</p>
                     </div>
                   </div>
 
                   <div className="mt-4 grid gap-4 text-sm md:grid-cols-3">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">\u00c1rea t\u00e9cnica</p>
-                      <p className="mt-1 font-medium text-foreground">{issue.technicalArea ? getProjectTechnicalAreaLabel(issue.technicalArea) : "N\u00e3o informada"}</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Área técnica</p>
+                      <p className="mt-1 font-medium text-foreground">{issue.technicalArea ? getProjectTechnicalAreaLabel(issue.technicalArea) : "Não informada"}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto t\u00e9cnico</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto técnico</p>
                       <p className="mt-1 font-medium text-foreground">{getTechnicalObjectSummary(issue.technicalObjectType)}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Ativo relacionado</p>
-                      <p className="mt-1 font-medium text-foreground">{issue.asset?.name || "Sem v\u00ednculo direto"}</p>
+                      <p className="mt-1 font-medium text-foreground">{issue.asset?.name || "Sem vínculo direto"}</p>
                     </div>
                   </div>
                 </article>
@@ -114,9 +114,9 @@ export default async function ProjetoPendenciasRiscosPage({ params }: ProjetoPen
           )}
         </ProjectSectionCard>
 
-        <ProjectSectionCard eyebrow="Riscos" title="Riscos monitorados" description="Riscos estrat\u00e9gicos e operacionais acompanhados no projeto.">
+        <ProjectSectionCard eyebrow="Riscos" title="Riscos monitorados" description="Riscos estratégicos e operacionais acompanhados no projeto.">
           {risks.length === 0 ? (
-            <ProjectEmptyBlock title="Sem riscos cadastrados" description="Os riscos do projeto aparecer\u00e3o aqui com categoria, probabilidade, impacto e respons\u00e1vel." />
+            <ProjectEmptyBlock title="Sem riscos cadastrados" description="Os riscos do projeto aparecerão aqui com categoria, probabilidade, impacto e responsável." />
           ) : (
             <div className="space-y-3">
               {risks.map((risk) => (
@@ -138,12 +138,12 @@ export default async function ProjetoPendenciasRiscosPage({ params }: ProjetoPen
                       <p className="mt-1 font-medium text-foreground">{getProjectRiskImpactLabel(risk.impact)}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Revis\u00e3o</p>
-                      <p className="mt-1 font-medium text-foreground">{risk.reviewDate ? formatDate(risk.reviewDate) : "N\u00e3o informada"}</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Revisão</p>
+                      <p className="mt-1 font-medium text-foreground">{risk.reviewDate ? formatDate(risk.reviewDate) : "Não informada"}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Respons\u00e1vel</p>
-                      <p className="mt-1 font-medium text-foreground">{risk.owner?.name || "N\u00e3o definido"}</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Responsável</p>
+                      <p className="mt-1 font-medium text-foreground">{risk.owner?.name || "Não definido"}</p>
                     </div>
                   </div>
                 </article>

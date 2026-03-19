@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!project) {
-      return NextResponse.json({ error: "Projeto informado n\u00e3o pertence ao tenant autenticado." }, { status: 400 });
+      return NextResponse.json({ error: "Projeto informado não pertence ao tenant autenticado." }, { status: 400 });
     }
 
     const phase = body.phaseId
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
       : null;
 
     if (body.phaseId && !phase) {
-      return NextResponse.json({ error: "Fase inv\u00e1lida para o projeto selecionado." }, { status: 400 });
+      return NextResponse.json({ error: "Fase inválida para o projeto selecionado." }, { status: 400 });
     }
 
     const asset = body.relatedAssetId
@@ -182,13 +182,13 @@ export async function POST(req: NextRequest) {
 
     if (body.relatedAssetId && !asset) {
       return NextResponse.json(
-        { error: "Objeto t\u00e9cnico relacionado n\u00e3o pertence ao projeto selecionado." },
+        { error: "Objeto técnico relacionado não pertence ao projeto selecionado." },
         { status: 400 }
       );
     }
 
     if (body.technicalObjectType && !isTechnicalObjectType(body.technicalObjectType)) {
-      return NextResponse.json({ error: "Tipo de objeto t\u00e9cnico inv\u00e1lido." }, { status: 400 });
+      return NextResponse.json({ error: "Tipo de objeto técnico inválido." }, { status: 400 });
     }
 
     const assetContext = asset ? resolveCampoAssetTechnicalContext(asset) : null;
@@ -206,26 +206,26 @@ export async function POST(req: NextRequest) {
     const technicalObjectType = assetContext?.technicalObjectType ?? body.technicalObjectType ?? null;
 
     if (!technicalArea) {
-      return NextResponse.json({ error: "Selecione a \u00e1rea t\u00e9cnica da vistoria ou ocorr\u00eancia." }, { status: 400 });
+      return NextResponse.json({ error: "Selecione a área técnica da vistoria ou ocorrência." }, { status: 400 });
     }
 
     if (!technicalObjectType) {
       return NextResponse.json(
-        { error: "Selecione o objeto t\u00e9cnico relacionado ou vincule um item t\u00e9cnico do projeto." },
+        { error: "Selecione o objeto técnico relacionado ou vincule um item técnico do projeto." },
         { status: 400 }
       );
     }
 
     if (!project.technicalAreas.includes(technicalArea) && technicalArea !== "FISCALIZACAO") {
       return NextResponse.json(
-        { error: "A \u00e1rea t\u00e9cnica informada n\u00e3o est\u00e1 habilitada neste projeto." },
+        { error: "A área técnica informada não está habilitada neste projeto." },
         { status: 400 }
       );
     }
 
     if (phase?.technicalArea && phase.technicalArea !== technicalArea) {
       return NextResponse.json(
-        { error: "A fase selecionada pertence a outra \u00e1rea t\u00e9cnica do projeto." },
+        { error: "A fase selecionada pertence a outra área técnica do projeto." },
         { status: 400 }
       );
     }
@@ -361,7 +361,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ data: issue }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Payload inv\u00e1lido.", details: error.issues }, { status: 400 });
+      return NextResponse.json({ error: "Payload inválido.", details: error.issues }, { status: 400 });
     }
 
     console.error("[CAMPO_RECORD_POST_ERROR]", error);

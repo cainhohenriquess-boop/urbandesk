@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     if (projectId) {
       const project = projects.find((item) => item.id === projectId);
       if (!project) {
-        return NextResponse.json({ error: "Projeto n\u00e3o encontrado." }, { status: 404 });
+        return NextResponse.json({ error: "Projeto não encontrado." }, { status: 404 });
       }
 
       const projectAssets = await prisma.asset.findMany({

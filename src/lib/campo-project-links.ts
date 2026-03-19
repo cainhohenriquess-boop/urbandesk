@@ -70,14 +70,14 @@ export function buildCampoProjectLabel(project: {
   code?: string | null;
   name: string;
 }) {
-  return project.code ? `${project.code} \u00b7 ${project.name}` : project.name;
+  return project.code ? `${project.code} · ${project.name}` : project.name;
 }
 
 export function buildCampoPhaseLabel(phase: {
   sequence: number;
   name: string;
 }) {
-  return `Fase ${phase.sequence} \u00b7 ${phase.name}`;
+  return `Fase ${phase.sequence} · ${phase.name}`;
 }
 
 export function resolveCampoAssetTechnicalContext(asset: {
@@ -107,5 +107,5 @@ export function getCampoTechnicalAreaOptions(projectAreas: ProjectTechnicalArea[
 }
 
 export function getCampoTechnicalObjectLabel(value: TechnicalObjectTypeId | null | undefined) {
-  return value ? getTechnicalObjectLabel(value) : "N\u00e3o vinculado";
+  return value ? getTechnicalObjectLabel(value) : "Não vinculado";
 }

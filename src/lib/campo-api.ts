@@ -22,7 +22,7 @@ export async function resolveCampoRequestContext(
 
   if (!session) {
     return {
-      response: NextResponse.json({ error: "N\u00e3o autenticado" }, { status: 401 }),
+      response: NextResponse.json({ error: "Não autenticado" }, { status: 401 }),
     };
   }
 
@@ -38,7 +38,7 @@ export async function resolveCampoRequestContext(
 
   if (!CAMPO_ALLOWED_ROLES.has(session.user.role ?? "")) {
     return {
-      response: NextResponse.json({ error: "N\u00e3o autorizado" }, { status: 403 }),
+      response: NextResponse.json({ error: "Não autorizado" }, { status: 403 }),
     };
   }
 
@@ -51,7 +51,7 @@ export async function resolveCampoRequestContext(
       const parsed = tenantIdSchema.safeParse(rawTenantId);
       if (!parsed.success) {
         return {
-          response: NextResponse.json({ error: "Tenant inv\u00e1lido." }, { status: 400 }),
+          response: NextResponse.json({ error: "Tenant inválido." }, { status: 400 }),
         };
       }
       tenantId = parsed.data;
@@ -60,7 +60,7 @@ export async function resolveCampoRequestContext(
 
   if (!tenantId || !tenantIdSchema.safeParse(tenantId).success) {
     return {
-      response: NextResponse.json({ error: "Tenant n\u00e3o identificado." }, { status: 400 }),
+      response: NextResponse.json({ error: "Tenant não identificado." }, { status: 400 }),
     };
   }
 

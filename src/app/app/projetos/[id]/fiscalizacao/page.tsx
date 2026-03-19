@@ -20,7 +20,7 @@ type ProjetoFiscalizacaoPageProps = {
 };
 
 function getTechnicalObjectSummary(value: string | null | undefined) {
-  return value && isTechnicalObjectType(value) ? getTechnicalObjectLabel(value) : "N\u00e3o informado";
+  return value && isTechnicalObjectType(value) ? getTechnicalObjectLabel(value) : "Não informado";
 }
 
 function getInspectionSource(metadata: unknown) {
@@ -42,15 +42,15 @@ export default async function ProjetoFiscalizacaoPage({ params }: ProjetoFiscali
   return (
     <div className="space-y-6">
       <section className="grid gap-4 xl:grid-cols-4">
-        <ProjectMetricCard label="Fiscaliza\u00e7\u00f5es" value={formatNumber(inspections.length)} helper="Registros de inspe\u00e7\u00e3o e vistoria do projeto." />
-        <ProjectMetricCard label="Realizadas" value={formatNumber(performedCount)} helper="J\u00e1 executadas em campo ou rotina t\u00e9cnica." />
-        <ProjectMetricCard label="Agendadas" value={formatNumber(scheduledCount)} helper="Ainda pendentes de execu\u00e7\u00e3o." />
-        <ProjectMetricCard label="Vinculadas ao campo" value={formatNumber(fieldCount)} helper="Criadas a partir do app de campo/fiscaliza\u00e7\u00e3o." />
+        <ProjectMetricCard label="Fiscalizações" value={formatNumber(inspections.length)} helper="Registros de inspeção e vistoria do projeto." />
+        <ProjectMetricCard label="Realizadas" value={formatNumber(performedCount)} helper="Já executadas em campo ou rotina técnica." />
+        <ProjectMetricCard label="Agendadas" value={formatNumber(scheduledCount)} helper="Ainda pendentes de execução." />
+        <ProjectMetricCard label="Vinculadas ao campo" value={formatNumber(fieldCount)} helper="Criadas a partir do app de campo/fiscalização." />
       </section>
 
-      <ProjectSectionCard eyebrow="Fiscaliza\u00e7\u00e3o" title="Agenda e registros" description="Fiscaliza\u00e7\u00f5es por tipo, status, \u00c1rea t\u00e9cnica, etapa e objeto relacionado.">
+      <ProjectSectionCard eyebrow="Fiscalização" title="Agenda e registros" description="Fiscalizações por tipo, status, Área técnica, etapa e objeto relacionado.">
         {inspections.length === 0 ? (
-          <ProjectEmptyBlock title="Sem fiscaliza\u00e7\u00f5es registradas" description="As fiscaliza\u00e7\u00f5es do projeto aparecer\u00e3o aqui com etapa, ativo vinculado e origem do registro." />
+          <ProjectEmptyBlock title="Sem fiscalizações registradas" description="As fiscalizações do projeto aparecerão aqui com etapa, ativo vinculado e origem do registro." />
         ) : (
           <div className="space-y-3">
             {inspections.map((inspection) => (
@@ -62,7 +62,7 @@ export default async function ProjetoFiscalizacaoPage({ params }: ProjetoFiscali
                       {inspection.technicalArea && <ProjectBadge label={getProjectTechnicalAreaLabel(inspection.technicalArea)} tone="neutral" />}
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {inspection.phase ? `Fase ${inspection.phase.sequence} \u00b7 ${inspection.phase.name}` : inspection.location || "Projeto"}
+                      {inspection.phase ? `Fase ${inspection.phase.sequence} · ${inspection.phase.name}` : inspection.location || "Projeto"}
                     </p>
                   </div>
                   <ProjectBadge label={getProjectInspectionStatusLabel(inspection.status)} tone={getGovernanceTone(inspection.status)} />
@@ -79,30 +79,30 @@ export default async function ProjetoFiscalizacaoPage({ params }: ProjetoFiscali
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Realizada</p>
-                    <p className="mt-1 font-medium text-foreground">{inspection.occurredAt ? formatDate(inspection.occurredAt) : "N\u00e3o informado"}</p>
+                    <p className="mt-1 font-medium text-foreground">{inspection.occurredAt ? formatDate(inspection.occurredAt) : "Não informado"}</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Fiscal</p>
-                    <p className="mt-1 font-medium text-foreground">{inspection.inspector?.name || "N\u00e3o informado"}</p>
+                    <p className="mt-1 font-medium text-foreground">{inspection.inspector?.name || "Não informado"}</p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Evid\u00eancias</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Evidências</p>
                     <p className="mt-1 font-medium text-foreground">{formatNumber(inspection._count.documents + inspection._count.issues)} item(ns)</p>
                   </div>
                 </div>
 
                 <div className="mt-4 grid gap-4 text-sm md:grid-cols-3">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">\u00c1rea t\u00e9cnica</p>
-                    <p className="mt-1 font-medium text-foreground">{inspection.technicalArea ? getProjectTechnicalAreaLabel(inspection.technicalArea) : "N\u00e3o informada"}</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Área técnica</p>
+                    <p className="mt-1 font-medium text-foreground">{inspection.technicalArea ? getProjectTechnicalAreaLabel(inspection.technicalArea) : "Não informada"}</p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto t\u00e9cnico</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto técnico</p>
                     <p className="mt-1 font-medium text-foreground">{getTechnicalObjectSummary(inspection.technicalObjectType)}</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Ativo relacionado</p>
-                    <p className="mt-1 font-medium text-foreground">{inspection.asset?.name || "Sem v\u00ednculo direto"}</p>
+                    <p className="mt-1 font-medium text-foreground">{inspection.asset?.name || "Sem vínculo direto"}</p>
                   </div>
                 </div>
 

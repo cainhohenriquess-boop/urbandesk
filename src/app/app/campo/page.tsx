@@ -50,13 +50,13 @@ const SYNC_CONFIG: Record<CampoSyncStatus, SyncVisual> = {
   pending: { label: "Pendente", color: "text-warning-500", description: "Aguardando envio para a nuvem." },
   syncing: { label: "Sincronizando", color: "text-brand-500", description: "Enviando anexos e metadados.", spin: true },
   synced: { label: "Sincronizado", color: "text-accent-500", description: "Registro salvo com sucesso no servidor." },
-  error: { label: "Erro", color: "text-danger-500", description: "Falha no envio. Nova tentativa autom\u00e1tica habilitada." },
+  error: { label: "Erro", color: "text-danger-500", description: "Falha no envio. Nova tentativa automática habilitada." },
   conflict: { label: "Conflito", color: "text-danger-600", description: "Conflito detectado. Requer nova tentativa manual." },
 };
 
 const RECORD_TYPES: Array<{ value: RecordType; label: string; desc: string }> = [
-  { value: "VISTORIA", label: "Vistoria", desc: "Fiscaliza\u00e7\u00e3o t\u00e9cnica vinculada a projeto, etapa e objeto." },
-  { value: "OCORRENCIA", label: "Ocorr\u00eancia", desc: "Registro de problema, n\u00e3o conformidade ou acionamento de campo." },
+  { value: "VISTORIA", label: "Vistoria", desc: "Fiscalização técnica vinculada a projeto, etapa e objeto." },
+  { value: "OCORRENCIA", label: "Ocorrência", desc: "Registro de problema, não conformidade ou acionamento de campo." },
 ];
 
 function getFieldStatusOptions(recordType: RecordType) {
@@ -78,11 +78,11 @@ function getAreaLabel(value: string | null | undefined) {
       value as (typeof PRISMA_PROJECT_TECHNICAL_AREAS)[number]
     )
     ? getProjectTechnicalAreaLabel(value as (typeof PRISMA_PROJECT_TECHNICAL_AREAS)[number])
-    : "N\u00e3o informado";
+    : "Não informado";
 }
 
 function getObjectLabel(value: string | null | undefined) {
-  return value && isTechnicalObjectType(value) ? getTechnicalObjectLabel(value) : "N\u00e3o informado";
+  return value && isTechnicalObjectType(value) ? getTechnicalObjectLabel(value) : "Não informado";
 }
 
 export default function CampoPage() {
@@ -166,13 +166,13 @@ export default function CampoPage() {
     try {
       const response = await fetch("/api/campo/context", { cache: "no-store" });
       const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(typeof payload?.error === "string" ? payload.error : "N\u00e3o foi poss\u00edvel carregar o contexto de projetos.");
+      if (!response.ok) throw new Error(typeof payload?.error === "string" ? payload.error : "Não foi possível carregar o contexto de projetos.");
       const nextProjects = Array.isArray(payload?.data?.projects) ? payload.data.projects : [];
       setProjects(nextProjects);
       if (nextProjects.length === 1 && !projectId) setProjectId(nextProjects[0].id);
     } catch (error) {
       console.error("Falha ao carregar projetos de campo:", error);
-      setContextError(error instanceof Error && error.message ? error.message : "Falha ao carregar os projetos dispon\u00edveis.");
+      setContextError(error instanceof Error && error.message ? error.message : "Falha ao carregar os projetos disponíveis.");
     } finally {
       setContextLoading(false);
     }
@@ -185,11 +185,11 @@ export default function CampoPage() {
     try {
       const response = await fetch(`/api/campo/context?projectId=${encodeURIComponent(nextProjectId)}`, { cache: "no-store" });
       const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(typeof payload?.error === "string" ? payload.error : "N\u00e3o foi poss\u00edvel carregar os objetos t\u00e9cnicos do projeto.");
+      if (!response.ok) throw new Error(typeof payload?.error === "string" ? payload.error : "Não foi possível carregar os objetos técnicos do projeto.");
       setProjectAssets(Array.isArray(payload?.data?.assets) ? payload.data.assets : []);
     } catch (error) {
-      console.error("Falha ao carregar objetos t\u00e9cnicos para campo:", error);
-      setContextError(error instanceof Error && error.message ? error.message : "Falha ao carregar os objetos t\u00e9cnicos do projeto.");
+      console.error("Falha ao carregar objetos técnicos para campo:", error);
+      setContextError(error instanceof Error && error.message ? error.message : "Falha ao carregar os objetos técnicos do projeto.");
       setProjectAssets([]);
     } finally {
       setProjectAssetsLoading(false);
@@ -292,7 +292,7 @@ export default function CampoPage() {
     setGpsLoading(true);
     setGpsError(null);
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGpsError("Geolocaliza\u00e7\u00e3o indispon\u00edvel neste dispositivo.");
+      setGpsError("Geolocalização indisponível neste dispositivo.");
       setGpsLoading(false);
       return;
     }
@@ -302,7 +302,7 @@ export default function CampoPage() {
         setGpsLoading(false);
       },
       () => {
-        setGpsError("GPS indispon\u00edvel. Verifique as permiss\u00f5es do navegador.");
+        setGpsError("GPS indisponível. Verifique as permissões do navegador.");
         setGpsLoading(false);
       },
       { enableHighAccuracy: true, timeout: 10_000 }
@@ -345,7 +345,7 @@ export default function CampoPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      if (!isCampoOfflineSupported()) throw new Error("Seu navegador n\u00e3o suporta fila offline com IndexedDB.");
+      if (!isCampoOfflineSupported()) throw new Error("Seu navegador não suporta fila offline com IndexedDB.");
       await createCampoQueueItem({
         assetType: "PONTO",
         recordType,
@@ -397,8 +397,8 @@ export default function CampoPage() {
     <div className="mx-auto max-w-5xl space-y-4 pb-20">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-xl font-700 text-foreground">Campo e fiscaliza\u00e7\u00e3o</h1>
-          <p className="text-sm text-muted-foreground">Captura offline-first com v\u00ednculo direto a projeto, etapa, \u00e1rea t\u00e9cnica e objeto relacionado.</p>
+          <h1 className="font-display text-xl font-700 text-foreground">Campo e fiscalização</h1>
+          <p className="text-sm text-muted-foreground">Captura offline-first com vínculo direto a projeto, etapa, área técnica e objeto relacionado.</p>
         </div>
         <div className={cn("flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium", isOnline ? "bg-accent-100 text-accent-700" : "bg-warning-100 text-warning-700")}>
           <span className={cn("h-1.5 w-1.5 rounded-full", isOnline ? "bg-accent-500 animate-pulse-dot" : "bg-warning-500")} />
@@ -406,7 +406,7 @@ export default function CampoPage() {
         </div>
       </div>
 
-      {!offlineSupported && <div className="rounded-xl border border-warning-300 bg-warning-50 px-4 py-3 text-xs text-warning-700">IndexedDB indispon\u00edvel neste navegador. O modo offline completo n\u00e3o pode ser habilitado.</div>}
+      {!offlineSupported && <div className="rounded-xl border border-warning-300 bg-warning-50 px-4 py-3 text-xs text-warning-700">IndexedDB indisponível neste navegador. O modo offline completo não pode ser habilitado.</div>}
       {contextError && <div className="rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">{contextError}</div>}
 
       <div className="flex gap-1 rounded-xl bg-muted p-1">
@@ -420,7 +420,7 @@ export default function CampoPage() {
 
       {tab === "capturar" ? (
         <div className="space-y-4">
-          {submitted && <div className="rounded-xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm font-medium text-accent-700">Registro salvo localmente na fila. {isOnline ? "Sincroniza\u00e7\u00e3o disparada." : "Sincroniza quando a conex\u00e3o voltar."}</div>}
+          {submitted && <div className="rounded-xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm font-medium text-accent-700">Registro salvo localmente na fila. {isOnline ? "Sincronização disparada." : "Sincroniza quando a conexão voltar."}</div>}
           {submitError && <div className="rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700">{submitError}</div>}
           <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
             <section className="space-y-4">
@@ -452,42 +452,42 @@ export default function CampoPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">\u00c1rea t\u00e9cnica *</label>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Área técnica *</label>
                     <select value={technicalArea} onChange={(event) => { const nextValue = event.target.value; setTechnicalArea(nextValue && isProjectDisciplineId(nextValue) ? nextValue : ""); setTechnicalObjectType(""); setRelatedAssetId(""); }} disabled={!selectedProject} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 disabled:cursor-not-allowed disabled:bg-muted">
-                      <option value="">Selecione a \u00e1rea</option>
+                      <option value="">Selecione a área</option>
                       {technicalAreaOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
-                    {selectedProject && technicalAreaOptions.length === 0 && <p className="mt-1 text-xs text-warning-700">Este projeto ainda n\u00e3o possui \u00e1reas t\u00e9cnicas vinculadas.</p>}
+                    {selectedProject && technicalAreaOptions.length === 0 && <p className="mt-1 text-xs text-warning-700">Este projeto ainda não possui áreas técnicas vinculadas.</p>}
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Objeto t\u00e9cnico *</label>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Objeto técnico *</label>
                     <select value={technicalObjectType} onChange={(event) => { const nextValue = event.target.value; setTechnicalObjectType(nextValue && isTechnicalObjectType(nextValue) ? nextValue : ""); setRelatedAssetId(""); }} disabled={!technicalArea} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 disabled:cursor-not-allowed disabled:bg-muted">
-                      <option value="">Selecione o objeto t\u00e9cnico</option>
+                      <option value="">Selecione o objeto técnico</option>
                       {technicalObjectOptions.map((objectType) => <option key={objectType.id} value={objectType.id}>{objectType.label}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Objeto relacionado</label>
                     <select value={relatedAssetId} onChange={(event) => setRelatedAssetId(event.target.value)} disabled={!projectId || projectAssetsLoading} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 disabled:cursor-not-allowed disabled:bg-muted">
-                      <option value="">Sem v\u00ednculo direto</option>
-                      {filteredAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name} \u00b7 {getCampoTechnicalObjectLabel(asset.technicalObjectType)}</option>)}
+                      <option value="">Sem vínculo direto</option>
+                      {filteredAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name} · {getCampoTechnicalObjectLabel(asset.technicalObjectType)}</option>)}
                     </select>
-                    <p className="mt-1 text-xs text-muted-foreground">{projectAssetsLoading ? "Carregando objetos t\u00e9cnicos do projeto..." : "Opcional. Use quando a vistoria ou ocorr\u00eancia apontar para um item t\u00e9cnico j\u00e1 cadastrado."}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{projectAssetsLoading ? "Carregando objetos técnicos do projeto..." : "Opcional. Use quando a vistoria ou ocorrência apontar para um item técnico já cadastrado."}</p>
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Status de fiscaliza\u00e7\u00e3o *</label>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Status de fiscalização *</label>
                     <select value={recordType === "VISTORIA" ? inspectionStatus : issueStatus} onChange={(event) => { if (recordType === "VISTORIA") setInspectionStatus(event.target.value as CampoInspectionStatus); else setIssueStatus(event.target.value as CampoIssueStatus); }} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30">
                       {fieldStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </div>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">{recordType === "VISTORIA" ? "T\u00edtulo da vistoria *" : "T\u00edtulo da ocorr\u00eancia *"}</label>
-                  <input type="text" value={name} onChange={(event) => setName(event.target.value)} placeholder={recordType === "VISTORIA" ? "Ex: Vistoria de drenagem no trecho da Rua Jo\u00e3o Pessoa" : "Ex: Ocorr\u00eancia de ponto apagado em lumin\u00e1ria da pra\u00e7a"} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30" />
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">{recordType === "VISTORIA" ? "Título da vistoria *" : "Título da ocorrência *"}</label>
+                  <input type="text" value={name} onChange={(event) => setName(event.target.value)} placeholder={recordType === "VISTORIA" ? "Ex: Vistoria de drenagem no trecho da Rua João Pessoa" : "Ex: Ocorrência de ponto apagado em luminária da praça"} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30" />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Observa\u00e7\u00f5es de campo</label>
-                  <textarea rows={4} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Achados, condi\u00e7\u00e3o encontrada, risco observado, encaminhamento ou recomenda\u00e7\u00e3o t\u00e9cnica..." className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30" />
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Observações de campo</label>
+                  <textarea rows={4} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Achados, condição encontrada, risco observado, encaminhamento ou recomendação técnica..." className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30" />
                 </div>
               </div>
             </section>
@@ -495,14 +495,14 @@ export default function CampoPage() {
             <section className="space-y-4">
               <div className="rounded-xl border bg-card p-4 space-y-3 text-sm">
                 <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Projeto</p><p className="mt-1 font-medium text-foreground">{selectedProject ? buildCampoProjectLabel(selectedProject) : "Selecione um projeto"}</p></div>
-                <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">\u00c1rea t\u00e9cnica</p><p className="mt-1 font-medium text-foreground">{getAreaLabel(technicalArea)}</p></div>
-                <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto t\u00e9cnico</p><p className="mt-1 font-medium text-foreground">{getObjectLabel(technicalObjectType)}</p></div>
+                <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Área técnica</p><p className="mt-1 font-medium text-foreground">{getAreaLabel(technicalArea)}</p></div>
+                <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto técnico</p><p className="mt-1 font-medium text-foreground">{getObjectLabel(technicalObjectType)}</p></div>
                 <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Etapa</p><p className="mt-1 font-medium text-foreground">{selectedPhase ? buildCampoPhaseLabel(selectedPhase) : "Sem etapa vinculada"}</p></div>
-                <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto relacionado</p><p className="mt-1 font-medium text-foreground">{selectedRelatedAsset ? `${selectedRelatedAsset.name} \u00b7 ${getCampoTechnicalObjectLabel(selectedRelatedAsset.technicalObjectType)}` : "Sem v\u00ednculo direto"}</p></div>
+                <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto relacionado</p><p className="mt-1 font-medium text-foreground">{selectedRelatedAsset ? `${selectedRelatedAsset.name} · ${getCampoTechnicalObjectLabel(selectedRelatedAsset.technicalObjectType)}` : "Sem vínculo direto"}</p></div>
               </div>
 
               <div className="rounded-xl border bg-card p-4">
-                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Localiza\u00e7\u00e3o GPS</p>
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Localização GPS</p>
                 {coords ? (
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -513,7 +513,7 @@ export default function CampoPage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <button onClick={handleGetGps} disabled={gpsLoading} className={cn("flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed py-3 text-sm font-medium transition-all", gpsLoading ? "cursor-wait border-brand-300 text-brand-500" : "border-border text-muted-foreground hover:border-brand-400 hover:text-brand-600")}>{gpsLoading ? "Obtendo localiza\u00e7\u00e3o..." : "Capturar GPS atual"}</button>
+                    <button onClick={handleGetGps} disabled={gpsLoading} className={cn("flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed py-3 text-sm font-medium transition-all", gpsLoading ? "cursor-wait border-brand-300 text-brand-500" : "border-border text-muted-foreground hover:border-brand-400 hover:text-brand-600")}>{gpsLoading ? "Obtendo localização..." : "Capturar GPS atual"}</button>
                     {gpsError && <p className="text-xs text-danger-600">{gpsError}</p>}
                   </div>
                 )}
@@ -537,22 +537,22 @@ export default function CampoPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
             <div>
               <p className="text-sm font-semibold text-foreground">{queueLoading ? "Carregando fila..." : `${queue.length} item(ns) na fila`}</p>
-              <p className="text-xs text-muted-foreground">{errorCount > 0 ? `${errorCount} item(ns) com falha precisam de aten\u00e7\u00e3o.` : "A fila sincroniza automaticamente quando a conex\u00e3o voltar."}</p>
+              <p className="text-xs text-muted-foreground">{errorCount > 0 ? `${errorCount} item(ns) com falha precisam de atenção.` : "A fila sincroniza automaticamente quando a conexão voltar."}</p>
             </div>
             <button onClick={() => void runSync()} disabled={!isOnline || queueSyncing || queueLoading || unsyncedCount === 0} className={cn("rounded-lg px-3 py-2 text-sm font-medium transition-all", !isOnline || queueSyncing || queueLoading || unsyncedCount === 0 ? "cursor-not-allowed bg-muted text-muted-foreground" : "bg-brand-600 text-white hover:bg-brand-700")}>{queueSyncing ? "Sincronizando..." : "Sincronizar agora"}</button>
           </div>
 
-          {queue.length === 0 && !queueLoading ? <div className="rounded-xl border border-dashed border-border bg-card px-6 py-10 text-center"><p className="text-sm font-medium text-foreground">Nenhum registro na fila.</p><p className="mt-1 text-sm text-muted-foreground">Capture uma vistoria ou ocorr\u00eancia para come\u00e7ar.</p></div> : queue.map((item) => {
+          {queue.length === 0 && !queueLoading ? <div className="rounded-xl border border-dashed border-border bg-card px-6 py-10 text-center"><p className="text-sm font-medium text-foreground">Nenhum registro na fila.</p><p className="mt-1 text-sm text-muted-foreground">Capture uma vistoria ou ocorrência para começar.</p></div> : queue.map((item) => {
             const syncState = SYNC_CONFIG[item.status];
             const attachmentTotal = item.attachmentCount || item.uploadedPhotoUrls.length;
-            const contextLine = [item.phaseLabel, item.technicalArea ? getAreaLabel(item.technicalArea) : null, item.technicalObjectType ? getObjectLabel(item.technicalObjectType) : null].filter(Boolean).join(" \u00b7 ");
+            const contextLine = [item.phaseLabel, item.technicalArea ? getAreaLabel(item.technicalArea) : null, item.technicalObjectType ? getObjectLabel(item.technicalObjectType) : null].filter(Boolean).join(" · ");
             const fieldStatusLabel = getQueueFieldStatusLabel(item);
             return (
               <div key={item.id} className="rounded-xl border bg-card p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <span className="status-badge bg-slate-100 text-slate-600 text-[9px]">{item.recordType === "VISTORIA" ? "Vistoria" : item.recordType === "OCORRENCIA" ? "Ocorr\u00eancia" : item.assetType}</span>
+                      <span className="status-badge bg-slate-100 text-slate-600 text-[9px]">{item.recordType === "VISTORIA" ? "Vistoria" : item.recordType === "OCORRENCIA" ? "Ocorrência" : item.assetType}</span>
                       {fieldStatusLabel && <span className="status-badge bg-brand-50 text-brand-700 text-[9px]">{fieldStatusLabel}</span>}
                       <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
                     </div>
@@ -562,7 +562,7 @@ export default function CampoPage() {
                     {item.note && <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{item.note}</p>}
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">{typeof item.lat === "number" && typeof item.lng === "number" && <span className="geo-label">{formatCoords(item.lat, item.lng)}</span>}<span>{formatDateTime(item.createdAt)}</span>{attachmentTotal > 0 && <span>{attachmentTotal} foto(s)</span>}</div>
                     <p className="mt-2 text-[11px] text-muted-foreground">{syncState.description}</p>
-                    {item.status === "error" && item.nextRetryAt && <p className="mt-1 text-[11px] text-warning-600">Pr\u00f3xima tentativa autom\u00e1tica: {formatDateTime(item.nextRetryAt)}</p>}
+                    {item.status === "error" && item.nextRetryAt && <p className="mt-1 text-[11px] text-warning-600">Próxima tentativa automática: {formatDateTime(item.nextRetryAt)}</p>}
                     {item.lastError && (item.status === "error" || item.status === "conflict") && <p className="mt-1 text-[11px] text-danger-600">Detalhe: {item.lastError}</p>}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
