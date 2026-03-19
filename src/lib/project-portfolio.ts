@@ -1,4 +1,4 @@
-export const PROJECT_STATUS_VALUES = [
+﻿export const PROJECT_STATUS_VALUES = [
   "PLANEJADO",
   "EM_ANDAMENTO",
   "PARALISADO",
@@ -126,3 +126,4 @@ export function getProjectPriorityTone(
       return "bg-slate-100 text-slate-700 ring-slate-200";
   }
 }
+

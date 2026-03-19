@@ -1,4 +1,4 @@
-import { formatBRLCompact, formatNumber } from "@/lib/utils";
+﻿import { formatBRLCompact, formatNumber } from "@/lib/utils";
 import type { ProjectPortfolioSummary } from "@/components/projetos/project-portfolio-model";
 
 type ProjectPortfolioMetricsProps = {
@@ -68,3 +68,4 @@ export function ProjectPortfolioMetrics({
     </section>
   );
 }
+

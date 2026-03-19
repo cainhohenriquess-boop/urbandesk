@@ -1,10 +1,22 @@
 ﻿import Link from "next/link";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { ProjectPortfolioClient } from "@/components/projetos/project-portfolio-client";
 import { resolveProjectsTenantId } from "@/lib/project-pages";
-import { getProjectSchemaCompatibility } from "@/lib/project-schema-compat";
+import {
+  getProjectSchemaCompatibility,
+  type ProjectSchemaCompatibility,
+} from "@/lib/project-schema-compat";
 
 type SearchParams = Promise<{ projectId?: string }>;
+
+const FALLBACK_SCHEMA_COMPATIBILITY: ProjectSchemaCompatibility = {
+  executiveSchemaReady: false,
+  governanceSchemaReady: false,
+  measurementSchemaReady: false,
+  schemaMode: "legacy",
+  notice: null,
+  measurementNotice: null,
+};
 
 export default async function ProjetosPage({
   searchParams,
@@ -18,8 +30,48 @@ export default async function ProjetosPage({
     redirect(`/app/projetos/${encodeURIComponent(projectId)}/mapa`);
   }
 
-  const tenantId = await resolveProjectsTenantId();
-  const projectSchema = await getProjectSchemaCompatibility();
+  let tenantId: string | null = null;
+  let projectSchema = FALLBACK_SCHEMA_COMPATIBILITY;
+
+  try {
+    [tenantId, projectSchema] = await Promise.all([
+      resolveProjectsTenantId(),
+      getProjectSchemaCompatibility(),
+    ]);
+  } catch (error) {
+    unstable_rethrow(error);
+    console.error("[PROJECTS_PAGE_RENDER_ERROR]", error);
+
+    return (
+      <section className="rounded-2xl border border-danger-200 bg-danger-50 px-6 py-10 shadow-card">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-danger-700">
+          Carteira de projetos indisponível
+        </p>
+        <h2 className="mt-2 font-display text-2xl font-800 text-danger-950">
+          Não foi possível carregar a página de projetos agora
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-danger-800">
+          Encontramos uma falha ao preparar a carteira do módulo. Você pode
+          tentar novamente agora ou voltar para a secretaria enquanto a
+          conexão se estabiliza.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link
+            href="/app/projetos"
+            className="rounded-lg bg-danger-600 px-4 py-2 text-sm font-semibold text-white hover:bg-danger-500"
+          >
+            Tentar novamente
+          </Link>
+          <Link
+            href="/app/secretaria"
+            className="rounded-lg border border-danger-200 px-4 py-2 text-sm font-semibold text-danger-900 hover:bg-danger-100"
+          >
+            Voltar para a secretaria
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   if (!tenantId) {
     return (
@@ -95,3 +147,4 @@ export default async function ProjetosPage({
     </div>
   );
 }
+

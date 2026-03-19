@@ -1,0 +1,138 @@
+
+> urbandesk@0.1.0 dev
+> next dev
+
+   ▲ Next.js 15.5.12
+   - Local:        http://localhost:3000
+   - Network:      http://172.16.0.2:3000
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 3.7s
+ ○ Compiling /api/auth/[...nextauth] ...
+ ✓ Compiled /api/auth/[...nextauth] in 3.7s (535 modules)
+ GET /api/auth/csrf 200 in 5029ms
+ POST /api/auth/callback/credentials 200 in 69ms
+ ○ Compiling /app/projetos ...
+ ✓ Compiled /app/projetos in 6.9s (1039 modules)
+ GET /app/projetos 307 in 7944ms
+ ✓ Compiled in 1033ms (306 modules)
+ ○ Compiling /login ...
+ ✓ Compiled /login in 1115ms (1005 modules)
+ GET /login 200 in 1519ms
+ GET /api/auth/csrf 200 in 169ms
+ GET /api/auth/csrf 200 in 48ms
+prisma:query SELECT "public"."users"."id", "public"."users"."name", "public"."users"."email", "public"."users"."passwordHash", "public"."users"."role"::text, "public"."users"."avatarUrl", "public"."users"."isActive", "public"."users"."createdAt", "public"."users"."updatedAt", "public"."users"."tenantId" FROM "public"."users" WHERE ("public"."users"."email" = $1 AND 1=1) LIMIT $2 OFFSET $3
+ POST /api/auth/callback/credentials 401 in 921ms
+ GET /app/projetos 307 in 606ms
+ GET /api/auth/csrf 200 in 69ms
+prisma:query SELECT 1
+prisma:query SELECT "public"."users"."id", "public"."users"."name", "public"."users"."email", "public"."users"."passwordHash", "public"."users"."role"::text, "public"."users"."avatarUrl", "public"."users"."isActive", "public"."users"."createdAt", "public"."users"."updatedAt", "public"."users"."tenantId" FROM "public"."users" WHERE ("public"."users"."email" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query INSERT INTO "public"."audit_logs" ("id","action","entityType","entityId","userId","userName","userEmail","userRole","tenantId","ip","userAgent","metadata","createdAt") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING "public"."audit_logs"."id", "public"."audit_logs"."action", "public"."audit_logs"."entityType", "public"."audit_logs"."entityId", "public"."audit_logs"."userId", "public"."audit_logs"."userName", "public"."audit_logs"."userEmail", "public"."audit_logs"."userRole", "public"."audit_logs"."tenantId", "public"."audit_logs"."ip", "public"."audit_logs"."userAgent", "public"."audit_logs"."metadata", "public"."audit_logs"."createdAt"
+ POST /api/auth/callback/credentials 200 in 420ms
+ GET /api/auth/csrf 200 in 52ms
+prisma:query SELECT "public"."users"."id", "public"."users"."name", "public"."users"."email", "public"."users"."passwordHash", "public"."users"."role"::text, "public"."users"."avatarUrl", "public"."users"."isActive", "public"."users"."createdAt", "public"."users"."updatedAt", "public"."users"."tenantId" FROM "public"."users" WHERE ("public"."users"."email" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."tenants"."id", "public"."tenants"."name", "public"."tenants"."status"::text, "public"."tenants"."trialEndsAt" FROM "public"."tenants" WHERE "public"."tenants"."id" IN ($1) OFFSET $2
+ POST /api/auth/callback/credentials 401 in 350ms
+ GET /api/auth/csrf 200 in 55ms
+prisma:query SELECT "public"."users"."id", "public"."users"."name", "public"."users"."email", "public"."users"."passwordHash", "public"."users"."role"::text, "public"."users"."avatarUrl", "public"."users"."isActive", "public"."users"."createdAt", "public"."users"."updatedAt", "public"."users"."tenantId" FROM "public"."users" WHERE ("public"."users"."email" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."tenants"."id", "public"."tenants"."name", "public"."tenants"."status"::text, "public"."tenants"."trialEndsAt" FROM "public"."tenants" WHERE "public"."tenants"."id" IN ($1) OFFSET $2
+ POST /api/auth/callback/credentials 401 in 278ms
+ GET /api/auth/csrf 200 in 72ms
+prisma:query SELECT 1
+prisma:query SELECT "public"."users"."id", "public"."users"."name", "public"."users"."email", "public"."users"."passwordHash", "public"."users"."role"::text, "public"."users"."avatarUrl", "public"."users"."isActive", "public"."users"."createdAt", "public"."users"."updatedAt", "public"."users"."tenantId" FROM "public"."users" WHERE ("public"."users"."email" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query INSERT INTO "public"."audit_logs" ("id","action","entityType","entityId","userId","userName","userEmail","userRole","tenantId","ip","userAgent","metadata","createdAt") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING "public"."audit_logs"."id", "public"."audit_logs"."action", "public"."audit_logs"."entityType", "public"."audit_logs"."entityId", "public"."audit_logs"."userId", "public"."audit_logs"."userName", "public"."audit_logs"."userEmail", "public"."audit_logs"."userRole", "public"."audit_logs"."tenantId", "public"."audit_logs"."ip", "public"."audit_logs"."userAgent", "public"."audit_logs"."metadata", "public"."audit_logs"."createdAt"
+ POST /api/auth/callback/credentials 200 in 355ms
+prisma:query SELECT "public"."tenants"."id", "public"."tenants"."name", "public"."tenants"."trialEndsAt" FROM "public"."tenants" WHERE ("public"."tenants"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query 
+    SELECT
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'projects'
+          AND column_name = 'code'
+      ) AS "hasProjectCode",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'projects'
+          AND column_name = 'estimatedBudget'
+      ) AS "hasEstimatedBudget",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'project_contracts'
+      ) AS "hasProjectContracts",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'project_comments'
+      ) AS "hasProjectComments",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'project_measurements'
+      ) AS "hasProjectMeasurements",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_measurements'
+          AND column_name = 'technicalArea'
+      ) AS "hasMeasurementTechnicalArea"
+  
+ GET /app/projetos 200 in 520ms
+ ○ Compiling /api/projects ...
+ ✓ Compiled /api/projects in 1391ms (1082 modules)
+prisma:query 
+    SELECT
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'projects'
+          AND column_name = 'code'
+      ) AS "hasProjectCode",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'projects'
+          AND column_name = 'estimatedBudget'
+      ) AS "hasEstimatedBudget",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'project_contracts'
+      ) AS "hasProjectContracts",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'project_comments'
+      ) AS "hasProjectComments",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'project_measurements'
+      ) AS "hasProjectMeasurements",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_measurements'
+          AND column_name = 'technicalArea'
+      ) AS "hasMeasurementTechnicalArea"
+  
+prisma:query SELECT "public"."projects"."id", "public"."projects"."responsibleDepartment", "public"."projects"."neighborhood", "public"."projects"."projectType"::text FROM "public"."projects" WHERE "public"."projects"."tenantId" = $1 OFFSET $2
+prisma:query SELECT "public"."projects"."id", "public"."projects"."status"::text, "public"."projects"."operationalStatus"::text, "public"."projects"."budget", "public"."projects"."estimatedBudget", "public"."projects"."plannedEndDate", "public"."projects"."endDate" FROM "public"."projects" WHERE ("public"."projects"."tenantId" = $1 AND "public"."projects"."status" <> CAST($2::text AS "public"."ProjectStatus")) OFFSET $3
+prisma:query SELECT COUNT(*) FROM (SELECT "public"."projects"."id" FROM "public"."projects" WHERE ("public"."projects"."tenantId" = $1 AND "public"."projects"."status" <> CAST($2::text AS "public"."ProjectStatus")) OFFSET $3) AS "sub"
+prisma:query SELECT "public"."projects"."id", "public"."projects"."code", "public"."projects"."name", "public"."projects"."description", "public"."projects"."projectType"::text, "public"."projects"."responsibleDepartment", "public"."projects"."responsibleArea", "public"."projects"."technicalAreas"::text[], "public"."projects"."neighborhood", "public"."projects"."district", "public"."projects"."region", "public"."projects"."priority"::text, "public"."projects"."criticality"::text, "public"."projects"."status"::text, "public"."projects"."operationalStatus"::text, "public"."projects"."publicVisibility"::text, "public"."projects"."budget", "public"."projects"."estimatedBudget", "public"."projects"."contractedBudget", "public"."projects"."measuredBudget", "public"."projects"."paidBudget", "public"."projects"."startDate", "public"."projects"."endDate", "public"."projects"."plannedStartDate", "public"."projects"."plannedEndDate", "public"."projects"."actualStartDate", "public"."projects"."actualEndDate", "public"."projects"."completionPct", "public"."projects"."physicalProgressPct", "public"."projects"."financialProgressPct", "public"."projects"."managerId", "public"."projects"."inspectorId", "public"."projects"."contractorName", "public"."projects"."address", "public"."projects"."referencePoint", "public"."projects"."procurementProcess", "public"."projects"."procurementModality", "public"."projects"."contractNumber", "public"."projects"."metadata", "public"."projects"."geomWkt", "public"."projects"."createdAt", "public"."projects"."updatedAt", "public"."projects"."tenantId", COALESCE("aggr_selection_0_Asset"."_aggr_count_assets", 0) AS "_aggr_count_assets" FROM "public"."projects" LEFT JOIN (SELECT "public"."assets"."projectId", COUNT(*) AS "_aggr_count_assets" FROM "public"."assets" WHERE 1=1 GROUP BY "public"."assets"."projectId") AS "aggr_selection_0_Asset" ON ("public"."projects"."id" = "aggr_selection_0_Asset"."projectId") WHERE ("public"."projects"."tenantId" = $1 AND "public"."projects"."status" <> CAST($2::text AS "public"."ProjectStatus")) ORDER BY "public"."projects"."updatedAt" DESC, "public"."projects"."createdAt" DESC LIMIT $3 OFFSET $4
+ GET /api/projects?limit=18 200 in 2244ms

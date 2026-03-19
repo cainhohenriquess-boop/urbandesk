@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import {
+  type FormEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -69,6 +70,137 @@ const EMPTY_FORM: ProjectPortfolioFormState = {
   plannedEndDate: "",
   completionPct: "0",
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeString(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function normalizeNullableString(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function normalizeNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeNullableNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeTechnicalAreas(value: unknown): ProjectPortfolioItem["technicalAreas"] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter(
+    (entry): entry is ProjectPortfolioItem["technicalAreas"][number] =>
+      typeof entry === "string" && entry.trim().length > 0
+  );
+}
+
+function normalizeProject(project: unknown): ProjectPortfolioItem | null {
+  if (!isRecord(project)) return null;
+
+  const id = normalizeString(project.id);
+  const name = normalizeString(project.name);
+  if (!id || !name) return null;
+
+  return {
+    id,
+    code: normalizeNullableString(project.code),
+    name,
+    description: normalizeNullableString(project.description),
+    status: (normalizeString(project.status) ||
+      "PLANEJADO") as ProjectPortfolioItem["status"],
+    projectType: (normalizeNullableString(project.projectType) ??
+      null) as ProjectPortfolioItem["projectType"],
+    responsibleDepartment: normalizeNullableString(project.responsibleDepartment),
+    neighborhood: normalizeNullableString(project.neighborhood),
+    district: normalizeNullableString(project.district),
+    region: normalizeNullableString(project.region),
+    technicalAreas: normalizeTechnicalAreas(project.technicalAreas),
+    priority: (normalizeString(project.priority) ||
+      "MEDIA") as ProjectPortfolioItem["priority"],
+    budget: normalizeNullableNumber(project.budget),
+    estimatedBudget: normalizeNullableNumber(project.estimatedBudget),
+    startDate: normalizeNullableString(project.startDate),
+    endDate: normalizeNullableString(project.endDate),
+    plannedStartDate: normalizeNullableString(project.plannedStartDate),
+    plannedEndDate: normalizeNullableString(project.plannedEndDate),
+    completionPct: normalizeNumber(project.completionPct),
+    physicalProgressPct: normalizeNumber(project.physicalProgressPct),
+    operationalStatus: normalizeString(project.operationalStatus),
+    geomWkt: normalizeNullableString(project.geomWkt),
+    createdAt: normalizeString(project.createdAt),
+    updatedAt: normalizeString(project.updatedAt),
+    _count: isRecord(project._count)
+      ? { assets: normalizeNumber(project._count.assets) }
+      : undefined,
+  };
+}
+
+function normalizePortfolioResponse(payload: unknown): ProjectPortfolioResponse {
+  const record = isRecord(payload) ? payload : {};
+  const data = Array.isArray(record.data)
+    ? record.data
+        .map((project) => normalizeProject(project))
+        .filter((project): project is ProjectPortfolioItem => Boolean(project))
+    : [];
+  const filterOptions = isRecord(record.filterOptions) ? record.filterOptions : {};
+
+  return {
+    data,
+    total: normalizeNumber(record.total),
+    page: Math.max(1, normalizeNumber(record.page, 1)),
+    perPage: Math.max(1, normalizeNumber(record.perPage, 18)),
+    pages: Math.max(1, normalizeNumber(record.pages, 1)),
+    summary: isRecord(record.summary)
+      ? {
+          totalProjects: normalizeNumber(record.summary.totalProjects),
+          delayedProjects: normalizeNumber(record.summary.delayedProjects),
+          inExecutionProjects: normalizeNumber(record.summary.inExecutionProjects),
+          completedProjects: normalizeNumber(record.summary.completedProjects),
+          consolidatedBudget: normalizeNumber(record.summary.consolidatedBudget),
+        }
+      : EMPTY_SUMMARY,
+    filterOptions: {
+      departments: Array.isArray(filterOptions.departments)
+        ? filterOptions.departments.filter(
+            (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+          )
+        : [],
+      neighborhoods: Array.isArray(filterOptions.neighborhoods)
+        ? filterOptions.neighborhoods.filter(
+            (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+          )
+        : [],
+      types: Array.isArray(filterOptions.types)
+        ? filterOptions.types.filter(
+            (entry): entry is ProjectPortfolioResponse["filterOptions"]["types"][number] =>
+              typeof entry === "string" && entry.trim().length > 0
+          )
+        : [],
+      priorities: Array.isArray(filterOptions.priorities)
+        ? filterOptions.priorities.filter(
+            (
+              entry
+            ): entry is ProjectPortfolioResponse["filterOptions"]["priorities"][number] =>
+              typeof entry === "string" && entry.trim().length > 0
+          )
+        : [],
+      statuses: Array.isArray(filterOptions.statuses)
+        ? filterOptions.statuses.filter(
+            (
+              entry
+            ): entry is ProjectPortfolioResponse["filterOptions"]["statuses"][number] =>
+              typeof entry === "string" && entry.trim().length > 0
+          )
+        : [],
+    },
+  };
+}
 
 function formatDateInput(raw: string | null): string {
   if (!raw) return "";
@@ -217,7 +349,7 @@ export function ProjectPortfolioClient() {
         );
       }
 
-      const parsed = payload as ProjectPortfolioResponse;
+      const parsed = normalizePortfolioResponse(payload);
       setProjects(parsed.data);
       setSummary(parsed.summary);
       setOptions(parsed.filterOptions);
@@ -230,6 +362,7 @@ export function ProjectPortfolioClient() {
       );
       setProjects([]);
       setSummary(EMPTY_SUMMARY);
+      setOptions(EMPTY_OPTIONS);
       setTotal(0);
       setPages(1);
     } finally {
@@ -259,7 +392,7 @@ export function ProjectPortfolioClient() {
     patchUrlState({ filters: DEFAULT_PROJECT_PORTFOLIO_FILTERS, page: 1 });
   }, [patchUrlState]);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const validationError = validateForm(form);

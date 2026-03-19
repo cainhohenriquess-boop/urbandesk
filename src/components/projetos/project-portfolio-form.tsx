@@ -1,13 +1,12 @@
-"use client";
+﻿"use client";
 
+import type { FormEvent } from "react";
 import {
   PROJECT_PRIORITY_OPTIONS,
   PROJECT_STATUS_OPTIONS,
   PROJECT_TYPE_OPTIONS,
 } from "@/lib/project-portfolio";
-import {
-  PRISMA_PROJECT_TECHNICAL_AREAS,
-} from "@/lib/project-disciplines";
+import { PRISMA_PROJECT_TECHNICAL_AREAS } from "@/lib/project-disciplines";
 import { getProjectTechnicalAreaLabel } from "@/lib/project-labels";
 import type { ProjectPortfolioFormState } from "@/components/projetos/project-portfolio-model";
 
@@ -17,7 +16,7 @@ type ProjectPortfolioFormProps = {
   isEditing: boolean;
   submitError: string | null;
   onChange: (patch: Partial<ProjectPortfolioFormState>) => void;
-  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
 };
 
@@ -135,8 +134,7 @@ export function ProjectPortfolioForm({
               value={form.projectType}
               onChange={(event) =>
                 onChange({
-                  projectType:
-                    event.target.value as ProjectPortfolioFormState["projectType"],
+                  projectType: event.target.value as ProjectPortfolioFormState["projectType"],
                 })
               }
               className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
@@ -179,9 +177,7 @@ export function ProjectPortfolioForm({
             </span>
             <input
               value={form.responsibleDepartment}
-              onChange={(event) =>
-                onChange({ responsibleDepartment: event.target.value })
-              }
+              onChange={(event) => onChange({ responsibleDepartment: event.target.value })}
               placeholder="Secretaria ou órgão responsável"
               className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
             />

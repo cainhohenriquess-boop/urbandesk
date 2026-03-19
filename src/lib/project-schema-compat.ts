@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+﻿import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export type ProjectSchemaMode = "full" | "legacy";
@@ -117,3 +117,5 @@ export function isProjectSchemaCompatError(error: unknown) {
     (error.code === "P2021" || error.code === "P2022")
   );
 }
+
+
