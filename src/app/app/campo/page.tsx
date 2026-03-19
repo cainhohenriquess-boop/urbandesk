@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import { cn, formatCoords, formatDateTime } from "@/lib/utils";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
-  type CampoAssetType,
+  type CampoInspectionStatus,
+  type CampoIssueStatus,
   type CampoQueueItem,
   type CampoSyncStatus,
   createCampoQueueItem,
@@ -13,89 +13,142 @@ import {
   removeCampoQueueItem,
   syncCampoQueueNow,
 } from "@/lib/offline/campo-queue";
+import {
+  CAMPO_INSPECTION_STATUS_VALUES,
+  CAMPO_ISSUE_STATUS_VALUES,
+  buildCampoPhaseLabel,
+  buildCampoProjectLabel,
+  getCampoTechnicalAreaOptions,
+  getCampoTechnicalObjectLabel,
+  type CampoProjectAssetOption,
+  type CampoProjectOption,
+} from "@/lib/campo-project-links";
+import {
+  PRISMA_PROJECT_TECHNICAL_AREAS,
+  getDisciplineObjectTypes,
+  getTechnicalObjectLabel,
+  isProjectDisciplineId,
+  isTechnicalObjectType,
+  type ProjectDisciplineId,
+  type TechnicalObjectDefinition,
+  type TechnicalObjectTypeId,
+} from "@/lib/project-disciplines";
+import {
+  getProjectInspectionStatusLabel,
+  getProjectIssueStatusLabel,
+  getProjectTechnicalAreaLabel,
+} from "@/lib/project-labels";
+import { cn, formatCoords, formatDateTime } from "@/lib/utils";
 
 const MAX_PHOTOS = 5;
-
 type ActiveTab = "capturar" | "fila";
+type RecordType = "VISTORIA" | "OCORRENCIA";
 
-const SYNC_CONFIG: Record<
-  CampoSyncStatus,
-  { label: string; color: string; description: string; spin?: boolean }
-> = {
-  pending: {
-    label: "Pendente",
-    color: "text-warning-500",
-    description: "Aguardando envio para nuvem.",
-  },
-  syncing: {
-    label: "Sincronizando",
-    color: "text-brand-500",
-    description: "Enviando anexos e metadados.",
-    spin: true,
-  },
-  synced: {
-    label: "Sincronizado",
-    color: "text-accent-500",
-    description: "Item salvo com sucesso no servidor.",
-  },
-  error: {
-    label: "Erro",
-    color: "text-danger-500",
-    description: "Falha no envio. Retry automático habilitado.",
-  },
-  conflict: {
-    label: "Conflito",
-    color: "text-danger-600",
-    description: "Conflito detectado (idempotência). Requer retry manual.",
-  },
+type SyncVisual = { label: string; color: string; description: string; spin?: boolean };
+
+const SYNC_CONFIG: Record<CampoSyncStatus, SyncVisual> = {
+  pending: { label: "Pendente", color: "text-warning-500", description: "Aguardando envio para a nuvem." },
+  syncing: { label: "Sincronizando", color: "text-brand-500", description: "Enviando anexos e metadados.", spin: true },
+  synced: { label: "Sincronizado", color: "text-accent-500", description: "Registro salvo com sucesso no servidor." },
+  error: { label: "Erro", color: "text-danger-500", description: "Falha no envio. Nova tentativa autom\u00e1tica habilitada." },
+  conflict: { label: "Conflito", color: "text-danger-600", description: "Conflito detectado. Requer nova tentativa manual." },
 };
 
-const ASSET_TYPES: { value: CampoAssetType; label: string; desc: string }[] = [
-  { value: "PONTO", label: "Ponto", desc: "Hidrante, bueiro..." },
-  { value: "TRECHO", label: "Trecho", desc: "Via, rede..." },
-  { value: "AREA", label: "Área", desc: "Lote, praça..." },
+const RECORD_TYPES: Array<{ value: RecordType; label: string; desc: string }> = [
+  { value: "VISTORIA", label: "Vistoria", desc: "Fiscaliza\u00e7\u00e3o t\u00e9cnica vinculada a projeto, etapa e objeto." },
+  { value: "OCORRENCIA", label: "Ocorr\u00eancia", desc: "Registro de problema, n\u00e3o conformidade ou acionamento de campo." },
 ];
+
+function getFieldStatusOptions(recordType: RecordType) {
+  return recordType === "VISTORIA"
+    ? CAMPO_INSPECTION_STATUS_VALUES.map((value) => ({ value, label: getProjectInspectionStatusLabel(value) }))
+    : CAMPO_ISSUE_STATUS_VALUES.map((value) => ({ value, label: getProjectIssueStatusLabel(value) }));
+}
+
+function getQueueFieldStatusLabel(item: CampoQueueItem) {
+  if (item.recordType === "VISTORIA") return item.inspectionStatus ? getProjectInspectionStatusLabel(item.inspectionStatus) : null;
+  if (item.recordType === "OCORRENCIA") return item.issueStatus ? getProjectIssueStatusLabel(item.issueStatus) : null;
+  return null;
+}
+
+function getAreaLabel(value: string | null | undefined) {
+  return value &&
+    isProjectDisciplineId(value) &&
+    PRISMA_PROJECT_TECHNICAL_AREAS.includes(
+      value as (typeof PRISMA_PROJECT_TECHNICAL_AREAS)[number]
+    )
+    ? getProjectTechnicalAreaLabel(value as (typeof PRISMA_PROJECT_TECHNICAL_AREAS)[number])
+    : "N\u00e3o informado";
+}
+
+function getObjectLabel(value: string | null | undefined) {
+  return value && isTechnicalObjectType(value) ? getTechnicalObjectLabel(value) : "N\u00e3o informado";
+}
 
 export default function CampoPage() {
   const [tab, setTab] = useState<ActiveTab>("capturar");
-  const [assetType, setAssetType] = useState<CampoAssetType>("PONTO");
+  const [recordType, setRecordType] = useState<RecordType>("VISTORIA");
+  const [projectId, setProjectId] = useState("");
+  const [phaseId, setPhaseId] = useState("");
+  const [technicalArea, setTechnicalArea] = useState<ProjectDisciplineId | "">("");
+  const [technicalObjectType, setTechnicalObjectType] = useState<TechnicalObjectTypeId | "">("");
+  const [relatedAssetId, setRelatedAssetId] = useState("");
+  const [inspectionStatus, setInspectionStatus] = useState<CampoInspectionStatus>("REALIZADA");
+  const [issueStatus, setIssueStatus] = useState<CampoIssueStatus>("ABERTA");
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
-
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
-
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
-
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
+  const [projects, setProjects] = useState<CampoProjectOption[]>([]);
+  const [projectAssets, setProjectAssets] = useState<CampoProjectAssetOption[]>([]);
+  const [contextLoading, setContextLoading] = useState(true);
+  const [projectAssetsLoading, setProjectAssetsLoading] = useState(false);
+  const [contextError, setContextError] = useState<string | null>(null);
   const [queue, setQueue] = useState<CampoQueueItem[]>([]);
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueSyncing, setQueueSyncing] = useState(false);
-
   const [isOnline, setIsOnline] = useState(true);
   const [offlineSupported, setOfflineSupported] = useState(true);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const refreshQueue = useCallback(async () => {
-    if (!isCampoOfflineSupported()) {
-      setQueue([]);
-      return;
-    }
+  const selectedProject = useMemo(() => projects.find((project) => project.id === projectId) ?? null, [projectId, projects]);
+  const selectedPhase = useMemo(() => selectedProject?.phases.find((phase) => phase.id === phaseId) ?? null, [phaseId, selectedProject]);
+  const technicalAreaOptions = useMemo(() => (selectedProject ? getCampoTechnicalAreaOptions(selectedProject.technicalAreas) : []), [selectedProject]);
+  const technicalObjectOptions = useMemo(
+    () =>
+      technicalArea
+        ? getDisciplineObjectTypes(technicalArea).filter(
+            (option): option is TechnicalObjectDefinition => Boolean(option)
+          )
+        : [],
+    [technicalArea]
+  );
+  const filteredAssets = useMemo(() => {
+    const allowedAreas = new Set<string>(technicalAreaOptions.map((option) => option.value));
+    return projectAssets.filter((asset) => {
+      if (asset.technicalArea && !allowedAreas.has(asset.technicalArea)) return false;
+      if (technicalArea && asset.technicalArea !== technicalArea) return false;
+      if (technicalObjectType && asset.technicalObjectType !== technicalObjectType) return false;
+      return true;
+    });
+  }, [projectAssets, technicalArea, technicalAreaOptions, technicalObjectType]);
+  const selectedRelatedAsset = useMemo(() => projectAssets.find((asset) => asset.id === relatedAssetId) ?? null, [projectAssets, relatedAssetId]);
+  const fieldStatusOptions = useMemo(() => getFieldStatusOptions(recordType), [recordType]);
 
-    const items = await listCampoQueueItems();
-    setQueue(items);
+  const refreshQueue = useCallback(async () => {
+    if (!isCampoOfflineSupported()) return void setQueue([]);
+    setQueue(await listCampoQueueItems());
   }, []);
 
   const runSync = useCallback(async () => {
     if (!isCampoOfflineSupported()) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
-
     setQueueSyncing(true);
     try {
       await syncCampoQueueNow();
@@ -107,104 +160,165 @@ export default function CampoPage() {
     }
   }, [refreshQueue]);
 
+  const loadProjects = useCallback(async () => {
+    setContextLoading(true);
+    setContextError(null);
+    try {
+      const response = await fetch("/api/campo/context", { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(typeof payload?.error === "string" ? payload.error : "N\u00e3o foi poss\u00edvel carregar o contexto de projetos.");
+      const nextProjects = Array.isArray(payload?.data?.projects) ? payload.data.projects : [];
+      setProjects(nextProjects);
+      if (nextProjects.length === 1 && !projectId) setProjectId(nextProjects[0].id);
+    } catch (error) {
+      console.error("Falha ao carregar projetos de campo:", error);
+      setContextError(error instanceof Error && error.message ? error.message : "Falha ao carregar os projetos dispon\u00edveis.");
+    } finally {
+      setContextLoading(false);
+    }
+  }, [projectId]);
+
+  const loadProjectAssets = useCallback(async (nextProjectId: string) => {
+    if (!nextProjectId) return void setProjectAssets([]);
+    setProjectAssetsLoading(true);
+    setContextError(null);
+    try {
+      const response = await fetch(`/api/campo/context?projectId=${encodeURIComponent(nextProjectId)}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(typeof payload?.error === "string" ? payload.error : "N\u00e3o foi poss\u00edvel carregar os objetos t\u00e9cnicos do projeto.");
+      setProjectAssets(Array.isArray(payload?.data?.assets) ? payload.data.assets : []);
+    } catch (error) {
+      console.error("Falha ao carregar objetos t\u00e9cnicos para campo:", error);
+      setContextError(error instanceof Error && error.message ? error.message : "Falha ao carregar os objetos t\u00e9cnicos do projeto.");
+      setProjectAssets([]);
+    } finally {
+      setProjectAssetsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const supported = isCampoOfflineSupported();
     setOfflineSupported(supported);
     setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : false);
-
-    if (!supported) {
-      setQueueLoading(false);
-      return;
-    }
-
+    if (!supported) return void setQueueLoading(false);
     let intervalId: number | null = null;
-
     const onOnline = () => {
       setIsOnline(true);
       void runSync();
     };
-
-    const onOffline = () => {
-      setIsOnline(false);
-    };
-
+    const onOffline = () => setIsOnline(false);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
-
-    void refreshQueue()
-      .then(() => {
-        if (navigator.onLine) {
-          void runSync();
-        }
-      })
-      .finally(() => {
-        setQueueLoading(false);
-      });
-
+    void refreshQueue().then(() => {
+      if (navigator.onLine) void runSync();
+    }).finally(() => setQueueLoading(false));
     intervalId = window.setInterval(() => {
-      if (navigator.onLine) {
-        void runSync();
-      }
+      if (navigator.onLine) void runSync();
     }, 15_000);
-
     return () => {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
-      if (intervalId !== null) {
-        window.clearInterval(intervalId);
-      }
+      if (intervalId !== null) window.clearInterval(intervalId);
     };
   }, [refreshQueue, runSync]);
 
   useEffect(() => {
-    return () => {
-      previews.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [previews]);
+    void loadProjects();
+  }, [loadProjects]);
+
+  useEffect(() => {
+    if (!projectId) return void setProjectAssets([]);
+    void loadProjectAssets(projectId);
+  }, [loadProjectAssets, projectId]);
+
+  useEffect(() => () => previews.forEach((url) => URL.revokeObjectURL(url)), [previews]);
+
+  useEffect(() => {
+    if (!selectedProject) {
+      setPhaseId("");
+      setTechnicalArea("");
+      setTechnicalObjectType("");
+      setRelatedAssetId("");
+      return;
+    }
+    const allowedAreas = new Set<string>(technicalAreaOptions.map((option) => option.value));
+    if (technicalArea && !allowedAreas.has(technicalArea)) {
+      setTechnicalArea("");
+      setTechnicalObjectType("");
+      setRelatedAssetId("");
+    }
+    if (phaseId && !selectedProject.phases.some((phase) => phase.id === phaseId)) {
+      setPhaseId("");
+    }
+  }, [phaseId, selectedProject, technicalArea, technicalAreaOptions]);
+
+  useEffect(() => {
+    if (technicalArea && !technicalObjectOptions.some((option) => option.id === technicalObjectType)) {
+      setTechnicalObjectType("");
+    }
+  }, [technicalArea, technicalObjectOptions, technicalObjectType]);
+
+  useEffect(() => {
+    if (!selectedPhase?.technicalArea || !isProjectDisciplineId(selectedPhase.technicalArea)) return;
+    if (technicalArea !== selectedPhase.technicalArea) setTechnicalArea(selectedPhase.technicalArea);
+  }, [selectedPhase, technicalArea]);
+
+  useEffect(() => {
+    if (!selectedProject || technicalArea || technicalAreaOptions.length !== 1) return;
+    setTechnicalArea(technicalAreaOptions[0].value);
+  }, [selectedProject, technicalArea, technicalAreaOptions]);
+
+  useEffect(() => {
+    if (!selectedRelatedAsset) return;
+    const assetArea =
+      selectedRelatedAsset.technicalArea && isProjectDisciplineId(selectedRelatedAsset.technicalArea)
+        ? selectedRelatedAsset.technicalArea
+        : null;
+    const assetAreaAllowed =
+      assetArea && technicalAreaOptions.some((option) => option.value === assetArea);
+    if (assetAreaAllowed && assetArea !== technicalArea) {
+      setTechnicalArea(assetArea);
+    }
+    if (
+      assetAreaAllowed &&
+      selectedRelatedAsset.technicalObjectType &&
+      selectedRelatedAsset.technicalObjectType !== technicalObjectType
+    ) {
+      setTechnicalObjectType(selectedRelatedAsset.technicalObjectType);
+    }
+  }, [selectedRelatedAsset, technicalArea, technicalAreaOptions, technicalObjectType]);
 
   const handleGetGps = useCallback(() => {
     setGpsLoading(true);
     setGpsError(null);
-
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGpsError("Geolocalização indisponível neste dispositivo.");
+      setGpsError("Geolocaliza\u00e7\u00e3o indispon\u00edvel neste dispositivo.");
       setGpsLoading(false);
       return;
     }
-
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      (position) => {
+        setCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
         setGpsLoading(false);
       },
       () => {
-        setGpsError("GPS indisponível. Verifique as permissões.");
+        setGpsError("GPS indispon\u00edvel. Verifique as permiss\u00f5es do navegador.");
         setGpsLoading(false);
       },
       { enableHighAccuracy: true, timeout: 10_000 }
     );
   }, []);
 
-  const handlePhotoChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files ?? []);
-      if (files.length === 0) return;
-
-      const availableSlots = Math.max(0, MAX_PHOTOS - photos.length);
-      if (availableSlots === 0) return;
-
-      const acceptedFiles = files.slice(0, availableSlots);
-      if (acceptedFiles.length === 0) return;
-
-      setPhotos((prev) => [...prev, ...acceptedFiles]);
-      setPreviews((prev) => [...prev, ...acceptedFiles.map((file) => URL.createObjectURL(file))]);
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    },
-    [photos.length]
-  );
+  const handlePhotoChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) return;
+    const availableSlots = Math.max(0, MAX_PHOTOS - photos.length);
+    const acceptedFiles = files.slice(0, availableSlots);
+    if (acceptedFiles.length === 0) return;
+    setPhotos((current) => [...current, ...acceptedFiles]);
+    setPreviews((current) => [...current, ...acceptedFiles.map((file) => URL.createObjectURL(file))]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [photos.length]);
 
   const clearCaptureForm = useCallback(() => {
     setName("");
@@ -213,421 +327,255 @@ export default function CampoPage() {
     setPhotos([]);
     previews.forEach((url) => URL.revokeObjectURL(url));
     setPreviews([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    setRelatedAssetId("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }, [previews]);
 
   const removePhoto = useCallback((index: number) => {
-    setPhotos((prev) => prev.filter((_, i) => i !== index));
-    setPreviews((prev) => {
-      const target = prev[index];
+    setPhotos((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setPreviews((current) => {
+      const target = current[index];
       if (target) URL.revokeObjectURL(target);
-      return prev.filter((_, i) => i !== index);
+      return current.filter((_, itemIndex) => itemIndex !== index);
     });
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !projectId || !technicalArea || !technicalObjectType) return;
     setSubmitting(true);
     setSubmitError(null);
-
     try {
-      if (!isCampoOfflineSupported()) {
-        throw new Error("Seu navegador não suporta fila offline (IndexedDB).");
-      }
-
+      if (!isCampoOfflineSupported()) throw new Error("Seu navegador n\u00e3o suporta fila offline com IndexedDB.");
       await createCampoQueueItem({
-        assetType,
+        assetType: "PONTO",
+        recordType,
         name: name.trim(),
         note: note.trim(),
         lat: coords?.lat ?? null,
         lng: coords?.lng ?? null,
+        projectId,
+        projectLabel: selectedProject ? buildCampoProjectLabel(selectedProject) : null,
+        phaseId: phaseId || null,
+        phaseLabel: selectedPhase ? buildCampoPhaseLabel(selectedPhase) : null,
+        technicalArea,
+        technicalObjectType,
+        relatedAssetId: relatedAssetId || null,
+        relatedAssetLabel: selectedRelatedAsset?.name ?? null,
+        inspectionStatus: recordType === "VISTORIA" ? inspectionStatus : null,
+        issueStatus: recordType === "OCORRENCIA" ? issueStatus : null,
         photos,
       });
-
       clearCaptureForm();
       await refreshQueue();
-
-      if (navigator.onLine) {
-        await runSync();
-      }
-
+      if (typeof navigator !== "undefined" && navigator.onLine) await runSync();
       setSubmitted(true);
       window.setTimeout(() => setSubmitted(false), 3000);
     } catch (error) {
-      console.error("Erro ao salvar ativo na fila offline:", error);
-      setSubmitError(
-        error instanceof Error && error.message
-          ? error.message
-          : "Falha ao salvar item localmente."
-      );
+      console.error("Erro ao salvar registro na fila offline:", error);
+      setSubmitError(error instanceof Error && error.message ? error.message : "Falha ao salvar registro localmente.");
     } finally {
       setSubmitting(false);
     }
-  }, [assetType, clearCaptureForm, coords?.lat, coords?.lng, name, note, photos, refreshQueue, runSync]);
+  }, [clearCaptureForm, coords?.lat, coords?.lng, inspectionStatus, issueStatus, name, note, phaseId, photos, projectId, recordType, refreshQueue, relatedAssetId, runSync, selectedPhase, selectedProject, selectedRelatedAsset, technicalArea, technicalObjectType]);
 
-  const handleRetryItem = useCallback(
-    async (id: string) => {
-      await markCampoItemForRetry(id);
-      await refreshQueue();
-      if (navigator.onLine) {
-        await runSync();
-      }
-    },
-    [refreshQueue, runSync]
-  );
+  const handleRetryItem = useCallback(async (id: string) => {
+    await markCampoItemForRetry(id);
+    await refreshQueue();
+    if (typeof navigator !== "undefined" && navigator.onLine) await runSync();
+  }, [refreshQueue, runSync]);
 
-  const handleDeleteItem = useCallback(
-    async (id: string) => {
-      await removeCampoQueueItem(id);
-      await refreshQueue();
-    },
-    [refreshQueue]
-  );
+  const handleDeleteItem = useCallback(async (id: string) => {
+    await removeCampoQueueItem(id);
+    await refreshQueue();
+  }, [refreshQueue]);
 
   const unsyncedCount = queue.filter((item) => item.status !== "synced").length;
   const errorCount = queue.filter((item) => item.status === "error" || item.status === "conflict").length;
+  const canSubmit = Boolean(name.trim()) && Boolean(projectId) && Boolean(technicalArea) && Boolean(technicalObjectType);
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 pb-20">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-5xl space-y-4 pb-20">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-xl font-700 text-foreground">App de Campo</h1>
-          <p className="text-sm text-muted-foreground">Captura offline-first com fila persistente e sync automático</p>
+          <h1 className="font-display text-xl font-700 text-foreground">Campo e fiscaliza\u00e7\u00e3o</h1>
+          <p className="text-sm text-muted-foreground">Captura offline-first com v\u00ednculo direto a projeto, etapa, \u00e1rea t\u00e9cnica e objeto relacionado.</p>
         </div>
-        <div
-          className={cn(
-            "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium",
-            isOnline ? "bg-accent-100 text-accent-700" : "bg-warning-100 text-warning-700"
-          )}
-        >
-          <span
-            className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              isOnline ? "bg-accent-500 animate-pulse-dot" : "bg-warning-500"
-            )}
-          />
+        <div className={cn("flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium", isOnline ? "bg-accent-100 text-accent-700" : "bg-warning-100 text-warning-700")}>
+          <span className={cn("h-1.5 w-1.5 rounded-full", isOnline ? "bg-accent-500 animate-pulse-dot" : "bg-warning-500")} />
           {isOnline ? "Online" : "Offline"}
         </div>
       </div>
 
-      {!offlineSupported && (
-        <div className="rounded-xl border border-warning-300 bg-warning-50 px-4 py-3 text-xs text-warning-700">
-          IndexedDB indisponível neste navegador. O modo offline completo não pode ser habilitado.
-        </div>
-      )}
+      {!offlineSupported && <div className="rounded-xl border border-warning-300 bg-warning-50 px-4 py-3 text-xs text-warning-700">IndexedDB indispon\u00edvel neste navegador. O modo offline completo n\u00e3o pode ser habilitado.</div>}
+      {contextError && <div className="rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">{contextError}</div>}
 
-      <div className="flex rounded-xl bg-muted p-1 gap-1">
-        {(["capturar", "fila"] as const).map((currentTab) => (
-          <button
-            key={currentTab}
-            onClick={() => setTab(currentTab)}
-            className={cn(
-              "relative flex-1 rounded-lg py-2 text-sm font-medium transition-all",
-              tab === currentTab
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {{ capturar: "Capturar Ativo", fila: "Fila de Envio" }[currentTab]}
-            {currentTab === "fila" && unsyncedCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-warning-500 text-[9px] font-700 text-white">
-                {unsyncedCount}
-              </span>
-            )}
+      <div className="flex gap-1 rounded-xl bg-muted p-1">
+        {([ ["capturar", "Capturar registro"], ["fila", "Fila de envio"] ] as const).map(([currentTab, label]) => (
+          <button key={currentTab} onClick={() => setTab(currentTab)} className={cn("relative flex-1 rounded-lg py-2 text-sm font-medium transition-all", tab === currentTab ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+            {label}
+            {currentTab === "fila" && unsyncedCount > 0 && <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-warning-500 text-[9px] font-700 text-white">{unsyncedCount}</span>}
           </button>
         ))}
       </div>
 
-      {tab === "capturar" && (
+      {tab === "capturar" ? (
         <div className="space-y-4">
-          {submitted && (
-            <div className="flex items-center gap-3 rounded-xl border border-accent-200 bg-accent-50 p-4 animate-fade-in">
-              <svg className="h-5 w-5 text-accent-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <p className="text-sm text-accent-700 font-medium">
-                Ativo salvo localmente na fila. {isOnline ? "Sincronização disparada." : "Sincroniza quando a conexão voltar."}
-              </p>
-            </div>
-          )}
-
-          {submitError && (
-            <div className="flex items-center gap-3 rounded-xl border border-danger-200 bg-danger-50 p-4 animate-fade-in">
-              <svg className="h-5 w-5 text-danger-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path d="M12 8v4m0 4h.01M22 12a10 10 0 11-20 0 10 10 0 0120 0z" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <p className="text-sm text-danger-700 font-medium">{submitError}</p>
-            </div>
-          )}
-
-          <div className="rounded-xl border bg-card p-4">
-            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Tipo de Ativo</p>
-            <div className="grid grid-cols-3 gap-2">
-              {ASSET_TYPES.map((type) => (
-                <button
-                  key={type.value}
-                  onClick={() => setAssetType(type.value)}
-                  className={cn(
-                    "rounded-lg border p-3 text-center transition-all",
-                    assetType === type.value
-                      ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30"
-                      : "border-border hover:border-muted-foreground/40"
-                  )}
-                >
-                  <p className={cn("text-sm font-medium", assetType === type.value ? "text-brand-700 dark:text-brand-300" : "text-foreground")}>{type.label}</p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground leading-tight">{type.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-card p-4 space-y-3">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome do Ativo *</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: Bueiro Av. Domingos Olímpio n 42"
-                className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 transition-all"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground uppercase tracking-wider">Observações de Campo</label>
-              <textarea
-                rows={3}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Estado de conservação, anomalias, notas técnicas..."
-                className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 transition-all"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-card p-4">
-            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Localização GPS</p>
-            {coords ? (
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-100">
-                    <svg className="h-4 w-4 text-accent-600" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-                    </svg>
-                  </div>
-                  <p className="geo-label text-xs">{formatCoords(coords.lat, coords.lng)}</p>
-                </div>
-                <button onClick={() => setCoords(null)} className="text-xs text-muted-foreground hover:text-danger-600 transition-colors">Remover</button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <button
-                  onClick={handleGetGps}
-                  disabled={gpsLoading}
-                  className={cn(
-                    "flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed py-3 text-sm font-medium transition-all",
-                    gpsLoading
-                      ? "border-brand-300 text-brand-500 cursor-wait"
-                      : "border-border text-muted-foreground hover:border-brand-400 hover:text-brand-600"
-                  )}
-                >
-                  <svg className={cn("h-4 w-4", gpsLoading && "animate-spin")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  {gpsLoading ? "Obtendo localização..." : "Capturar GPS atual"}
-                </button>
-                {gpsError && <p className="text-xs text-danger-600">{gpsError}</p>}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-xl border bg-card p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Fotos ({previews.length}/{MAX_PHOTOS})</p>
-              {previews.length < MAX_PHOTOS && (
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 transition-colors"
-                >
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Adicionar
-                </button>
-              )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              multiple
-              className="hidden"
-              onChange={handlePhotoChange}
-            />
-            {previews.length === 0 ? (
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border py-8 text-muted-foreground hover:border-brand-400 hover:text-brand-600 transition-all"
-              >
-                <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span className="text-sm">Tirar foto ou escolher da galeria</span>
-              </button>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                {previews.map((src, i) => (
-                  <div key={src} className="group relative aspect-square overflow-hidden rounded-lg">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt={`Foto ${i + 1}`} className="h-full w-full object-cover" />
-                    <button
-                      onClick={() => removePhoto(i)}
-                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                    >
-                      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                        <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
-                      </svg>
+          {submitted && <div className="rounded-xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm font-medium text-accent-700">Registro salvo localmente na fila. {isOnline ? "Sincroniza\u00e7\u00e3o disparada." : "Sincroniza quando a conex\u00e3o voltar."}</div>}
+          {submitError && <div className="rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700">{submitError}</div>}
+          <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+            <section className="space-y-4">
+              <div className="rounded-xl border bg-card p-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Tipo de registro</p>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {RECORD_TYPES.map((option) => (
+                    <button key={option.value} onClick={() => setRecordType(option.value)} className={cn("rounded-lg border p-3 text-left transition-all", recordType === option.value ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30" : "border-border hover:border-muted-foreground/40")}>
+                      <p className={cn("text-sm font-medium", recordType === option.value ? "text-brand-700 dark:text-brand-300" : "text-foreground")}>{option.label}</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{option.desc}</p>
                     </button>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-xl border bg-card p-4 space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Projeto *</label>
+                    <select value={projectId} onChange={(event) => { setProjectId(event.target.value); setPhaseId(""); setTechnicalArea(""); setTechnicalObjectType(""); setRelatedAssetId(""); }} disabled={contextLoading} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30">
+                      <option value="">Selecione o projeto</option>
+                      {projects.map((project) => <option key={project.id} value={project.id}>{buildCampoProjectLabel(project)}</option>)}
+                    </select>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={handleSubmit}
-            disabled={!name.trim() || submitting || !offlineSupported}
-            className={cn(
-              "w-full rounded-xl py-4 text-sm font-600 font-display transition-all duration-200 shadow-[0_4px_12px_rgba(52,104,246,0.3)]",
-              name.trim() && !submitting && offlineSupported
-                ? "bg-brand-600 text-white hover:bg-brand-500 active:scale-[0.98]"
-                : "bg-muted text-muted-foreground cursor-not-allowed"
-            )}
-          >
-            {submitting ? "Salvando na fila..." : "Salvar Ativo na Fila Offline"}
-          </button>
-        </div>
-      )}
-
-      {tab === "fila" && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between rounded-xl border bg-card px-4 py-3">
-            <div>
-              <p className="text-sm font-medium text-foreground">Fila local</p>
-              <p className="text-xs text-muted-foreground">
-                {queueLoading
-                  ? "Carregando fila..."
-                  : `${queue.length} item(ns), ${unsyncedCount} pendente(s), ${errorCount} com erro/conflito`}
-              </p>
-            </div>
-            <button
-              onClick={() => void runSync()}
-              disabled={!isOnline || queueSyncing || !offlineSupported}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-bold transition-colors",
-                isOnline && !queueSyncing && offlineSupported
-                  ? "bg-brand-600 text-white hover:bg-brand-500"
-                  : "bg-muted text-muted-foreground cursor-not-allowed"
-              )}
-            >
-              {queueSyncing ? (
-                <>
-                  <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                  </svg>
-                  Sincronizando
-                </>
-              ) : (
-                "Sincronizar agora"
-              )}
-            </button>
-          </div>
-
-          {queue.length === 0 && !queueLoading ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-16 text-center text-muted-foreground">
-              <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <div>
-                <p className="text-sm font-medium">Nenhum ativo na fila</p>
-                <p className="text-xs mt-0.5">Vá para &quot;Capturar Ativo&quot; para começar</p>
-              </div>
-            </div>
-          ) : (
-            queue.map((item) => {
-              const syncState = SYNC_CONFIG[item.status];
-              const attachmentTotal = item.attachmentCount > 0 ? item.attachmentCount : item.uploadedPhotoUrls.length;
-
-              return (
-                <div key={item.id} className="rounded-xl border bg-card p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="status-badge bg-slate-100 text-slate-600 text-[9px]">{item.assetType}</span>
-                        <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
-                      </div>
-
-                      {item.note && <p className="mb-2 text-xs text-muted-foreground line-clamp-2">{item.note}</p>}
-
-                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
-                        {typeof item.lat === "number" && typeof item.lng === "number" && (
-                          <span className="geo-label">{formatCoords(item.lat, item.lng)}</span>
-                        )}
-                        <span>{formatDateTime(item.createdAt)}</span>
-                        {attachmentTotal > 0 && <span>{attachmentTotal} foto(s)</span>}
-                      </div>
-
-                      <p className="mt-2 text-[11px] text-muted-foreground">{syncState.description}</p>
-
-                      {item.status === "error" && item.nextRetryAt && (
-                        <p className="mt-1 text-[11px] text-warning-600">
-                          Próxima tentativa automática: {formatDateTime(item.nextRetryAt)}
-                        </p>
-                      )}
-
-                      {item.lastError && (item.status === "error" || item.status === "conflict") && (
-                        <p className="mt-1 text-[11px] text-danger-600">Detalhe: {item.lastError}</p>
-                      )}
-                    </div>
-
-                    <div className="shrink-0 flex flex-col items-end gap-2">
-                      <div className={cn("flex items-center gap-1 text-xs font-medium", syncState.color)}>
-                        {syncState.spin && (
-                          <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                          </svg>
-                        )}
-                        {syncState.label}
-                      </div>
-
-                      {(item.status === "error" || item.status === "conflict") && (
-                        <button
-                          onClick={() => void handleRetryItem(item.id)}
-                          className="rounded-md bg-warning-500 px-2 py-1 text-[10px] font-bold text-white hover:bg-warning-600 transition-colors"
-                        >
-                          Tentar novamente
-                        </button>
-                      )}
-
-                      {(item.status === "synced" || item.status === "conflict") && (
-                        <button
-                          onClick={() => void handleDeleteItem(item.id)}
-                          className="rounded-md bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          Remover da fila
-                        </button>
-                      )}
-                    </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Etapa</label>
+                    <select value={phaseId} onChange={(event) => setPhaseId(event.target.value)} disabled={!selectedProject} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 disabled:cursor-not-allowed disabled:bg-muted">
+                      <option value="">Sem etapa vinculada</option>
+                      {selectedProject?.phases.map((phase) => <option key={phase.id} value={phase.id}>{buildCampoPhaseLabel(phase)}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">\u00c1rea t\u00e9cnica *</label>
+                    <select value={technicalArea} onChange={(event) => { const nextValue = event.target.value; setTechnicalArea(nextValue && isProjectDisciplineId(nextValue) ? nextValue : ""); setTechnicalObjectType(""); setRelatedAssetId(""); }} disabled={!selectedProject} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 disabled:cursor-not-allowed disabled:bg-muted">
+                      <option value="">Selecione a \u00e1rea</option>
+                      {technicalAreaOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                    {selectedProject && technicalAreaOptions.length === 0 && <p className="mt-1 text-xs text-warning-700">Este projeto ainda n\u00e3o possui \u00e1reas t\u00e9cnicas vinculadas.</p>}
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Objeto t\u00e9cnico *</label>
+                    <select value={technicalObjectType} onChange={(event) => { const nextValue = event.target.value; setTechnicalObjectType(nextValue && isTechnicalObjectType(nextValue) ? nextValue : ""); setRelatedAssetId(""); }} disabled={!technicalArea} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 disabled:cursor-not-allowed disabled:bg-muted">
+                      <option value="">Selecione o objeto t\u00e9cnico</option>
+                      {technicalObjectOptions.map((objectType) => <option key={objectType.id} value={objectType.id}>{objectType.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Objeto relacionado</label>
+                    <select value={relatedAssetId} onChange={(event) => setRelatedAssetId(event.target.value)} disabled={!projectId || projectAssetsLoading} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 disabled:cursor-not-allowed disabled:bg-muted">
+                      <option value="">Sem v\u00ednculo direto</option>
+                      {filteredAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name} \u00b7 {getCampoTechnicalObjectLabel(asset.technicalObjectType)}</option>)}
+                    </select>
+                    <p className="mt-1 text-xs text-muted-foreground">{projectAssetsLoading ? "Carregando objetos t\u00e9cnicos do projeto..." : "Opcional. Use quando a vistoria ou ocorr\u00eancia apontar para um item t\u00e9cnico j\u00e1 cadastrado."}</p>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Status de fiscaliza\u00e7\u00e3o *</label>
+                    <select value={recordType === "VISTORIA" ? inspectionStatus : issueStatus} onChange={(event) => { if (recordType === "VISTORIA") setInspectionStatus(event.target.value as CampoInspectionStatus); else setIssueStatus(event.target.value as CampoIssueStatus); }} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30">
+                      {fieldStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
                   </div>
                 </div>
-              );
-            })
-          )}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">{recordType === "VISTORIA" ? "T\u00edtulo da vistoria *" : "T\u00edtulo da ocorr\u00eancia *"}</label>
+                  <input type="text" value={name} onChange={(event) => setName(event.target.value)} placeholder={recordType === "VISTORIA" ? "Ex: Vistoria de drenagem no trecho da Rua Jo\u00e3o Pessoa" : "Ex: Ocorr\u00eancia de ponto apagado em lumin\u00e1ria da pra\u00e7a"} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Observa\u00e7\u00f5es de campo</label>
+                  <textarea rows={4} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Achados, condi\u00e7\u00e3o encontrada, risco observado, encaminhamento ou recomenda\u00e7\u00e3o t\u00e9cnica..." className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30" />
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <div className="rounded-xl border bg-card p-4 space-y-3 text-sm">
+                <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Projeto</p><p className="mt-1 font-medium text-foreground">{selectedProject ? buildCampoProjectLabel(selectedProject) : "Selecione um projeto"}</p></div>
+                <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">\u00c1rea t\u00e9cnica</p><p className="mt-1 font-medium text-foreground">{getAreaLabel(technicalArea)}</p></div>
+                <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto t\u00e9cnico</p><p className="mt-1 font-medium text-foreground">{getObjectLabel(technicalObjectType)}</p></div>
+                <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Etapa</p><p className="mt-1 font-medium text-foreground">{selectedPhase ? buildCampoPhaseLabel(selectedPhase) : "Sem etapa vinculada"}</p></div>
+                <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto relacionado</p><p className="mt-1 font-medium text-foreground">{selectedRelatedAsset ? `${selectedRelatedAsset.name} \u00b7 ${getCampoTechnicalObjectLabel(selectedRelatedAsset.technicalObjectType)}` : "Sem v\u00ednculo direto"}</p></div>
+              </div>
+
+              <div className="rounded-xl border bg-card p-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Localiza\u00e7\u00e3o GPS</p>
+                {coords ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-100"><svg className="h-4 w-4 text-accent-600" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" /></svg></div>
+                      <p className="geo-label text-xs">{formatCoords(coords.lat, coords.lng)}</p>
+                    </div>
+                    <button onClick={() => setCoords(null)} className="text-xs text-muted-foreground transition-colors hover:text-danger-600">Remover</button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <button onClick={handleGetGps} disabled={gpsLoading} className={cn("flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed py-3 text-sm font-medium transition-all", gpsLoading ? "cursor-wait border-brand-300 text-brand-500" : "border-border text-muted-foreground hover:border-brand-400 hover:text-brand-600")}>{gpsLoading ? "Obtendo localiza\u00e7\u00e3o..." : "Capturar GPS atual"}</button>
+                    {gpsError && <p className="text-xs text-danger-600">{gpsError}</p>}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border bg-card p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Fotos ({previews.length}/{MAX_PHOTOS})</p>
+                  {previews.length < MAX_PHOTOS && <button onClick={() => fileInputRef.current?.click()} className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-50">Adicionar</button>}
+                </div>
+                <input ref={fileInputRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handlePhotoChange} />
+                {previews.length === 0 ? <button onClick={() => fileInputRef.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border py-8 text-muted-foreground transition-all hover:border-brand-400 hover:text-brand-600"><span className="text-sm">Tirar foto ou escolher da galeria</span></button> : <div className="grid grid-cols-3 gap-2">{previews.map((src, index) => <div key={src} className="group relative aspect-square overflow-hidden rounded-lg">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={src} alt={`Foto ${index + 1}`} className="h-full w-full object-cover" /><button onClick={() => removePhoto(index)} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100">x</button></div>)}</div>}
+              </div>
+
+              <button onClick={() => void handleSubmit()} disabled={!canSubmit || submitting} className={cn("flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white transition-all", !canSubmit || submitting ? "cursor-not-allowed bg-slate-300" : "bg-brand-600 hover:bg-brand-700")}>{submitting ? "Salvando na fila..." : "Salvar registro na fila offline"}</button>
+            </section>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
+            <div>
+              <p className="text-sm font-semibold text-foreground">{queueLoading ? "Carregando fila..." : `${queue.length} item(ns) na fila`}</p>
+              <p className="text-xs text-muted-foreground">{errorCount > 0 ? `${errorCount} item(ns) com falha precisam de aten\u00e7\u00e3o.` : "A fila sincroniza automaticamente quando a conex\u00e3o voltar."}</p>
+            </div>
+            <button onClick={() => void runSync()} disabled={!isOnline || queueSyncing || queueLoading || unsyncedCount === 0} className={cn("rounded-lg px-3 py-2 text-sm font-medium transition-all", !isOnline || queueSyncing || queueLoading || unsyncedCount === 0 ? "cursor-not-allowed bg-muted text-muted-foreground" : "bg-brand-600 text-white hover:bg-brand-700")}>{queueSyncing ? "Sincronizando..." : "Sincronizar agora"}</button>
+          </div>
+
+          {queue.length === 0 && !queueLoading ? <div className="rounded-xl border border-dashed border-border bg-card px-6 py-10 text-center"><p className="text-sm font-medium text-foreground">Nenhum registro na fila.</p><p className="mt-1 text-sm text-muted-foreground">Capture uma vistoria ou ocorr\u00eancia para come\u00e7ar.</p></div> : queue.map((item) => {
+            const syncState = SYNC_CONFIG[item.status];
+            const attachmentTotal = item.attachmentCount || item.uploadedPhotoUrls.length;
+            const contextLine = [item.phaseLabel, item.technicalArea ? getAreaLabel(item.technicalArea) : null, item.technicalObjectType ? getObjectLabel(item.technicalObjectType) : null].filter(Boolean).join(" \u00b7 ");
+            const fieldStatusLabel = getQueueFieldStatusLabel(item);
+            return (
+              <div key={item.id} className="rounded-xl border bg-card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="status-badge bg-slate-100 text-slate-600 text-[9px]">{item.recordType === "VISTORIA" ? "Vistoria" : item.recordType === "OCORRENCIA" ? "Ocorr\u00eancia" : item.assetType}</span>
+                      {fieldStatusLabel && <span className="status-badge bg-brand-50 text-brand-700 text-[9px]">{fieldStatusLabel}</span>}
+                      <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
+                    </div>
+                    {item.projectLabel && <p className="text-xs font-medium text-foreground">{item.projectLabel}</p>}
+                    {contextLine && <p className="mt-1 text-xs text-muted-foreground">{contextLine}</p>}
+                    {item.relatedAssetLabel && <p className="mt-1 text-xs text-muted-foreground">Relacionado a {item.relatedAssetLabel}</p>}
+                    {item.note && <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{item.note}</p>}
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">{typeof item.lat === "number" && typeof item.lng === "number" && <span className="geo-label">{formatCoords(item.lat, item.lng)}</span>}<span>{formatDateTime(item.createdAt)}</span>{attachmentTotal > 0 && <span>{attachmentTotal} foto(s)</span>}</div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">{syncState.description}</p>
+                    {item.status === "error" && item.nextRetryAt && <p className="mt-1 text-[11px] text-warning-600">Pr\u00f3xima tentativa autom\u00e1tica: {formatDateTime(item.nextRetryAt)}</p>}
+                    {item.lastError && (item.status === "error" || item.status === "conflict") && <p className="mt-1 text-[11px] text-danger-600">Detalhe: {item.lastError}</p>}
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <div className={cn("flex items-center gap-1 text-xs font-medium", syncState.color)}>{syncState.label}</div>
+                    {(item.status === "error" || item.status === "conflict") && <button onClick={() => void handleRetryItem(item.id)} className="rounded-md bg-warning-500 px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-warning-600">Tentar novamente</button>}
+                    {(item.status === "synced" || item.status === "conflict") && <button onClick={() => void handleDeleteItem(item.id)} className="rounded-md bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground">Remover da fila</button>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
-

@@ -563,10 +563,11 @@ model Asset {
   tenantId    String
   projectId   String?
 
-  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  project Project?       @relation(fields: [projectId], references: [id])
-  issues  ProjectIssue[]
-  logs    AssetLog[]
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project     Project?            @relation(fields: [projectId], references: [id])
+  inspections ProjectInspection[]
+  issues      ProjectIssue[]
+  logs        AssetLog[]
 
   @@index([tenantId])
   @@index([projectId])
@@ -794,29 +795,33 @@ model ProjectMeasurement {
 }
 
 model ProjectInspection {
-  id              String                  @id @default(cuid())
-  inspectionType  ProjectInspectionType   @default(ROTINA)
-  status          ProjectInspectionStatus @default(AGENDADA)
-  scheduledAt     DateTime?
-  occurredAt      DateTime?
-  location        String?
-  summary         String?
-  findings        String?
-  recommendations String?
-  metadata        Json                    @default("{}")
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  tenantId        String
-  projectId       String
-  phaseId         String?
-  measurementId   String?
-  inspectorId     String?
+  id                  String                  @id @default(cuid())
+  inspectionType      ProjectInspectionType   @default(ROTINA)
+  status              ProjectInspectionStatus @default(AGENDADA)
+  scheduledAt         DateTime?
+  occurredAt          DateTime?
+  location            String?
+  summary             String?
+  findings            String?
+  recommendations     String?
+  metadata            Json                    @default("{}")
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  tenantId            String
+  projectId           String
+  phaseId             String?
+  measurementId       String?
+  inspectorId         String?
+  assetId             String?
+  technicalArea       ProjectTechnicalArea?
+  technicalObjectType String?
 
   tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   phase       ProjectPhase?       @relation(fields: [phaseId], references: [id], onDelete: SetNull)
   measurement ProjectMeasurement? @relation(fields: [measurementId], references: [id], onDelete: SetNull)
   inspector   User?               @relation("ProjectInspectionInspector", fields: [inspectorId], references: [id], onDelete: SetNull)
+  asset       Asset?              @relation(fields: [assetId], references: [id], onDelete: SetNull)
   documents   ProjectDocument[]
   issues      ProjectIssue[]
   comments    ProjectComment[]
@@ -826,30 +831,35 @@ model ProjectInspection {
   @@index([projectId, inspectionType])
   @@index([phaseId])
   @@index([measurementId])
+  @@index([assetId])
+  @@index([technicalArea])
+  @@index([projectId, technicalArea])
   @@index([inspectorId, occurredAt])
   @@map("project_inspections")
 }
 
 model ProjectIssue {
-  id              String             @id @default(cuid())
-  title           String
-  description     String?
-  issueType       ProjectIssueType   @default(OUTRO)
-  status          ProjectIssueStatus @default(ABERTA)
-  priority        ProjectPriority    @default(MEDIA)
-  dueDate         DateTime?
-  resolvedAt      DateTime?
-  resolutionNotes String?
-  metadata        Json               @default("{}")
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  tenantId        String
-  projectId       String
-  phaseId         String?
-  inspectionId    String?
-  assetId         String?
-  reportedById    String?
-  assignedToId    String?
+  id                  String                @id @default(cuid())
+  title               String
+  description         String?
+  issueType           ProjectIssueType      @default(OUTRO)
+  status              ProjectIssueStatus    @default(ABERTA)
+  priority            ProjectPriority       @default(MEDIA)
+  dueDate             DateTime?
+  resolvedAt          DateTime?
+  resolutionNotes     String?
+  metadata            Json                  @default("{}")
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  tenantId            String
+  projectId           String
+  phaseId             String?
+  inspectionId        String?
+  assetId             String?
+  technicalArea       ProjectTechnicalArea?
+  technicalObjectType String?
+  reportedById        String?
+  assignedToId        String?
 
   tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -866,6 +876,8 @@ model ProjectIssue {
   @@index([phaseId])
   @@index([inspectionId])
   @@index([assetId])
+  @@index([technicalArea])
+  @@index([projectId, technicalArea])
   @@index([reportedById])
   @@index([assignedToId])
   @@map("project_issues")

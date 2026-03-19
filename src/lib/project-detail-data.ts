@@ -274,6 +274,13 @@ async function loadInspectionData(context: ProjectContext) {
           email: true,
         },
       },
+      asset: {
+        select: {
+          id: true,
+          name: true,
+          type: true,
+        },
+      },
       _count: {
         select: {
           documents: true,

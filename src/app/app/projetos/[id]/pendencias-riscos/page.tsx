@@ -14,116 +14,98 @@ import {
   getProjectRiskImpactLabel,
   getProjectRiskProbabilityLabel,
   getProjectRiskStatusLabel,
+  getProjectTechnicalAreaLabel,
 } from "@/lib/project-labels";
+import { getTechnicalObjectLabel, isTechnicalObjectType } from "@/lib/project-disciplines";
 import { formatDate, formatNumber } from "@/lib/utils";
 
 type ProjetoPendenciasRiscosPageProps = {
   params: Promise<{ id: string }>;
 };
 
-export default async function ProjetoPendenciasRiscosPage({
-  params,
-}: ProjetoPendenciasRiscosPageProps) {
+function getTechnicalObjectSummary(value: string | null | undefined) {
+  return value && isTechnicalObjectType(value) ? getTechnicalObjectLabel(value) : "N\u00e3o informado";
+}
+
+function getIssueSource(issue: { metadata?: unknown; inspection?: { id: string } | null }) {
+  if (issue.inspection) return "Fiscaliza\u00e7\u00e3o";
+  if (!issue.metadata || typeof issue.metadata !== "object" || Array.isArray(issue.metadata)) {
+    return "Projeto";
+  }
+  return (issue.metadata as { source?: unknown }).source === "campo" ? "Campo" : "Projeto";
+}
+
+export default async function ProjetoPendenciasRiscosPage({ params }: ProjetoPendenciasRiscosPageProps) {
   const { id } = await params;
   const data = await getProjectIssuesAndRisksData(id);
 
-  if (!data) {
-    notFound();
-  }
+  if (!data) notFound();
 
   const { issues, risks } = data;
-  const openIssues = issues.filter((item) =>
-    item.status === "ABERTA" || item.status === "EM_TRATATIVA"
-  );
+  const openIssues = issues.filter((item) => item.status === "ABERTA" || item.status === "EM_TRATATIVA");
   const activeRisks = risks.filter((item) => item.status !== "ENCERRADO");
+  const fieldIssues = issues.filter((item) => getIssueSource(item) === "Campo").length;
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 xl:grid-cols-4">
-        <ProjectMetricCard
-          label="Pendências"
-          value={formatNumber(issues.length)}
-          helper="Todas as pendências registradas no projeto."
-        />
-        <ProjectMetricCard
-          label="Abertas"
-          value={formatNumber(openIssues.length)}
-          helper="Pendências ainda em tratamento."
-        />
-        <ProjectMetricCard
-          label="Riscos"
-          value={formatNumber(risks.length)}
-          helper="Riscos mapeados no projeto."
-        />
-        <ProjectMetricCard
-          label="Riscos ativos"
-          value={formatNumber(activeRisks.length)}
-          helper="Riscos ainda sob monitoramento."
-        />
+      <section className="grid gap-4 xl:grid-cols-5">
+        <ProjectMetricCard label="Pend\u00eancias" value={formatNumber(issues.length)} helper="Todas as pend\u00eancias registradas no projeto." />
+        <ProjectMetricCard label="Abertas" value={formatNumber(openIssues.length)} helper="Pend\u00eancias ainda em tratamento." />
+        <ProjectMetricCard label="Vindas do campo" value={formatNumber(fieldIssues)} helper="Ocorr\u00eancias registradas no app de campo." />
+        <ProjectMetricCard label="Riscos" value={formatNumber(risks.length)} helper="Riscos mapeados no projeto." />
+        <ProjectMetricCard label="Riscos ativos" value={formatNumber(activeRisks.length)} helper="Riscos ainda sob monitoramento." />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <ProjectSectionCard
-          eyebrow="Pendências"
-          title="Pendências e bloqueios"
-          description="Itens de prazo, qualidade, documentação ou execução que exigem tratamento."
-        >
+        <ProjectSectionCard eyebrow="Pend\u00eancias" title="Pend\u00eancias e bloqueios" description="Itens de prazo, qualidade, documenta\u00e7\u00e3o ou execu\u00e7\u00e3o que exigem tratamento.">
           {issues.length === 0 ? (
-            <ProjectEmptyBlock
-              title="Sem pendências registradas"
-              description="As pendências do projeto aparecerão aqui com prioridade, responsável e prazo."
-            />
+            <ProjectEmptyBlock title="Sem pend\u00eancias registradas" description="As pend\u00eancias do projeto aparecer\u00e3o aqui com prioridade, \u00e1rea t\u00e9cnica, ativo relacionado e prazo." />
           ) : (
             <div className="space-y-3">
               {issues.map((issue) => (
-                <article
-                  key={issue.id}
-                  className="rounded-xl border border-border bg-background px-4 py-4"
-                >
+                <article key={issue.id} className="rounded-xl border border-border bg-background px-4 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">{issue.title}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {getProjectIssueTypeLabel(issue.issueType)} · {issue.priority.toLowerCase()}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground">{issue.title}</p>
+                        {issue.technicalArea && <ProjectBadge label={getProjectTechnicalAreaLabel(issue.technicalArea)} tone="neutral" />}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{getProjectIssueTypeLabel(issue.issueType)} \u00b7 {issue.priority.toLowerCase()}</p>
                     </div>
-                    <ProjectBadge
-                      label={getProjectIssueStatusLabel(issue.status)}
-                      tone={getGovernanceTone(issue.status)}
-                    />
+                    <ProjectBadge label={getProjectIssueStatusLabel(issue.status)} tone={getGovernanceTone(issue.status)} />
                   </div>
-                  <div className="mt-4 grid gap-4 md:grid-cols-4 text-sm">
+
+                  <div className="mt-4 grid gap-4 text-sm md:grid-cols-4">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        Prazo
-                      </p>
-                      <p className="mt-1 font-medium text-foreground">
-                        {issue.dueDate ? formatDate(issue.dueDate) : "Não informado"}
-                      </p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Prazo</p>
+                      <p className="mt-1 font-medium text-foreground">{issue.dueDate ? formatDate(issue.dueDate) : "N\u00e3o informado"}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        Responsável
-                      </p>
-                      <p className="mt-1 font-medium text-foreground">
-                        {issue.assignedTo?.name || "Não definido"}
-                      </p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Respons\u00e1vel</p>
+                      <p className="mt-1 font-medium text-foreground">{issue.assignedTo?.name || "N\u00e3o definido"}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        Origem
-                      </p>
-                      <p className="mt-1 font-medium text-foreground">
-                        {issue.inspection ? "Fiscalização" : issue.asset ? issue.asset.name : "Projeto"}
-                      </p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Origem</p>
+                      <p className="mt-1 font-medium text-foreground">{getIssueSource(issue)}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        Reportado por
-                      </p>
-                      <p className="mt-1 font-medium text-foreground">
-                        {issue.reportedBy?.name || "Não informado"}
-                      </p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Reportado por</p>
+                      <p className="mt-1 font-medium text-foreground">{issue.reportedBy?.name || "N\u00e3o informado"}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 text-sm md:grid-cols-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">\u00c1rea t\u00e9cnica</p>
+                      <p className="mt-1 font-medium text-foreground">{issue.technicalArea ? getProjectTechnicalAreaLabel(issue.technicalArea) : "N\u00e3o informada"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto t\u00e9cnico</p>
+                      <p className="mt-1 font-medium text-foreground">{getTechnicalObjectSummary(issue.technicalObjectType)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Ativo relacionado</p>
+                      <p className="mt-1 font-medium text-foreground">{issue.asset?.name || "Sem v\u00ednculo direto"}</p>
                     </div>
                   </div>
                 </article>
@@ -132,67 +114,36 @@ export default async function ProjetoPendenciasRiscosPage({
           )}
         </ProjectSectionCard>
 
-        <ProjectSectionCard
-          eyebrow="Riscos"
-          title="Riscos monitorados"
-          description="Riscos estratégicos e operacionais acompanhados no projeto."
-        >
+        <ProjectSectionCard eyebrow="Riscos" title="Riscos monitorados" description="Riscos estrat\u00e9gicos e operacionais acompanhados no projeto.">
           {risks.length === 0 ? (
-            <ProjectEmptyBlock
-              title="Sem riscos cadastrados"
-              description="Os riscos do projeto aparecerão aqui com categoria, probabilidade, impacto e responsável."
-            />
+            <ProjectEmptyBlock title="Sem riscos cadastrados" description="Os riscos do projeto aparecer\u00e3o aqui com categoria, probabilidade, impacto e respons\u00e1vel." />
           ) : (
             <div className="space-y-3">
               {risks.map((risk) => (
-                <article
-                  key={risk.id}
-                  className="rounded-xl border border-border bg-background px-4 py-4"
-                >
+                <article key={risk.id} className="rounded-xl border border-border bg-background px-4 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">{risk.title}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {getProjectRiskCategoryLabel(risk.category)}
-                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{getProjectRiskCategoryLabel(risk.category)}</p>
                     </div>
-                    <ProjectBadge
-                      label={getProjectRiskStatusLabel(risk.status)}
-                      tone={getGovernanceTone(risk.status)}
-                    />
+                    <ProjectBadge label={getProjectRiskStatusLabel(risk.status)} tone={getGovernanceTone(risk.status)} />
                   </div>
-                  <div className="mt-4 grid gap-4 md:grid-cols-4 text-sm">
+                  <div className="mt-4 grid gap-4 text-sm md:grid-cols-4">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        Probabilidade
-                      </p>
-                      <p className="mt-1 font-medium text-foreground">
-                        {getProjectRiskProbabilityLabel(risk.probability)}
-                      </p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Probabilidade</p>
+                      <p className="mt-1 font-medium text-foreground">{getProjectRiskProbabilityLabel(risk.probability)}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        Impacto
-                      </p>
-                      <p className="mt-1 font-medium text-foreground">
-                        {getProjectRiskImpactLabel(risk.impact)}
-                      </p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Impacto</p>
+                      <p className="mt-1 font-medium text-foreground">{getProjectRiskImpactLabel(risk.impact)}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        Revisão
-                      </p>
-                      <p className="mt-1 font-medium text-foreground">
-                        {risk.reviewDate ? formatDate(risk.reviewDate) : "Não informada"}
-                      </p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Revis\u00e3o</p>
+                      <p className="mt-1 font-medium text-foreground">{risk.reviewDate ? formatDate(risk.reviewDate) : "N\u00e3o informada"}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        Responsável
-                      </p>
-                      <p className="mt-1 font-medium text-foreground">
-                        {risk.owner?.name || "Não definido"}
-                      </p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Respons\u00e1vel</p>
+                      <p className="mt-1 font-medium text-foreground">{risk.owner?.name || "N\u00e3o definido"}</p>
                     </div>
                   </div>
                 </article>

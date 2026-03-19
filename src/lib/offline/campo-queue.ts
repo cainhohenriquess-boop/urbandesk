@@ -1,13 +1,32 @@
 ﻿export type CampoAssetType = "PONTO" | "TRECHO" | "AREA";
+export type CampoRecordType = "VISTORIA" | "OCORRENCIA";
+export type CampoInspectionStatus = "AGENDADA" | "REALIZADA" | "CANCELADA";
+export type CampoIssueStatus =
+  | "ABERTA"
+  | "EM_TRATATIVA"
+  | "RESOLVIDA"
+  | "FECHADA"
+  | "CANCELADA";
 export type CampoSyncStatus = "pending" | "syncing" | "synced" | "error" | "conflict";
 
 export interface CampoQueueItem {
   id: string;
   assetType: CampoAssetType;
+  recordType: CampoRecordType | null;
   name: string;
   note: string;
   lat: number | null;
   lng: number | null;
+  projectId: string | null;
+  projectLabel: string | null;
+  phaseId: string | null;
+  phaseLabel: string | null;
+  technicalArea: string | null;
+  technicalObjectType: string | null;
+  relatedAssetId: string | null;
+  relatedAssetLabel: string | null;
+  inspectionStatus: CampoInspectionStatus | null;
+  issueStatus: CampoIssueStatus | null;
   createdAt: string;
   updatedAt: string;
   status: CampoSyncStatus;
@@ -22,10 +41,21 @@ export interface CampoQueueItem {
 
 export interface CampoCaptureDraft {
   assetType: CampoAssetType;
+  recordType?: CampoRecordType | null;
   name: string;
   note: string;
   lat: number | null;
   lng: number | null;
+  projectId?: string | null;
+  projectLabel?: string | null;
+  phaseId?: string | null;
+  phaseLabel?: string | null;
+  technicalArea?: string | null;
+  technicalObjectType?: string | null;
+  relatedAssetId?: string | null;
+  relatedAssetLabel?: string | null;
+  inspectionStatus?: CampoInspectionStatus | null;
+  issueStatus?: CampoIssueStatus | null;
   photos: File[];
   createdAt?: string;
 }
@@ -41,10 +71,21 @@ export interface CampoSyncSummary {
 interface CampoQueueRecord {
   id: string;
   assetType: CampoAssetType;
+  recordType: CampoRecordType | null;
   name: string;
   note: string;
   lat: number | null;
   lng: number | null;
+  projectId: string | null;
+  projectLabel: string | null;
+  phaseId: string | null;
+  phaseLabel: string | null;
+  technicalArea: string | null;
+  technicalObjectType: string | null;
+  relatedAssetId: string | null;
+  relatedAssetLabel: string | null;
+  inspectionStatus: CampoInspectionStatus | null;
+  issueStatus: CampoIssueStatus | null;
   createdAt: string;
   updatedAt: string;
   status: CampoSyncStatus;
@@ -79,7 +120,7 @@ let activeSyncPromise: Promise<CampoSyncSummary> | null = null;
 
 function ensureOfflineSupport(): void {
   if (typeof window === "undefined" || typeof indexedDB === "undefined") {
-    throw new Error("IndexedDB indisponivel neste ambiente.");
+    throw new Error("IndexedDB indisponível neste ambiente.");
   }
 }
 
@@ -106,6 +147,12 @@ function normalizeNumber(value: number | null): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function normalizeText(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function toQueueItem(record: CampoQueueRecord, attachmentCount: number): CampoQueueItem {
   return {
     ...record,
@@ -129,8 +176,8 @@ function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
 function transactionToPromise(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error ?? new Error("Falha na transacao IndexedDB."));
-    transaction.onabort = () => reject(transaction.error ?? new Error("Transacao IndexedDB abortada."));
+    transaction.onerror = () => reject(transaction.error ?? new Error("Falha na transação IndexedDB."));
+    transaction.onabort = () => reject(transaction.error ?? new Error("Transação IndexedDB abortada."));
   });
 }
 
@@ -154,7 +201,7 @@ async function openDb(): Promise<IDBDatabase> {
     };
 
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("Nao foi possivel abrir IndexedDB."));
+    request.onerror = () => reject(request.error ?? new Error("Não foi possível abrir IndexedDB."));
   });
 }
 
@@ -279,7 +326,7 @@ function buildGeomWkt(lat: number | null, lng: number | null): string | null {
   return `POINT(${lng} ${lat})`;
 }
 
-function buildCampoPayload(item: CampoQueueRecord, photoUrls: string[]) {
+function buildCampoAssetPayload(item: CampoQueueRecord, photoUrls: string[]) {
   return {
     name: item.name,
     type: item.assetType,
@@ -296,6 +343,25 @@ function buildCampoPayload(item: CampoQueueRecord, photoUrls: string[]) {
       capturedAt: item.createdAt,
       offlineQueue: true,
     },
+  };
+}
+
+function buildCampoFieldRecordPayload(item: CampoQueueRecord, photoUrls: string[]) {
+  return {
+    recordType: item.recordType,
+    name: item.name,
+    note: item.note || null,
+    lat: item.lat,
+    lng: item.lng,
+    photos: photoUrls,
+    projectId: item.projectId,
+    phaseId: item.phaseId,
+    technicalArea: item.technicalArea,
+    technicalObjectType: item.technicalObjectType,
+    relatedAssetId: item.relatedAssetId,
+    inspectionStatus: item.inspectionStatus,
+    issueStatus: item.issueStatus,
+    clientRef: item.id,
   };
 }
 
@@ -341,7 +407,7 @@ async function uploadAttachments(
   }
 
   if (!payload || typeof payload !== "object") {
-    throw new Error("Resposta invalida do upload.");
+    throw new Error("Resposta inválida do upload.");
   }
 
   const urls = (payload as { urls?: unknown }).urls;
@@ -351,7 +417,7 @@ async function uploadAttachments(
 
   const validUrls = urls.filter((url): url is string => typeof url === "string" && url.length > 0);
   if (validUrls.length === 0) {
-    throw new Error("Upload nao retornou URLs validas.");
+    throw new Error("Upload não retornou URLs válidas.");
   }
 
   return validUrls;
@@ -371,10 +437,21 @@ export async function createCampoQueueItem(draft: CampoCaptureDraft): Promise<Ca
     const record: CampoQueueRecord = {
       id: itemId,
       assetType: draft.assetType,
+      recordType: draft.recordType ?? null,
       name: draft.name.trim(),
       note: draft.note.trim(),
       lat: normalizeNumber(draft.lat),
       lng: normalizeNumber(draft.lng),
+      projectId: normalizeText(draft.projectId),
+      projectLabel: normalizeText(draft.projectLabel),
+      phaseId: normalizeText(draft.phaseId),
+      phaseLabel: normalizeText(draft.phaseLabel),
+      technicalArea: normalizeText(draft.technicalArea),
+      technicalObjectType: normalizeText(draft.technicalObjectType),
+      relatedAssetId: normalizeText(draft.relatedAssetId),
+      relatedAssetLabel: normalizeText(draft.relatedAssetLabel),
+      inspectionStatus: draft.inspectionStatus ?? null,
+      issueStatus: draft.issueStatus ?? null,
       createdAt: draft.createdAt ?? now,
       updatedAt: now,
       status: "pending",
@@ -467,7 +544,11 @@ async function setItemStatusSyncing(id: string): Promise<void> {
   }));
 }
 
-async function setItemStatusSynced(id: string, serverAssetId: string | null, photoUrls: string[]): Promise<void> {
+async function setItemStatusSynced(
+  id: string,
+  serverAssetId: string | null,
+  photoUrls: string[]
+): Promise<void> {
   await updateQueueRecord(id, (current) => ({
     ...current,
     status: "synced",
@@ -551,8 +632,12 @@ async function runSync(fetchImpl: typeof fetch): Promise<CampoSyncSummary> {
         await saveUploadedPhotoUrls(current.id, photoUrls);
       }
 
-      const payload = buildCampoPayload(current, photoUrls);
-      const response = await fetchImpl("/api/gis", {
+      const isFieldRecord = current.recordType === "VISTORIA" || current.recordType === "OCORRENCIA";
+      const payload = isFieldRecord
+        ? buildCampoFieldRecordPayload(current, photoUrls)
+        : buildCampoAssetPayload(current, photoUrls);
+
+      const response = await fetchImpl(isFieldRecord ? "/api/campo/records" : "/api/gis", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -566,14 +651,14 @@ async function runSync(fetchImpl: typeof fetch): Promise<CampoSyncSummary> {
       if (response.status === 409) {
         await setItemStatusConflict(
           current.id,
-          extractErrorMessage(responsePayload, "Conflito de sincronizacao detectado.")
+          extractErrorMessage(responsePayload, "Conflito de sincronização detectado.")
         );
         summary.conflicted += 1;
         continue;
       }
 
       if (!response.ok) {
-        throw new Error(extractErrorMessage(responsePayload, "Falha ao sincronizar ativo."));
+        throw new Error(extractErrorMessage(responsePayload, "Falha ao sincronizar registro de campo."));
       }
 
       const serverAssetId =
@@ -590,7 +675,7 @@ async function runSync(fetchImpl: typeof fetch): Promise<CampoSyncSummary> {
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
-          : "Erro inesperado na sincronizacao.";
+          : "Erro inesperado na sincronização.";
       await setItemStatusError(current.id, message);
       summary.failed += 1;
     }
@@ -625,4 +710,3 @@ export async function getCampoQueueItem(id: string): Promise<CampoQueueItem | nu
   const attachments = await getAttachmentsByQueueId(id);
   return toQueueItem(record, attachments.length);
 }
-
