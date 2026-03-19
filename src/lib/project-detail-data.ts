@@ -1,6 +1,7 @@
-import { Prisma } from "@prisma/client";
+﻿import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getProjectShellData, type ProjectShellRecord } from "@/lib/project-pages";
+import type { ProjectSchemaCompatibility } from "@/lib/project-schema-compat";
 import { summarizePavementProjectAssets } from "@/lib/pavement-technical";
 import {
   buildEmptyMeasurementIndicators,
@@ -11,6 +12,7 @@ import {
 type ProjectContext = {
   tenantId: string;
   project: ProjectShellRecord;
+  compatibility: ProjectSchemaCompatibility;
 };
 
 function decimalToNumber(value: Prisma.Decimal | number | null | undefined) {
@@ -20,9 +22,9 @@ function decimalToNumber(value: Prisma.Decimal | number | null | undefined) {
 }
 
 async function getProjectContext(projectId: string): Promise<ProjectContext | null> {
-  const { tenantId, project } = await getProjectShellData(projectId);
+  const { tenantId, project, compatibility } = await getProjectShellData(projectId);
   if (!tenantId || !project) return null;
-  return { tenantId, project };
+  return { tenantId, project, compatibility };
 }
 
 export function resolveProjectDeadline(project: {
@@ -39,7 +41,7 @@ export function resolveProjectLocation(project: {
 }) {
   return [project.neighborhood, project.district, project.region]
     .filter((value): value is string => Boolean(value && value.trim()))
-    .join(" Â· ");
+    .join(" Ã‚Â· ");
 }
 
 export function resolvePrimaryContract(project: ProjectShellRecord) {
@@ -143,7 +145,7 @@ async function loadPlanningData(context: ProjectContext) {
 }
 
 async function loadFinancialData(context: ProjectContext) {
-  const { tenantId, project } = context;
+  const { tenantId, project, compatibility } = context;
 
   const [contracts, fundingSources, measurementTotals] = await Promise.all([
     prisma.projectContract.findMany({
@@ -156,63 +158,110 @@ async function loadFinancialData(context: ProjectContext) {
       orderBy: [{ isPrimary: "desc" }, { updatedAt: "desc" }],
       take: 8,
     }),
-    prisma.projectMeasurement.aggregate({
-      where: { tenantId, projectId: project.id },
-      _count: { _all: true },
-      _sum: {
-        approvedAmount: true,
-        measuredAmount: true,
-        paidAmount: true,
-      },
-    }),
+    compatibility.measurementSchemaReady
+      ? prisma.projectMeasurement.aggregate({
+          where: { tenantId, projectId: project.id },
+          _count: { _all: true },
+          _sum: {
+            approvedAmount: true,
+            measuredAmount: true,
+            paidAmount: true,
+          },
+        })
+      : Promise.resolve({
+          _count: { _all: 0 },
+          _sum: {
+            approvedAmount: null,
+            measuredAmount: null,
+            paidAmount: null,
+          },
+        }),
   ]);
 
   return { contracts, fundingSources, measurementTotals };
 }
 
 async function loadDocumentData(context: ProjectContext) {
-  const { tenantId, project } = context;
+  const { tenantId, project, compatibility } = context;
 
-  const documents = await prisma.projectDocument.findMany({
-    where: { tenantId, projectId: project.id },
-    orderBy: [{ documentDate: "desc" }, { createdAt: "desc" }],
-    take: 24,
-    include: {
-      uploadedBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
+  const documents = compatibility.measurementSchemaReady
+    ? await prisma.projectDocument.findMany({
+        where: { tenantId, projectId: project.id },
+        orderBy: [{ documentDate: "desc" }, { createdAt: "desc" }],
+        take: 24,
+        include: {
+          uploadedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          phase: {
+            select: {
+              id: true,
+              name: true,
+              sequence: true,
+            },
+          },
+          contract: {
+            select: {
+              id: true,
+              title: true,
+              contractNumber: true,
+            },
+          },
+          measurement: {
+            select: {
+              id: true,
+              measurementNumber: true,
+            },
+          },
         },
-      },
-      phase: {
-        select: {
-          id: true,
-          name: true,
-          sequence: true,
-        },
-      },
-      contract: {
-        select: {
-          id: true,
-          title: true,
-          contractNumber: true,
-        },
-      },
-      measurement: {
-        select: {
-          id: true,
-          measurementNumber: true,
-        },
-      },
-    },
-  });
+      })
+    : (
+        await prisma.projectDocument.findMany({
+          where: { tenantId, projectId: project.id },
+          orderBy: [{ documentDate: "desc" }, { createdAt: "desc" }],
+          take: 24,
+          include: {
+            uploadedBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            phase: {
+              select: {
+                id: true,
+                name: true,
+                sequence: true,
+              },
+            },
+            contract: {
+              select: {
+                id: true,
+                title: true,
+                contractNumber: true,
+              },
+            },
+          },
+        })
+      ).map((document) => ({
+        ...document,
+        measurement: null,
+      }));
 
   return { documents };
 }
 
 async function loadMeasurementData(context: ProjectContext) {
-  const { tenantId, project } = context;
+  const { tenantId, project, compatibility } = context;
+
+  if (!compatibility.measurementSchemaReady) {
+    return { measurements: [] };
+  }
 
   const measurements = await prisma.projectMeasurement.findMany({
     where: { tenantId, projectId: project.id },
@@ -274,48 +323,88 @@ async function loadMeasurementData(context: ProjectContext) {
 }
 
 async function loadInspectionData(context: ProjectContext) {
-  const { tenantId, project } = context;
+  const { tenantId, project, compatibility } = context;
 
-  const inspections = await prisma.projectInspection.findMany({
-    where: { tenantId, projectId: project.id },
-    orderBy: [{ occurredAt: "desc" }, { scheduledAt: "desc" }, { createdAt: "desc" }],
-    take: 24,
-    include: {
-      phase: {
-        select: {
-          id: true,
-          name: true,
-          sequence: true,
+  const inspections = compatibility.measurementSchemaReady
+    ? await prisma.projectInspection.findMany({
+        where: { tenantId, projectId: project.id },
+        orderBy: [{ occurredAt: "desc" }, { scheduledAt: "desc" }, { createdAt: "desc" }],
+        take: 24,
+        include: {
+          phase: {
+            select: {
+              id: true,
+              name: true,
+              sequence: true,
+            },
+          },
+          measurement: {
+            select: {
+              id: true,
+              measurementNumber: true,
+            },
+          },
+          inspector: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          asset: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+            },
+          },
+          _count: {
+            select: {
+              documents: true,
+              issues: true,
+            },
+          },
         },
-      },
-      measurement: {
-        select: {
-          id: true,
-          measurementNumber: true,
-        },
-      },
-      inspector: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-      asset: {
-        select: {
-          id: true,
-          name: true,
-          type: true,
-        },
-      },
-      _count: {
-        select: {
-          documents: true,
-          issues: true,
-        },
-      },
-    },
-  });
+      })
+    : (
+        await prisma.projectInspection.findMany({
+          where: { tenantId, projectId: project.id },
+          orderBy: [{ occurredAt: "desc" }, { scheduledAt: "desc" }, { createdAt: "desc" }],
+          take: 24,
+          include: {
+            phase: {
+              select: {
+                id: true,
+                name: true,
+                sequence: true,
+              },
+            },
+            inspector: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            asset: {
+              select: {
+                id: true,
+                name: true,
+                type: true,
+              },
+            },
+            _count: {
+              select: {
+                documents: true,
+                issues: true,
+              },
+            },
+          },
+        })
+      ).map((inspection) => ({
+        ...inspection,
+        measurement: null,
+      }));
 
   return { inspections };
 }
@@ -390,59 +479,109 @@ async function loadIssuesAndRisksData(context: ProjectContext) {
 }
 
 async function loadHistoryData(context: ProjectContext) {
-  const { tenantId, project } = context;
+  const { tenantId, project, compatibility } = context;
 
   const [comments, auditLogs] = await Promise.all([
-    prisma.projectComment.findMany({
-      where: { tenantId, projectId: project.id },
-      orderBy: [{ createdAt: "desc" }],
-      take: 24,
-      include: {
-        author: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+    compatibility.measurementSchemaReady
+      ? prisma.projectComment.findMany({
+          where: { tenantId, projectId: project.id },
+          orderBy: [{ createdAt: "desc" }],
+          take: 24,
+          include: {
+            author: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            phase: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            milestone: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+            measurement: {
+              select: {
+                id: true,
+                measurementNumber: true,
+              },
+            },
+            inspection: {
+              select: {
+                id: true,
+                inspectionType: true,
+              },
+            },
+            issue: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+            risk: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
           },
-        },
-        phase: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        milestone: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-        measurement: {
-          select: {
-            id: true,
-            measurementNumber: true,
-          },
-        },
-        inspection: {
-          select: {
-            id: true,
-            inspectionType: true,
-          },
-        },
-        issue: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-        risk: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-      },
-    }),
+        })
+      : (
+          await prisma.projectComment.findMany({
+            where: { tenantId, projectId: project.id },
+            orderBy: [{ createdAt: "desc" }],
+            take: 24,
+            include: {
+              author: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+              phase: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+              milestone: {
+                select: {
+                  id: true,
+                  title: true,
+                },
+              },
+              inspection: {
+                select: {
+                  id: true,
+                  inspectionType: true,
+                },
+              },
+              issue: {
+                select: {
+                  id: true,
+                  title: true,
+                },
+              },
+              risk: {
+                select: {
+                  id: true,
+                  title: true,
+                },
+              },
+            },
+          })
+        ).map((comment) => ({
+          ...comment,
+          measurement: null,
+        })),
     prisma.auditLog.findMany({
       where: {
         tenantId,
@@ -601,7 +740,7 @@ export async function getProjectMeasurementsData(projectId: string) {
     };
   }
 
-  const context = { tenantId, project };
+  const context = { tenantId, project, compatibility };
   const [{ measurements }, phases, contracts] = await Promise.all([
     loadMeasurementData(context),
     prisma.projectPhase.findMany({
@@ -694,3 +833,4 @@ export async function getProjectGisData(projectId: string) {
 export type ProjectOverviewData = NonNullable<
   Awaited<ReturnType<typeof getProjectOverviewData>>
 >;
+
