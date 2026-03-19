@@ -14,10 +14,12 @@ const FALLBACK_SCHEMA_COMPATIBILITY: ProjectSchemaCompatibility = {
   governanceSchemaReady: false,
   measurementSchemaReady: false,
   fieldSchemaReady: false,
+  documentSchemaReady: false,
   schemaMode: "legacy",
   notice: null,
   measurementNotice: null,
   fieldNotice: null,
+  documentNotice: null,
 };
 
 export default async function ProjetosPage({

@@ -8,10 +8,12 @@ export type ProjectSchemaCompatibility = {
   governanceSchemaReady: boolean;
   measurementSchemaReady: boolean;
   fieldSchemaReady: boolean;
+  documentSchemaReady: boolean;
   schemaMode: ProjectSchemaMode;
   notice: string | null;
   measurementNotice: string | null;
   fieldNotice: string | null;
+  documentNotice: string | null;
 };
 
 type ProjectSchemaCheckRow = {
@@ -28,6 +30,11 @@ type ProjectSchemaCheckRow = {
   hasInspectionTechnicalObjectType: boolean;
   hasIssueTechnicalArea: boolean;
   hasIssueTechnicalObjectType: boolean;
+  hasDocumentTechnicalArea: boolean;
+  hasDocumentTypeEdital: boolean;
+  hasDocumentTypeOrdemServico: boolean;
+  hasDocumentTypeRelatorioFotografico: boolean;
+  hasDocumentTypeLaudo: boolean;
 };
 
 function buildCompatibilityNotice(
@@ -55,6 +62,12 @@ function buildFieldNotice(fieldSchemaReady: boolean) {
   if (fieldSchemaReady) return null;
 
   return "Fiscalização, pendências e vínculos de campo ainda dependem da migration complementar do módulo Projetos. Aplique `npx prisma migrate deploy` no ambiente publicado para liberar vínculos por área técnica e objeto relacionado.";
+}
+
+function buildDocumentNotice(documentSchemaReady: boolean) {
+  if (documentSchemaReady) return null;
+
+  return "A gestão documental ampliada do projeto ainda depende da migration complementar do módulo Projetos. Aplique `npx prisma migrate deploy` no ambiente publicado para liberar categorias novas, vínculo por área técnica e upload documental completo.";
 }
 
 export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaCompatibility> {
@@ -146,6 +159,42 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
           AND table_name = 'project_issues'
           AND column_name = 'technicalObjectType'
       ) AS "hasIssueTechnicalObjectType"
+      ,
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_documents'
+          AND column_name = 'technicalArea'
+      ) AS "hasDocumentTechnicalArea",
+      EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_enum e ON e.enumtypid = t.oid
+        WHERE t.typname = 'ProjectDocumentType'
+          AND e.enumlabel = 'EDITAL'
+      ) AS "hasDocumentTypeEdital",
+      EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_enum e ON e.enumtypid = t.oid
+        WHERE t.typname = 'ProjectDocumentType'
+          AND e.enumlabel = 'ORDEM_SERVICO'
+      ) AS "hasDocumentTypeOrdemServico",
+      EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_enum e ON e.enumtypid = t.oid
+        WHERE t.typname = 'ProjectDocumentType'
+          AND e.enumlabel = 'RELATORIO_FOTOGRAFICO'
+      ) AS "hasDocumentTypeRelatorioFotografico",
+      EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_enum e ON e.enumtypid = t.oid
+        WHERE t.typname = 'ProjectDocumentType'
+          AND e.enumlabel = 'LAUDO'
+      ) AS "hasDocumentTypeLaudo"
   `);
 
   const row = rows[0] ?? {
@@ -162,6 +211,11 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
     hasInspectionTechnicalObjectType: false,
     hasIssueTechnicalArea: false,
     hasIssueTechnicalObjectType: false,
+    hasDocumentTechnicalArea: false,
+    hasDocumentTypeEdital: false,
+    hasDocumentTypeOrdemServico: false,
+    hasDocumentTypeRelatorioFotografico: false,
+    hasDocumentTypeLaudo: false,
   };
 
   const executiveSchemaReady = row.hasProjectCode && row.hasEstimatedBudget;
@@ -178,16 +232,25 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
     row.hasInspectionTechnicalObjectType &&
     row.hasIssueTechnicalArea &&
     row.hasIssueTechnicalObjectType;
+  const documentSchemaReady =
+    governanceSchemaReady &&
+    row.hasDocumentTechnicalArea &&
+    row.hasDocumentTypeEdital &&
+    row.hasDocumentTypeOrdemServico &&
+    row.hasDocumentTypeRelatorioFotografico &&
+    row.hasDocumentTypeLaudo;
 
   return {
     executiveSchemaReady,
     governanceSchemaReady,
     measurementSchemaReady,
     fieldSchemaReady,
+    documentSchemaReady,
     schemaMode: governanceSchemaReady ? "full" : "legacy",
     notice: buildCompatibilityNotice(executiveSchemaReady, governanceSchemaReady),
     measurementNotice: buildMeasurementNotice(measurementSchemaReady),
     fieldNotice: buildFieldNotice(fieldSchemaReady),
+    documentNotice: buildDocumentNotice(documentSchemaReady),
   };
 }
 

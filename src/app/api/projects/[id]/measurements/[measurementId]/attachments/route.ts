@@ -73,6 +73,7 @@ export async function POST(req: NextRequest, context: ProjectMeasurementAttachme
         measurementNumber: true,
         phaseId: true,
         contractId: true,
+        technicalArea: true,
       },
     });
 
@@ -163,6 +164,9 @@ export async function POST(req: NextRequest, context: ProjectMeasurementAttachme
           },
           tenantId: routeContext.tenantId,
           projectId: routeContext.project.id,
+          ...(routeContext.compatibility.documentSchemaReady
+            ? { technicalArea: measurement.technicalArea }
+            : {}),
           phaseId: measurement.phaseId,
           contractId: measurement.contractId,
           measurementId: measurement.id,

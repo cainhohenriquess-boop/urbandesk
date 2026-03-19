@@ -145,6 +145,8 @@ enum ProjectMilestoneStatus {
 
 enum ProjectDocumentType {
   TERMO_REFERENCIA
+  EDITAL
+  ORDEM_SERVICO
   PROJETO_BASICO
   PROJETO_EXECUTIVO
   MEMORIAL
@@ -155,6 +157,8 @@ enum ProjectDocumentType {
   ADITIVO
   MEDICAO
   RELATORIO
+  RELATORIO_FOTOGRAFICO
+  LAUDO
   LICENCA
   MAPA
   FOTO
@@ -709,22 +713,23 @@ model ProjectMilestone {
 }
 
 model ProjectDocument {
-  id            String              @id @default(cuid())
+  id            String                @id @default(cuid())
   title         String
   description   String?
-  documentType  ProjectDocumentType @default(OUTRO)
+  documentType  ProjectDocumentType   @default(OUTRO)
   fileName      String
   storageKey    String
   fileUrl       String?
   mimeType      String?
   fileSize      Int?
   documentDate  DateTime?
-  isPublic      Boolean             @default(false)
-  metadata      Json                @default("{}")
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  isPublic      Boolean               @default(false)
+  metadata      Json                  @default("{}")
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
   tenantId      String
   projectId     String
+  technicalArea ProjectTechnicalArea?
   phaseId       String?
   contractId    String?
   measurementId String?
@@ -741,6 +746,7 @@ model ProjectDocument {
 
   @@index([tenantId, projectId])
   @@index([projectId, documentType])
+  @@index([projectId, technicalArea, documentDate])
   @@index([tenantId, isPublic])
   @@index([phaseId])
   @@index([contractId])

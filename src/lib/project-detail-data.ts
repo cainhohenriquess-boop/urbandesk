@@ -8,6 +8,10 @@ import {
   buildProjectMeasurementIndicators,
   serializeProjectMeasurements,
 } from "@/lib/project-measurements";
+import {
+  buildProjectDocumentIndicators,
+  serializeProjectDocuments,
+} from "@/lib/project-documents";
 
 type ProjectContext = {
   tenantId: string;
@@ -212,76 +216,69 @@ async function loadFinancialData(context: ProjectContext) {
 async function loadDocumentData(context: ProjectContext) {
   const { tenantId, project, compatibility } = context;
 
-  const documents = compatibility.measurementSchemaReady
-    ? await prisma.projectDocument.findMany({
-        where: { tenantId, projectId: project.id },
-        orderBy: [{ documentDate: "desc" }, { createdAt: "desc" }],
-        take: 24,
-        include: {
-          uploadedBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          phase: {
-            select: {
-              id: true,
-              name: true,
-              sequence: true,
-            },
-          },
-          contract: {
-            select: {
-              id: true,
-              title: true,
-              contractNumber: true,
-            },
-          },
-          measurement: {
-            select: {
-              id: true,
-              measurementNumber: true,
-            },
-          },
+  const documents = await prisma.projectDocument.findMany({
+    where: { tenantId, projectId: project.id },
+    orderBy: [{ documentDate: "desc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      documentType: true,
+      fileName: true,
+      fileUrl: true,
+      mimeType: true,
+      fileSize: true,
+      documentDate: true,
+      isPublic: true,
+      createdAt: true,
+      updatedAt: true,
+      ...(compatibility.documentSchemaReady ? { technicalArea: true } : {}),
+      uploadedBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
         },
-      })
-    : (
-        await prisma.projectDocument.findMany({
-          where: { tenantId, projectId: project.id },
-          orderBy: [{ documentDate: "desc" }, { createdAt: "desc" }],
-          take: 24,
-          include: {
-            uploadedBy: {
+      },
+      phase: {
+        select: {
+          id: true,
+          name: true,
+          sequence: true,
+        },
+      },
+      contract: {
+        select: {
+          id: true,
+          title: true,
+          contractNumber: true,
+        },
+      },
+      ...(compatibility.measurementSchemaReady
+        ? {
+            measurement: {
               select: {
                 id: true,
-                name: true,
-                email: true,
+                measurementNumber: true,
               },
             },
-            phase: {
-              select: {
-                id: true,
-                name: true,
-                sequence: true,
-              },
-            },
-            contract: {
-              select: {
-                id: true,
-                title: true,
-                contractNumber: true,
-              },
-            },
-          },
-        })
-      ).map((document) => ({
-        ...document,
-        measurement: null,
-      }));
+          }
+        : {}),
+    },
+  });
 
-  return { documents };
+  const serializedDocuments = serializeProjectDocuments(
+    documents.map((document) => ({
+      ...document,
+      measurement: "measurement" in document ? document.measurement ?? null : null,
+      technicalArea: "technicalArea" in document ? document.technicalArea ?? null : null,
+    }))
+  );
+
+  return {
+    documents: serializedDocuments,
+    documentIndicators: buildProjectDocumentIndicators(serializedDocuments),
+  };
 }
 
 async function loadMeasurementData(context: ProjectContext) {
@@ -751,6 +748,7 @@ export async function getProjectDocumentsData(projectId: string) {
   return {
     tenantId: context.tenantId,
     project: context.project,
+    compatibility: context.compatibility,
     ...(await loadDocumentData(context)),
   };
 }
