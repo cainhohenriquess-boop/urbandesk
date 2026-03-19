@@ -50,7 +50,6 @@ const projectShellInclude = {
       fundingSources: true,
       inspections: true,
       issues: true,
-      measurements: true,
       milestones: true,
       phases: true,
       risks: true,
@@ -58,9 +57,15 @@ const projectShellInclude = {
   },
 } satisfies Prisma.ProjectInclude;
 
-export type ProjectShellRecord = Prisma.ProjectGetPayload<{
+type ProjectShellBaseRecord = Prisma.ProjectGetPayload<{
   include: typeof projectShellInclude;
 }>;
+
+export type ProjectShellRecord = Omit<ProjectShellBaseRecord, "_count"> & {
+  _count: ProjectShellBaseRecord["_count"] & {
+    measurements: number;
+  };
+};
 
 export type ProjectShellData = {
   tenantId: string | null;
@@ -118,9 +123,29 @@ const getProjectShellDataCached = cache(async (projectId: string): Promise<Proje
     include: projectShellInclude,
   });
 
+  if (!project) {
+    return {
+      tenantId,
+      project: null,
+      compatibility,
+    };
+  }
+
+  const measurementCount = compatibility.measurementSchemaReady
+    ? await prisma.projectMeasurement.count({
+        where: { tenantId, projectId: project.id },
+      })
+    : 0;
+
   return {
     tenantId,
-    project,
+    project: {
+      ...project,
+      _count: {
+        ...project._count,
+        measurements: measurementCount,
+      },
+    },
     compatibility,
   };
 });

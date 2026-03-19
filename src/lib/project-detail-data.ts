@@ -41,7 +41,7 @@ export function resolveProjectLocation(project: {
 }) {
   return [project.neighborhood, project.district, project.region]
     .filter((value): value is string => Boolean(value && value.trim()))
-    .join(" Ã‚Â· ");
+    .join(" · ");
 }
 
 export function resolvePrimaryContract(project: ProjectShellRecord) {
@@ -92,9 +92,9 @@ export function resolveProjectFinancialProgress(project: ProjectShellRecord) {
 }
 
 async function loadPlanningData(context: ProjectContext) {
-  const { tenantId, project } = context;
+  const { tenantId, project, compatibility } = context;
 
-  const [phases, milestones] = await Promise.all([
+  const [phasesBase, phaseMeasurementCounts, milestones] = await Promise.all([
     prisma.projectPhase.findMany({
       where: { tenantId, projectId: project.id },
       orderBy: [{ sequence: "asc" }],
@@ -111,13 +111,27 @@ async function loadPlanningData(context: ProjectContext) {
             documents: true,
             inspections: true,
             issues: true,
-            measurements: true,
             milestones: true,
             risks: true,
           },
         },
       },
     }),
+    compatibility.measurementSchemaReady
+      ? prisma.projectMeasurement.groupBy({
+          by: ["phaseId"],
+          where: {
+            tenantId,
+            projectId: project.id,
+            phaseId: {
+              not: null,
+            },
+          },
+          _count: {
+            _all: true,
+          },
+        })
+      : Promise.resolve([]),
     prisma.projectMilestone.findMany({
       where: { tenantId, projectId: project.id },
       orderBy: [{ targetDate: "asc" }, { createdAt: "asc" }],
@@ -140,6 +154,18 @@ async function loadPlanningData(context: ProjectContext) {
       },
     }),
   ]);
+
+  const phaseMeasurementCountMap = new Map(
+    phaseMeasurementCounts.map((item) => [item.phaseId, item._count._all])
+  );
+
+  const phases = phasesBase.map((phase) => ({
+    ...phase,
+    _count: {
+      ...phase._count,
+      measurements: phaseMeasurementCountMap.get(phase.id) ?? 0,
+    },
+  }));
 
   return { phases, milestones };
 }
