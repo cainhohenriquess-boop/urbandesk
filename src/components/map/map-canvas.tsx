@@ -161,6 +161,13 @@ const ASSET_STYLES = {
     icon: "ðŸ“¸",
     label: "Radar",
   },
+  DISPOSITIVO_VIARIO: {
+    color: "bg-sky-700",
+    hex: "#0369a1",
+    ring: "ring-sky-700/50",
+    icon: "DV",
+    label: "Dispositivo viário",
+  },
   POSTE_LUZ: {
     color: "bg-yellow-400",
     hex: "#facc15",
@@ -298,11 +305,46 @@ function getDrainageLineStyle(feature: { attributes?: Record<string, unknown>; c
     technicalObjectType === "CANAL";
   const isPavementLine = technicalObjectType === "TRECHO_PAVIMENTO";
   const isLightingLine = technicalObjectType === "CIRCUITO_ILUMINACAO";
-  if (!isDrainageLine && !isPavementLine && !isLightingLine) {
+  const isSignalingMobilityLine =
+    technicalObjectType === "FAIXA_VIARIA" ||
+    technicalObjectType === "TRAVESSIA_PEDESTRE" ||
+    technicalObjectType === "CICLOVIA_CICLOFAIXA" ||
+    technicalObjectType === "PINTURA_VIARIA";
+  if (!isDrainageLine && !isPavementLine && !isLightingLine && !isSignalingMobilityLine) {
     return {
       lineColor: feature.color || "#3b82f6",
       lineWidth: 4,
       lineOpacity: 0.94,
+    };
+  }
+  if (isSignalingMobilityLine) {
+    let lineColor =
+      technicalObjectType === "CICLOVIA_CICLOFAIXA"
+        ? "#06b6d4"
+        : technicalObjectType === "TRAVESSIA_PEDESTRE"
+          ? "#f97316"
+          : "#f43f5e";
+    if (
+      operationalStatus === "INOPERANTE" ||
+      assetCondition === "RUIM" ||
+      surfaceCondition === "RUIM" ||
+      readFeatureString(feature.attributes, "operationCondition") === "INOPERANTE" ||
+      readFeatureString(feature.attributes, "conformityStatus") === "NAO_CONFORME"
+    ) {
+      lineColor = "#dc2626";
+    } else if (
+      readFeatureString(feature.attributes, "operationCondition") === "REGULAR" ||
+      readFeatureString(feature.attributes, "conformityStatus") === "AJUSTE" ||
+      readFeatureString(feature.attributes, "operationCondition") === "DESGASTADA"
+    ) {
+      lineColor = "#f59e0b";
+    }
+
+    return {
+      lineColor,
+      lineWidth: technicalObjectType === "TRAVESSIA_PEDESTRE" ? 5.5 : 4.5,
+      lineOpacity:
+        readFeatureString(feature.attributes, "conformityStatus") === "A_VERIFICAR" ? 0.82 : 0.96,
     };
   }
   if (isLightingLine) {
@@ -417,6 +459,19 @@ function getPointVisualStyle(feature: { type: string; attributes?: Record<string
     technicalObjectType === "PONTO_APAGADO" ||
     technicalObjectType === "OCORRENCIA_MANUTENCAO_ILUMINACAO" ||
     technicalObjectType === "ITEM_VISTORIADO_ILUMINACAO";
+  const isSignalingMobilityPoint =
+    technicalObjectType === "SEMAFORO" ||
+    technicalObjectType === "PLACA_TRANSITO" ||
+    technicalObjectType === "LOMBADA" ||
+    technicalObjectType === "PONTO_ONIBUS" ||
+    technicalObjectType === "RADAR" ||
+    technicalObjectType === "DISPOSITIVO_VIARIO" ||
+    feature.type === "SEMAFORO" ||
+    feature.type === "PLACA_TRANSITO" ||
+    feature.type === "LOMBADA" ||
+    feature.type === "PONTO_ONIBUS" ||
+    feature.type === "RADAR" ||
+    feature.type === "DISPOSITIVO_VIARIO";
   const isArborizationPoint =
     technicalObjectType === "ARVORE" ||
     technicalObjectType === "OCORRENCIA_PODA" ||
@@ -432,7 +487,34 @@ function getPointVisualStyle(feature: { type: string; attributes?: Record<string
     readFeatureString(feature.attributes, "criticality") ??
     readFeatureString(feature.attributes, "severity");
   let hex: string = baseStyle?.hex || "#ffffff";
-  if (!isDrainagePoint && !isPavementPoint && !isLightingPoint && !isArborizationPoint) {
+  if (
+    !isDrainagePoint &&
+    !isPavementPoint &&
+    !isLightingPoint &&
+    !isArborizationPoint &&
+    !isSignalingMobilityPoint
+  ) {
+    return {
+      ...(baseStyle ?? {}),
+      hex,
+    };
+  }
+  if (isSignalingMobilityPoint) {
+    const operationCondition =
+      readFeatureString(feature.attributes, "operationCondition") ??
+      readFeatureString(feature.attributes, "mobilityStatus");
+    const conformityStatus = readFeatureString(feature.attributes, "conformityStatus");
+
+    if (conformityStatus === "NAO_CONFORME" || operationCondition === "INOPERANTE") {
+      hex = "#dc2626";
+    } else if (
+      conformityStatus === "AJUSTE" ||
+      operationCondition === "REGULAR" ||
+      operationCondition === "DESGASTADA"
+    ) {
+      hex = "#f59e0b";
+    }
+
     return {
       ...(baseStyle ?? {}),
       hex,

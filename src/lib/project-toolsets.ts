@@ -153,16 +153,16 @@ const PROJECT_AREA_TOOLSET_GROUPS: Partial<
   ],
   SINALIZACAO: [
     {
-      id: "signaling-points",
+      id: "signaling-vertical",
       title: "Sinalização pontual",
-      description: "Semáforos, placas e dispositivos físicos.",
-      items: ["SEMAFORO", "PLACA_TRANSITO", "LOMBADA"],
+      description: "Placas, semáforos e elementos físicos de moderação ou controle.",
+      items: ["PLACA_TRANSITO", "SEMAFORO", "LOMBADA"],
     },
     {
-      id: "signaling-lines",
-      title: "Sinalização linear",
-      description: "Pintura viária e faixas horizontais.",
-      items: ["PINTURA_VIARIA"],
+      id: "signaling-horizontal",
+      title: "Marcação horizontal",
+      description: "Faixas, travessias e pintura aplicada ao sistema viário.",
+      items: ["FAIXA_VIARIA", "TRAVESSIA_PEDESTRE", "PINTURA_VIARIA"],
     },
   ],
   FISCALIZACAO: [
@@ -183,8 +183,14 @@ const PROJECT_AREA_TOOLSET_GROUPS: Partial<
     {
       id: "mobility-assets",
       title: "Equipamentos de mobilidade",
-      description: "Pontos de ônibus, radares e apoio operacional.",
-      items: ["PONTO_ONIBUS", "RADAR"],
+      description: "Pontos de ônibus, dispositivos viários e apoio operacional.",
+      items: ["PONTO_ONIBUS", "DISPOSITIVO_VIARIO", "RADAR"],
+    },
+    {
+      id: "mobility-corridors",
+      title: "Infraestrutura cicloviária",
+      description: "Ciclovias, ciclofaixas e trechos associados à circulação segura.",
+      items: ["CICLOVIA_CICLOFAIXA"],
     },
   ],
   SANEAMENTO: [

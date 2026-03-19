@@ -23,6 +23,8 @@ import { ProjectLightingTechnicalPanel } from "@/components/projetos/project-lig
 import { ProjectMapDisciplineToolset } from "@/components/projetos/project-map-discipline-toolset";
 import { ProjectMapGlobalToolbar } from "@/components/projetos/project-map-global-toolbar";
 import { ProjectPavementRoadForm } from "@/components/projetos/project-pavement-road-form";
+import { ProjectSignalingMobilityForm } from "@/components/projetos/project-signaling-mobility-form";
+import { ProjectSignalingMobilityPanel } from "@/components/projetos/project-signaling-mobility-panel";
 import { ProjectMapTechnicalForm } from "@/components/projetos/project-map-technical-form";
 import {
   ARBORIZATION_FILTER_LABELS,
@@ -74,6 +76,24 @@ import {
   getLightingTechnicalPanelStats,
   type LightingProjectLinkFilter,
 } from "@/lib/lighting-technical-panel";
+import {
+  buildSignalingMobilityAssistAttributes,
+  buildSignalingMobilityAutoContext,
+  buildSignalingMobilitySuggestedName,
+  buildSignalingMobilityTechnicalDefaults,
+  isSignalingMobilityObjectType,
+  validateSignalingMobilityGeometry,
+  type SignalingMobilityTechnicalObjectTypeId,
+} from "@/lib/signaling-mobility";
+import {
+  EMPTY_SIGNALING_MOBILITY_FILTERS,
+  getSignalingMobilityFilterOptions,
+  getSignalingMobilityTechnicalPanelStats,
+  readSignalingMobilityFilterValue,
+  SIGNALING_MOBILITY_FILTER_LABELS,
+  type SignalingMobilityFilterKey,
+  type SignalingMobilityFilterState,
+} from "@/lib/signaling-mobility-panel";
 import {
   importGeoJsonFeatures,
   joinLineFeatures,
@@ -757,6 +777,8 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const [arborizationFilters, setArborizationFilters] =
     useState<ArborizationFilterState>(EMPTY_ARBORIZATION_FILTERS);
   const [drainageFilters, setDrainageFilters] = useState<DrainageFilterState>(EMPTY_DRAINAGE_FILTERS);
+  const [signalingMobilityFilters, setSignalingMobilityFilters] =
+    useState<SignalingMobilityFilterState>(EMPTY_SIGNALING_MOBILITY_FILTERS);
   const [infrastructureFilters, setInfrastructureFilters] = useState<InfrastructureLayerFeatureFilters>(
     EMPTY_INFRASTRUCTURE_LAYER_FILTERS
   );
@@ -1165,6 +1187,67 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     return assessArborizationTree(technicalFieldValues, arborizationTreeAutoContext);
   }, [arborizationTreeAutoContext, technicalFieldValues]);
 
+  const signalingMobilityAutoContext = useMemo(() => {
+    const source = pendingFeature ?? selectedFeature;
+    if (!source) return null;
+
+    const context = getFeatureTechnicalContext(source, effectiveTechnicalArea);
+    if (!isSignalingMobilityObjectType(context.technicalObjectType)) {
+      return null;
+    }
+
+    return buildSignalingMobilityAutoContext({
+      feature: source,
+      baseLayersData,
+      project: {
+        id: project.id,
+        name: project.name,
+        code: project.code,
+        neighborhood: project.neighborhood,
+        district: project.district,
+        region: project.region,
+      },
+      currentUser,
+      technicalArea: context.technicalArea ?? effectiveTechnicalArea,
+    });
+  }, [
+    baseLayersData,
+    currentUser,
+    effectiveTechnicalArea,
+    pendingFeature,
+    project.code,
+    project.district,
+    project.id,
+    project.name,
+    project.neighborhood,
+    project.region,
+    selectedFeature,
+  ]);
+  const signalingMobilityAssessment = useMemo(() => {
+    const source = pendingFeature ?? selectedFeature;
+    if (!source) return null;
+
+    const context = getFeatureTechnicalContext(source, effectiveTechnicalArea);
+    const signalingMobilityObjectType = isSignalingMobilityObjectType(
+      context.technicalObjectType
+    )
+      ? context.technicalObjectType
+      : null;
+    if (!signalingMobilityObjectType) return null;
+
+    return buildSignalingMobilityTechnicalDefaults({
+      autoContext: signalingMobilityAutoContext,
+      technicalObjectType: signalingMobilityObjectType,
+      currentValues: technicalFieldValues,
+    });
+  }, [
+    effectiveTechnicalArea,
+    pendingFeature,
+    selectedFeature,
+    signalingMobilityAutoContext,
+    technicalFieldValues,
+  ]);
+
   const lightingAutoContext = useMemo(() => {
     const source = pendingFeature ?? selectedFeature;
     if (!source) return null;
@@ -1285,6 +1368,11 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     if (pendingFeature) {
       const context = getFeatureTechnicalContext(pendingFeature, effectiveTechnicalArea);
       const isArborizationTree = isArborizationTreeObjectType(context.technicalObjectType);
+      const signalingMobilityObjectType = isSignalingMobilityObjectType(
+        context.technicalObjectType
+      )
+        ? context.technicalObjectType
+        : null;
       const lightingObjectType = isLightingTechnicalObjectType(context.technicalObjectType)
         ? context.technicalObjectType
         : null;
@@ -1296,6 +1384,13 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       const arborizationDefaultState = isArborizationTree
         ? buildArborizationTreeTechnicalDefaults({
             autoContext: arborizationTreeAutoContext,
+            currentValues: rawTechnicalValues,
+          })
+        : null;
+      const signalingMobilityDefaultState = signalingMobilityObjectType
+        ? buildSignalingMobilityTechnicalDefaults({
+            autoContext: signalingMobilityAutoContext,
+            technicalObjectType: signalingMobilityObjectType,
             currentValues: rawTechnicalValues,
           })
         : null;
@@ -1312,6 +1407,8 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           ? mergePavementRoadSegmentDefaultValues(rawTechnicalValues)
           : arborizationDefaultState
             ? arborizationDefaultState.suggestedValues
+          : signalingMobilityDefaultState
+            ? signalingMobilityDefaultState.suggestedValues
           : lightingDefaultState
             ? lightingDefaultState.suggestedValues
             : rawTechnicalValues;
@@ -1324,6 +1421,12 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                 pavementRoadSegmentAutoContext,
                 nextTechnicalValues
               )
+            : signalingMobilityObjectType && signalingMobilityAutoContext
+              ? buildSignalingMobilitySuggestedName(
+                  signalingMobilityAutoContext,
+                  signalingMobilityObjectType,
+                  nextTechnicalValues
+                )
             : lightingObjectType && lightingAutoContext
               ? buildLightingSuggestedName(
                   lightingAutoContext,
@@ -1373,6 +1476,11 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       const attributes = (selectedFeature.attributes ?? selectedDetail?.attributes ?? {}) as Record<string, unknown>;
       const context = getFeatureTechnicalContext(selectedFeature, effectiveTechnicalArea);
       const isArborizationTree = isArborizationTreeObjectType(context.technicalObjectType);
+      const signalingMobilityObjectType = isSignalingMobilityObjectType(
+        context.technicalObjectType
+      )
+        ? context.technicalObjectType
+        : null;
       const lightingObjectType = isLightingTechnicalObjectType(context.technicalObjectType)
         ? context.technicalObjectType
         : null;
@@ -1384,6 +1492,13 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       const arborizationDefaultState = isArborizationTree
         ? buildArborizationTreeTechnicalDefaults({
             autoContext: arborizationTreeAutoContext,
+            currentValues: rawTechnicalValues,
+          })
+        : null;
+      const signalingMobilityDefaultState = signalingMobilityObjectType
+        ? buildSignalingMobilityTechnicalDefaults({
+            autoContext: signalingMobilityAutoContext,
+            technicalObjectType: signalingMobilityObjectType,
             currentValues: rawTechnicalValues,
           })
         : null;
@@ -1400,6 +1515,8 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           ? mergePavementRoadSegmentDefaultValues(rawTechnicalValues)
           : arborizationDefaultState
             ? arborizationDefaultState.suggestedValues
+          : signalingMobilityDefaultState
+            ? signalingMobilityDefaultState.suggestedValues
           : lightingDefaultState
             ? lightingDefaultState.suggestedValues
             : rawTechnicalValues;
@@ -1412,6 +1529,12 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                 pavementRoadSegmentAutoContext,
                 nextTechnicalValues
               )
+            : signalingMobilityObjectType && signalingMobilityAutoContext
+              ? buildSignalingMobilitySuggestedName(
+                  signalingMobilityAutoContext,
+                  signalingMobilityObjectType,
+                  nextTechnicalValues
+                )
             : lightingObjectType && lightingAutoContext
               ? buildLightingSuggestedName(
                   lightingAutoContext,
@@ -1475,6 +1598,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     pendingFeature,
     pavementRoadSegmentAutoContext,
     project.responsibleDepartment,
+    signalingMobilityAutoContext,
     selectedDetail,
     selectedFeature,
   ]);
@@ -1648,11 +1772,38 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     },
     []
   );
+  const handleSignalingMobilityFilterChange = useCallback(
+    (key: SignalingMobilityFilterKey, value: string) => {
+      setSignalingMobilityFilters((current) => ({
+        ...current,
+        [key]: value,
+      }));
+    },
+    []
+  );
 
   const arborizationFilterOptions = useMemo(
     () => getArborizationFilterOptions(features),
     [features]
   );
+  const signalingMobilityFilterOptions = useMemo(() => {
+    if (effectiveTechnicalArea !== "SINALIZACAO" && effectiveTechnicalArea !== "MOBILIDADE") {
+      return {
+        technicalObjectType: [],
+        operationCondition: [],
+        conformityStatus: [],
+      } satisfies Record<SignalingMobilityFilterKey, Array<{ value: string; label: string }>>;
+    }
+
+    return getSignalingMobilityFilterOptions(features, effectiveTechnicalArea);
+  }, [effectiveTechnicalArea, features]);
+  const signalingMobilityPanelStats = useMemo(() => {
+    if (effectiveTechnicalArea !== "SINALIZACAO" && effectiveTechnicalArea !== "MOBILIDADE") {
+      return getSignalingMobilityTechnicalPanelStats(features, "SINALIZACAO");
+    }
+
+    return getSignalingMobilityTechnicalPanelStats(features, effectiveTechnicalArea);
+  }, [effectiveTechnicalArea, features]);
 
   const filteredFeatures = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -1694,6 +1845,21 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         if (!matchesArborizationFilters) return false;
       }
 
+      if (
+        effectiveTechnicalArea === "SINALIZACAO" ||
+        effectiveTechnicalArea === "MOBILIDADE"
+      ) {
+        const matchesSignalingMobilityFilters = (
+          Object.keys(signalingMobilityFilters) as SignalingMobilityFilterKey[]
+        ).every((key) => {
+          const expectedValue = signalingMobilityFilters[key];
+          if (expectedValue === "ALL") return true;
+          return readSignalingMobilityFilterValue(feature, key) === expectedValue;
+        });
+
+        if (!matchesSignalingMobilityFilters) return false;
+      }
+
       if (!normalizedSearch) return true;
 
       const haystack = [
@@ -1719,6 +1885,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     features,
     pendingOnly,
     searchQuery,
+    signalingMobilityFilters,
   ]);
 
   const disciplineCounts = useMemo(() => {
@@ -2131,6 +2298,11 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       const isArborizationTree = isArborizationTreeObjectType(
         context.technicalObjectType
       );
+      const signalingMobilityObjectType = isSignalingMobilityObjectType(
+        context.technicalObjectType
+      )
+        ? context.technicalObjectType
+        : null;
       const isDrainageSegment = isDrainageSegmentObjectType(context.technicalObjectType);
       const isPavementRoadSegment = isPavementRoadSegmentObjectType(
         context.technicalObjectType
@@ -2139,6 +2311,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         ? context.technicalObjectType
         : null;
       const isLightingObject = lightingObjectType !== null;
+      const isSignalingMobilityObject = signalingMobilityObjectType !== null;
       const assistedDrainageAttributes =
         isDrainageSegment && drainageSegmentAutoContext && drainageSegmentAssessment
           ? buildDrainageSegmentAssistAttributes(drainageSegmentAutoContext, drainageSegmentAssessment)
@@ -2165,6 +2338,13 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
               lightingAutoContext,
               lightingObjectType,
               technicalFieldValues
+            )
+          : {};
+      const assistedSignalingMobilityAttributes =
+        isSignalingMobilityObject && signalingMobilityAutoContext
+          ? buildSignalingMobilityAssistAttributes(
+              signalingMobilityAutoContext,
+              signalingMobilityObjectType
             )
           : {};
 
@@ -2233,6 +2413,24 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
         }
       }
 
+      if (isSignalingMobilityObject) {
+        if (!signalingMobilityAutoContext) {
+          window.alert(
+            "Não foi possível montar o contexto assistido do item de sinalização / mobilidade."
+          );
+          return;
+        }
+
+        const geometryValidation = validateSignalingMobilityGeometry({
+          coords: contextSource?.coords,
+          technicalObjectType: signalingMobilityObjectType,
+        });
+        if (geometryValidation.errors.length > 0) {
+          window.alert(geometryValidation.errors.join("\n"));
+          return;
+        }
+      }
+
       nextAttributes = normalizeTechnicalAttributes(
         compactAttributes({
           ...((selectedFeature?.attributes ?? pendingFeature?.attributes ?? {}) as Record<
@@ -2252,6 +2450,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
           ...assistedPavementAttributes,
           ...assistedArborizationAttributes,
           ...assistedLightingAttributes,
+          ...assistedSignalingMobilityAttributes,
           ...(fieldArea ? { technicalArea: fieldArea } : {}),
           ...(context.technicalObjectType
             ? {
@@ -2282,6 +2481,14 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                 pavementRoadSegmentAutoContext,
                 technicalFieldValues
               )
+            : isSignalingMobilityObjectType(
+                  inspectorContext?.technicalObjectType ?? null
+                ) && signalingMobilityAutoContext
+              ? buildSignalingMobilitySuggestedName(
+                  signalingMobilityAutoContext,
+                  inspectorContext!.technicalObjectType as SignalingMobilityTechnicalObjectTypeId,
+                  technicalFieldValues
+                )
             : isLightingTechnicalObjectType(inspectorContext?.technicalObjectType ?? null) &&
                 lightingAutoContext
               ? buildLightingSuggestedName(
@@ -2318,6 +2525,14 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                 pavementRoadSegmentAutoContext,
                 technicalFieldValues
               )
+            : isSignalingMobilityObjectType(
+                  inspectorContext?.technicalObjectType ?? null
+                ) && signalingMobilityAutoContext
+              ? buildSignalingMobilitySuggestedName(
+                  signalingMobilityAutoContext,
+                  inspectorContext!.technicalObjectType as SignalingMobilityTechnicalObjectTypeId,
+                  technicalFieldValues
+                )
             : isLightingTechnicalObjectType(inspectorContext?.technicalObjectType ?? null) &&
                 lightingAutoContext
               ? buildLightingSuggestedName(
@@ -2458,6 +2673,11 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
   const isArborizationTreeInspector = isArborizationTreeObjectType(
     inspectorContext?.technicalObjectType ?? null
   );
+  const signalingMobilityInspectorObjectType: SignalingMobilityTechnicalObjectTypeId | null =
+    isSignalingMobilityObjectType(inspectorContext?.technicalObjectType ?? null)
+      ? (inspectorContext!.technicalObjectType as SignalingMobilityTechnicalObjectTypeId)
+      : null;
+  const isSignalingMobilityInspector = signalingMobilityInspectorObjectType !== null;
   const lightingInspectorObjectType: LightingTechnicalObjectTypeId | null =
     isLightingTechnicalObjectType(inspectorContext?.technicalObjectType ?? null)
       ? (inspectorContext!.technicalObjectType as LightingTechnicalObjectTypeId)
@@ -2662,6 +2882,23 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
             {effectiveTechnicalArea === "ARBORIZACAO" ? (
               <PanelSection title="Painel técnico" eyebrow="Arborização">
                 <ProjectArborizationTechnicalPanel stats={arborizationPanelStats} />
+              </PanelSection>
+            ) : null}
+
+            {effectiveTechnicalArea === "SINALIZACAO" ||
+            effectiveTechnicalArea === "MOBILIDADE" ? (
+              <PanelSection
+                title="Painel técnico"
+                eyebrow={
+                  effectiveTechnicalArea === "SINALIZACAO"
+                    ? "Sinalização"
+                    : "Mobilidade"
+                }
+              >
+                <ProjectSignalingMobilityPanel
+                  area={effectiveTechnicalArea}
+                  stats={signalingMobilityPanelStats}
+                />
               </PanelSection>
             ) : null}
 
@@ -2939,6 +3176,60 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                           </div>
                         </div>
                       </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {effectiveTechnicalArea === "SINALIZACAO" ||
+                effectiveTechnicalArea === "MOBILIDADE" ? (
+                  <div className="space-y-3 rounded-2xl border border-rose-200 bg-rose-50/70 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-700">
+                          Filtros da disciplina
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          Tipo, condição e conformidade dos elementos de sinalização e mobilidade.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() =>
+                          setSignalingMobilityFilters(EMPTY_SIGNALING_MOBILITY_FILTERS)
+                        }
+                        className="text-[11px] font-semibold text-rose-700 hover:text-rose-600"
+                      >
+                        Limpar
+                      </button>
+                    </div>
+                    <div className="grid gap-3">
+                      {(
+                        Object.keys(
+                          SIGNALING_MOBILITY_FILTER_LABELS
+                        ) as SignalingMobilityFilterKey[]
+                      ).map((key) => (
+                        <label key={key} className="grid gap-1.5">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            {SIGNALING_MOBILITY_FILTER_LABELS[key]}
+                          </span>
+                          <select
+                            value={signalingMobilityFilters[key]}
+                            onChange={(event) =>
+                              handleSignalingMobilityFilterChange(
+                                key,
+                                event.target.value
+                              )
+                            }
+                            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-brand-500"
+                          >
+                            <option value="ALL">Todos</option>
+                            {signalingMobilityFilterOptions[key].map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
                     </div>
                   </div>
                 ) : null}
@@ -3315,6 +3606,23 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                         onChange={handleTechnicalFieldChange}
                       />
                     </>
+                  ) : isSignalingMobilityInspector ? (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome sugerido do item viário" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição técnica, localização ou escopo operacional" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações de conformidade, manutenção ou vistoria" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectSignalingMobilityForm
+                        autoContext={signalingMobilityAutoContext}
+                        technicalArea={effectiveTechnicalArea}
+                        technicalObjectType={signalingMobilityInspectorObjectType!}
+                        assessment={signalingMobilityAssessment}
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={handleTechnicalFieldChange}
+                      />
+                    </>
                   ) : isLightingInspector ? (
                     <>
                       <div className="grid gap-3">
@@ -3413,6 +3721,23 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
                       <ProjectArborizationTreeForm
                         autoContext={arborizationTreeAutoContext}
                         assessment={arborizationTreeAssessment}
+                        fields={activeTechnicalFields}
+                        values={technicalFieldValues}
+                        onChange={handleTechnicalFieldChange}
+                      />
+                    </>
+                  ) : isSignalingMobilityInspector ? (
+                    <>
+                      <div className="grid gap-3">
+                        <input value={inspectorForm.name} onChange={(event) => setInspectorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nome do item viário" className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.description} onChange={(event) => setInspectorForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descrição técnica, localização e contexto operacional" rows={3} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                        <textarea value={inspectorForm.notes} onChange={(event) => setInspectorForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Observações de conformidade, manutenção ou mobilidade" rows={4} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-brand-500" />
+                      </div>
+                      <ProjectSignalingMobilityForm
+                        autoContext={signalingMobilityAutoContext}
+                        technicalArea={effectiveTechnicalArea}
+                        technicalObjectType={signalingMobilityInspectorObjectType!}
+                        assessment={signalingMobilityAssessment}
                         fields={activeTechnicalFields}
                         values={technicalFieldValues}
                         onChange={handleTechnicalFieldChange}

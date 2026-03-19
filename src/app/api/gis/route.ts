@@ -24,6 +24,10 @@ import {
   validateArborizationTreeGeometry,
 } from "@/lib/arborization-tree";
 import {
+  isSignalingMobilityObjectType,
+  validateSignalingMobilityGeometry,
+} from "@/lib/signaling-mobility";
+import {
   getTechnicalFieldsForContext,
   normalizeTechnicalAttributes,
   readTechnicalFieldValues,
@@ -345,6 +349,41 @@ function enrichArborizationAttributes(
   };
 }
 
+function enrichSignalingMobilityAttributes(
+  normalizedAttributes: Record<string, unknown>,
+  geomWkt: string | null
+) {
+  const technicalObjectType = resolveTechnicalObjectType(null, normalizedAttributes);
+  if (!isSignalingMobilityObjectType(technicalObjectType)) {
+    return { attributes: normalizedAttributes, errors: [] as string[] };
+  }
+
+  const geometry = parseWktGeometry(geomWkt);
+  const point = extractPointFromGeometry(geometry);
+  const lineCoords = extractLineCoordsFromGeometry(geometry);
+  const geometryValidation = validateSignalingMobilityGeometry({
+    coords: point ? [point] : lineCoords,
+    technicalObjectType,
+  });
+
+  if (geometryValidation.errors.length > 0) {
+    return {
+      attributes: normalizedAttributes,
+      errors: geometryValidation.errors,
+    };
+  }
+
+  return {
+    attributes: {
+      ...normalizedAttributes,
+      geometryWarnings: geometryValidation.warnings,
+      latitude: geometryValidation.anchor?.lat ?? normalizedAttributes.latitude ?? undefined,
+      longitude: geometryValidation.anchor?.lng ?? normalizedAttributes.longitude ?? undefined,
+    },
+    errors: [] as string[],
+  };
+}
+
 // GET /api/gis - Fetch GIS assets (supports superadmin impersonation)
 export async function GET(req: NextRequest) {
   try {
@@ -647,6 +686,20 @@ export async function POST(req: NextRequest) {
       );
     }
     normalizedAttributes = enrichedArborizationCreate.attributes;
+    const enrichedSignalingMobilityCreate = enrichSignalingMobilityAttributes(
+      normalizedAttributes,
+      geomWkt
+    );
+    if (enrichedSignalingMobilityCreate.errors.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Geometria inválida para sinalização / mobilidade.",
+          details: enrichedSignalingMobilityCreate.errors,
+        },
+        { status: 400 }
+      );
+    }
+    normalizedAttributes = enrichedSignalingMobilityCreate.attributes;
     const requestPhotos = sanitizePhotoArray(body.photos);
     const attributePhotos = sanitizePhotoArray(normalizedAttributes.photos);
     const photos = requestPhotos.length > 0 ? requestPhotos : attributePhotos;
@@ -926,6 +979,20 @@ export async function PATCH(req: NextRequest) {
         );
       }
       normalizedAttributes = enrichedArborizationUpdate.attributes;
+      const enrichedSignalingMobilityUpdate = enrichSignalingMobilityAttributes(
+        normalizedAttributes,
+        body.geomWkt !== undefined ? sanitizeOptionalString(body.geomWkt) : existing.geomWkt
+      );
+      if (enrichedSignalingMobilityUpdate.errors.length > 0) {
+        return NextResponse.json(
+          {
+            error: "Geometria inválida para sinalização / mobilidade.",
+            details: enrichedSignalingMobilityUpdate.errors,
+          },
+          { status: 400 }
+        );
+      }
+      normalizedAttributes = enrichedSignalingMobilityUpdate.attributes;
       updateData.attributes = normalizedAttributes as Prisma.InputJsonValue;
       changedFields.push("attributes");
     }
@@ -990,6 +1057,32 @@ export async function PATCH(req: NextRequest) {
       ) {
         updateData.attributes =
           enrichedArborizationUpdate.attributes as Prisma.InputJsonValue;
+        if (!changedFields.includes("attributes")) changedFields.push("attributes");
+      }
+
+      const signalingMobilityBaseAttributes = toPlainObject(
+        updateData.attributes ?? existing.attributes
+      );
+      const enrichedSignalingMobilityUpdate = enrichSignalingMobilityAttributes(
+        signalingMobilityBaseAttributes,
+        sanitizeOptionalString(body.geomWkt)
+      );
+      if (enrichedSignalingMobilityUpdate.errors.length > 0) {
+        return NextResponse.json(
+          {
+            error: "Geometria inválida para sinalização / mobilidade.",
+            details: enrichedSignalingMobilityUpdate.errors,
+          },
+          { status: 400 }
+        );
+      }
+
+      if (
+        JSON.stringify(enrichedSignalingMobilityUpdate.attributes) !==
+        JSON.stringify(signalingMobilityBaseAttributes)
+      ) {
+        updateData.attributes =
+          enrichedSignalingMobilityUpdate.attributes as Prisma.InputJsonValue;
         if (!changedFields.includes("attributes")) changedFields.push("attributes");
       }
     }
