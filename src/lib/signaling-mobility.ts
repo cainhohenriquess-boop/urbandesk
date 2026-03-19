@@ -1,4 +1,4 @@
-import * as turf from "@turf/turf";
+﻿import * as turf from "@turf/turf";
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from "geojson";
 import type { BaseLayerData, DrawnFeature } from "@/store/useMapStore";
 import type { ProjectDisciplineId, TechnicalObjectTypeId } from "@/lib/project-disciplines";
@@ -43,6 +43,8 @@ export type SignalingMobilityAutoContext = {
   neighborhood: string | null;
   district: string | null;
   region: string | null;
+  suggestedRoadDirection: string | null;
+  suggestedRoadDirectionLabel: string | null;
   nearestStreetDistanceMeters: number | null;
 };
 
@@ -90,8 +92,12 @@ const LINE_TYPES = new Set<SignalingMobilityTechnicalObjectTypeId>([
 ]);
 
 const SIGNALING_MOBILITY_DEFAULT_VALUES: Record<string, string> = {
+  signalingType: "",
+  materialType: "",
+  roadDirection: "",
   operationCondition: "BOA",
   conformityStatus: "A_VERIFICAR",
+  priorityLevel: "MEDIA",
 };
 
 function readString(value: unknown) {
@@ -173,6 +179,55 @@ function getStreetLabel(properties: Record<string, unknown>) {
   );
 }
 
+function normalizeBearingToDirectionCode(bearing: number | null) {
+  if (bearing == null || !Number.isFinite(bearing)) return null;
+  const normalized = ((bearing % 360) + 360) % 360;
+
+  if (normalized >= 337.5 || normalized < 22.5) return "NORTE";
+  if (normalized < 67.5) return "NORDESTE";
+  if (normalized < 112.5) return "LESTE";
+  if (normalized < 157.5) return "SUDESTE";
+  if (normalized < 202.5) return "SUL";
+  if (normalized < 247.5) return "SUDOESTE";
+  if (normalized < 292.5) return "OESTE";
+  return "NOROESTE";
+}
+
+function directionCodeToLabel(directionCode: string | null) {
+  if (!directionCode) return null;
+  const labels: Record<string, string> = {
+    NORTE: "Norte",
+    NORDESTE: "Nordeste",
+    LESTE: "Leste",
+    SUDESTE: "Sudeste",
+    SUL: "Sul",
+    SUDOESTE: "Sudoeste",
+    OESTE: "Oeste",
+    NOROESTE: "Noroeste",
+    BIDIRECIONAL: "Bidirecional",
+  };
+  return labels[directionCode] ?? directionCode;
+}
+
+function getFeatureBearing(feature: Feature<Point | LineString | Polygon>) {
+  if (!feature.geometry || feature.geometry.type !== "LineString") return null;
+  const coords = feature.geometry.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2) return null;
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  return turf.bearing(turf.point(first), turf.point(last));
+}
+
+function getDraftFeatureBearing(feature: SignalingMobilityFeatureLike) {
+  if (feature.coords.length < 2) return null;
+  const first = feature.coords[0];
+  const last = feature.coords[feature.coords.length - 1];
+  return turf.bearing(
+    turf.point([first.lng, first.lat]),
+    turf.point([last.lng, last.lat])
+  );
+}
+
 function distanceToStreetFeature(
   anchor: Feature<Point>,
   feature: Feature<Point | LineString | Polygon>
@@ -198,16 +253,14 @@ function distanceToStreetFeature(
   return null;
 }
 
-function inferStreetName(
-  anchor: Feature<Point> | null,
-  baseLayersData: BaseLayerData[]
-) {
+function inferStreetContext(anchor: Feature<Point> | null, baseLayersData: BaseLayerData[]) {
   if (!anchor) {
-    return { streetName: null, distanceMeters: null };
+    return { streetName: null, distanceMeters: null, directionCode: null };
   }
 
   let nearestStreetName: string | null = null;
   let nearestStreetDistance: number | null = null;
+  let nearestStreetDirection: string | null = null;
 
   for (const layer of baseLayersData) {
     if (layer.type !== "STREETS" && layer.type !== "STREET_NAMES") continue;
@@ -224,6 +277,7 @@ function inferStreetName(
       if (nearestStreetDistance == null || distanceMeters < nearestStreetDistance) {
         nearestStreetName = streetName;
         nearestStreetDistance = Number(distanceMeters.toFixed(2));
+        nearestStreetDirection = normalizeBearingToDirectionCode(getFeatureBearing(feature));
       }
     }
   }
@@ -231,6 +285,7 @@ function inferStreetName(
   return {
     streetName: nearestStreetName,
     distanceMeters: nearestStreetDistance,
+    directionCode: nearestStreetDirection,
   };
 }
 
@@ -263,7 +318,9 @@ export function buildSignalingMobilityAutoContext(input: {
         lat: anchorFeature.geometry.coordinates[1],
       })
     : null;
-  const street = inferStreetName(anchorFeature, input.baseLayersData);
+  const street = inferStreetContext(anchorFeature, input.baseLayersData);
+  const featureDirection = normalizeBearingToDirectionCode(getDraftFeatureBearing(input.feature));
+  const suggestedRoadDirection = featureDirection ?? street.directionCode;
 
   return {
     technicalArea: input.technicalArea,
@@ -282,6 +339,8 @@ export function buildSignalingMobilityAutoContext(input: {
     neighborhood: readString(attributes.neighborhood) ?? input.project.neighborhood ?? null,
     district: readString(attributes.district) ?? input.project.district ?? null,
     region: readString(attributes.region) ?? input.project.region ?? null,
+    suggestedRoadDirection,
+    suggestedRoadDirectionLabel: directionCodeToLabel(suggestedRoadDirection),
     nearestStreetDistanceMeters: street.distanceMeters,
   } satisfies SignalingMobilityAutoContext;
 }
@@ -294,6 +353,68 @@ function withSuggestedValue(
   if (!value) return;
   if (typeof nextValues[key] === "string" && nextValues[key].trim().length > 0) return;
   nextValues[key] = value;
+}
+
+function resolveSignalingMobilityType(technicalObjectType: SignalingMobilityTechnicalObjectTypeId) {
+  switch (technicalObjectType) {
+    case "PLACA_TRANSITO":
+      return "PLACA";
+    case "SEMAFORO":
+      return "SEMAFORO";
+    case "LOMBADA":
+      return "LOMBADA";
+    case "FAIXA_VIARIA":
+      return "FAIXA";
+    case "TRAVESSIA_PEDESTRE":
+      return "TRAVESSIA";
+    case "PONTO_ONIBUS":
+      return "PONTO_ONIBUS";
+    case "CICLOVIA_CICLOFAIXA":
+      return "CICLOVIA_CICLOFAIXA";
+    case "DISPOSITIVO_VIARIO":
+      return "DISPOSITIVO_VIARIO";
+    case "RADAR":
+      return "RADAR";
+    case "PINTURA_VIARIA":
+      return "PINTURA_VIARIA";
+    default:
+      return null;
+  }
+}
+
+function resolveMaterialType(technicalObjectType: SignalingMobilityTechnicalObjectTypeId) {
+  switch (technicalObjectType) {
+    case "PLACA_TRANSITO":
+    case "SEMAFORO":
+    case "PONTO_ONIBUS":
+    case "RADAR":
+      return "METAL";
+    case "LOMBADA":
+      return "CONCRETO";
+    case "FAIXA_VIARIA":
+    case "TRAVESSIA_PEDESTRE":
+    case "PINTURA_VIARIA":
+      return "TERMOPLASTICO";
+    case "CICLOVIA_CICLOFAIXA":
+      return "ASFALTO";
+    case "DISPOSITIVO_VIARIO":
+      return "PVC";
+    default:
+      return null;
+  }
+}
+
+function resolvePriorityLevel(values: Record<string, string>) {
+  if (values.conformityStatus === "NAO_CONFORME" || values.operationCondition === "INOPERANTE") {
+    return "URGENTE";
+  }
+  if (values.operationCondition === "RUIM" || values.operationCondition === "APAGADA") {
+    return "ALTA";
+  }
+  if (values.conformityStatus === "AJUSTE" || values.operationCondition === "REGULAR") {
+    return "MEDIA";
+  }
+  return "BAIXA";
 }
 
 export function buildSignalingMobilityTechnicalDefaults(input: {
@@ -344,12 +465,35 @@ export function buildSignalingMobilityTechnicalDefaults(input: {
       break;
   }
 
+  withSuggestedValue(
+    nextValues,
+    "signalingType",
+    resolveSignalingMobilityType(input.technicalObjectType)
+  );
+  withSuggestedValue(
+    nextValues,
+    "materialType",
+    resolveMaterialType(input.technicalObjectType)
+  );
+  withSuggestedValue(nextValues, "roadDirection", input.autoContext?.suggestedRoadDirection);
+
+  if (
+    !nextValues.priorityLevel ||
+    nextValues.priorityLevel === SIGNALING_MOBILITY_DEFAULT_VALUES.priorityLevel
+  ) {
+    nextValues.priorityLevel = resolvePriorityLevel(nextValues);
+  }
+
   if (!input.autoContext?.streetName) {
     warnings.push("Não foi possível identificar automaticamente o logradouro deste cadastro.");
   }
 
   if (!input.autoContext?.neighborhood && !input.autoContext?.region) {
     warnings.push("O item ficou sem contexto territorial do projeto para bairro ou região.");
+  }
+
+  if (!input.autoContext?.suggestedRoadDirection) {
+    warnings.push("O sentido da via não pôde ser inferido automaticamente para este cadastro.");
   }
 
   return {
@@ -413,6 +557,8 @@ export function buildSignalingMobilityAssistAttributes(
     region: autoContext.region,
     latitude: autoContext.latitude,
     longitude: autoContext.longitude,
+    roadDirection: autoContext.suggestedRoadDirection,
+    roadDirectionLabel: autoContext.suggestedRoadDirectionLabel,
     createdById: autoContext.creatorId,
     createdByName: autoContext.creatorName,
     createdByEmail: autoContext.creatorEmail,

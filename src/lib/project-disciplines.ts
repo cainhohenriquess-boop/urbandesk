@@ -482,7 +482,7 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         options: [
           { value: "BOA", label: "Boa" },
           { value: "REGULAR", label: "Regular" },
-          { value: "CRITICA", label: "CrÃ­tica" },
+          { value: "CRITICA", label: "Crítica" },
         ],
       },
     ],
@@ -501,9 +501,9 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         required: true,
         options: [
           { value: "BAIXA", label: "Baixa" },
-          { value: "MEDIA", label: "MÃ©dia" },
+          { value: "MEDIA", label: "Média" },
           { value: "ALTA", label: "Alta" },
-          { value: "CRITICA", label: "CrÃ­tica" },
+          { value: "CRITICA", label: "Crítica" },
         ],
       },
       {
@@ -561,9 +561,9 @@ const TECHNICAL_OBJECT_DEFINITIONS: Record<TechnicalObjectTypeId, TechnicalObjec
         kind: "select",
         options: [
           { value: "BAIXA", label: "Baixa" },
-          { value: "MEDIA", label: "MÃ©dia" },
+          { value: "MEDIA", label: "Média" },
           { value: "ALTA", label: "Alta" },
-          { value: "CRITICA", label: "CrÃ­tica" },
+          { value: "CRITICA", label: "Crítica" },
         ],
       },
       {
@@ -2276,19 +2276,64 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
   SINALIZACAO: {
     id: "SINALIZACAO",
     label: DISCIPLINE_LABELS.SINALIZACAO,
-    description: "SinalizaÃ§Ã£o vertical, horizontal e semafÃ³rica.",
+    description: "Sinalização vertical, horizontal e semafórica.",
     accentClassName: "border-rose-200 bg-rose-50 text-rose-700",
     commonFields: [
       {
+        key: "signalingType",
+        label: "Tipo de sinalização / elemento",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "PLACA", label: "Placa" },
+          { value: "SEMAFORO", label: "Semáforo" },
+          { value: "LOMBADA", label: "Lombada" },
+          { value: "FAIXA", label: "Faixa" },
+          { value: "TRAVESSIA", label: "Travessia" },
+          { value: "PINTURA_VIARIA", label: "Pintura viária" },
+        ],
+      },
+      {
         key: "signCode",
-        label: "CÃ³digo tÃ©cnico",
+        label: "Código técnico",
         kind: "text",
         placeholder: "Ex.: R-1, A-2b, FAIXA-01...",
       },
       {
-        key: "operationCondition",
-        label: "CondiÃ§Ã£o operacional",
+        key: "materialType",
+        label: "Material",
         kind: "select",
+        required: true,
+        options: [
+          { value: "METAL", label: "Metal" },
+          { value: "ALUMINIO", label: "Alumínio" },
+          { value: "CONCRETO", label: "Concreto" },
+          { value: "TERMOPLASTICO", label: "Termoplástico" },
+          { value: "PVC", label: "PVC" },
+          { value: "ASFALTO", label: "Asfalto" },
+        ],
+      },
+      {
+        key: "roadDirection",
+        label: "Sentido da via",
+        kind: "select",
+        options: [
+          { value: "NORTE", label: "Norte" },
+          { value: "NORDESTE", label: "Nordeste" },
+          { value: "LESTE", label: "Leste" },
+          { value: "SUDESTE", label: "Sudeste" },
+          { value: "SUL", label: "Sul" },
+          { value: "SUDOESTE", label: "Sudoeste" },
+          { value: "OESTE", label: "Oeste" },
+          { value: "NOROESTE", label: "Noroeste" },
+          { value: "BIDIRECIONAL", label: "Bidirecional" },
+        ],
+      },
+      {
+        key: "operationCondition",
+        label: "Condição operacional",
+        kind: "select",
+        required: true,
         options: [
           { value: "BOA", label: "Boa" },
           { value: "REGULAR", label: "Regular" },
@@ -2300,11 +2345,24 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
         key: "conformityStatus",
         label: "Conformidade",
         kind: "select",
+        required: true,
         options: [
           { value: "CONFORME", label: "Conforme" },
           { value: "AJUSTE", label: "Requer ajuste" },
           { value: "NAO_CONFORME", label: "Não conforme" },
           { value: "A_VERIFICAR", label: "A verificar" },
+        ],
+      },
+      {
+        key: "priorityLevel",
+        label: "Prioridade",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "BAIXA", label: "Baixa" },
+          { value: "MEDIA", label: "Média" },
+          { value: "ALTA", label: "Alta" },
+          { value: "URGENTE", label: "Urgente" },
         ],
       },
     ],
@@ -2329,14 +2387,14 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
         kind: "select",
         options: [
           { value: "BAIXA", label: "Baixa" },
-          { value: "MEDIA", label: "MÃ©dia" },
+          { value: "MEDIA", label: "Média" },
           { value: "ALTA", label: "Alta" },
-          { value: "CRITICA", label: "CrÃ­tica" },
+          { value: "CRITICA", label: "Crítica" },
         ],
       },
       {
         key: "correctionDeadline",
-        label: "Prazo de correÃ§Ã£o",
+        label: "Prazo de correção",
         kind: "date",
       },
     ],
@@ -2349,9 +2407,52 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
     accentClassName: "border-cyan-200 bg-cyan-50 text-cyan-700",
     commonFields: [
       {
+        key: "signalingType",
+        label: "Tipo de sinalização / elemento",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "PONTO_ONIBUS", label: "Ponto de ônibus" },
+          { value: "CICLOVIA_CICLOFAIXA", label: "Ciclovia / ciclofaixa" },
+          { value: "DISPOSITIVO_VIARIO", label: "Dispositivo viário" },
+          { value: "RADAR", label: "Radar" },
+        ],
+      },
+      {
+        key: "materialType",
+        label: "Material",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "METAL", label: "Metal" },
+          { value: "ALUMINIO", label: "Alumínio" },
+          { value: "CONCRETO", label: "Concreto" },
+          { value: "TERMOPLASTICO", label: "Termoplástico" },
+          { value: "PVC", label: "PVC" },
+          { value: "ASFALTO", label: "Asfalto" },
+        ],
+      },
+      {
+        key: "roadDirection",
+        label: "Sentido da via",
+        kind: "select",
+        options: [
+          { value: "NORTE", label: "Norte" },
+          { value: "NORDESTE", label: "Nordeste" },
+          { value: "LESTE", label: "Leste" },
+          { value: "SUDESTE", label: "Sudeste" },
+          { value: "SUL", label: "Sul" },
+          { value: "SUDOESTE", label: "Sudoeste" },
+          { value: "OESTE", label: "Oeste" },
+          { value: "NOROESTE", label: "Noroeste" },
+          { value: "BIDIRECIONAL", label: "Bidirecional" },
+        ],
+      },
+      {
         key: "operationCondition",
         label: "Condição",
         kind: "select",
+        required: true,
         options: [
           { value: "BOA", label: "Boa" },
           { value: "REGULAR", label: "Regular" },
@@ -2363,11 +2464,24 @@ export const PROJECT_DISCIPLINE_DEFINITIONS: Record<
         key: "conformityStatus",
         label: "Conformidade",
         kind: "select",
+        required: true,
         options: [
           { value: "CONFORME", label: "Conforme" },
           { value: "AJUSTE", label: "Requer ajuste" },
           { value: "NAO_CONFORME", label: "Não conforme" },
           { value: "A_VERIFICAR", label: "A verificar" },
+        ],
+      },
+      {
+        key: "priorityLevel",
+        label: "Prioridade",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "BAIXA", label: "Baixa" },
+          { value: "MEDIA", label: "Média" },
+          { value: "ALTA", label: "Alta" },
+          { value: "URGENTE", label: "Urgente" },
         ],
       },
     ],
@@ -2754,6 +2868,7 @@ export function normalizeTechnicalAttributes(attributes: Record<string, unknown>
 
   return nextAttributes;
 }
+
 
 
 

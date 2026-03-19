@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { ProjectBadge } from "@/components/projetos/project-detail-components";
 import { ProjectMapTechnicalForm } from "@/components/projetos/project-map-technical-form";
@@ -43,10 +43,7 @@ export function ProjectSignalingMobilityForm({
         <div className="mt-3 flex flex-wrap gap-2">
           <ProjectBadge label={getProjectDisciplineLabel(technicalArea)} tone="brand" />
           <ProjectBadge label={getTechnicalObjectLabel(technicalObjectType)} tone="neutral" />
-          <ProjectBadge
-            label={autoContext?.projectLabel || "Projeto atual"}
-            tone="success"
-          />
+          <ProjectBadge label={autoContext?.projectLabel || "Projeto atual"} tone="success" />
         </div>
 
         <dl className="mt-4 space-y-2 text-sm">
@@ -57,9 +54,9 @@ export function ProjectSignalingMobilityForm({
             </dd>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground">Logradouro</dt>
+            <dt className="text-muted-foreground">Via</dt>
             <dd className="text-right font-medium text-foreground">
-              {autoContext?.streetName || "Não identificado"}
+              {autoContext?.streetName || "Não identificada"}
             </dd>
           </div>
           <div className="flex items-center justify-between gap-4">
@@ -76,6 +73,12 @@ export function ProjectSignalingMobilityForm({
             </dd>
           </div>
           <div className="flex items-center justify-between gap-4">
+            <dt className="text-muted-foreground">Sentido da via</dt>
+            <dd className="text-right font-medium text-foreground">
+              {autoContext?.suggestedRoadDirectionLabel || "Não inferido"}
+            </dd>
+          </div>
+          <div className="flex items-center justify-between gap-4">
             <dt className="text-muted-foreground">Georreferenciamento</dt>
             <dd className="text-right font-medium text-foreground">
               {autoContext?.latitude != null && autoContext?.longitude != null
@@ -84,7 +87,13 @@ export function ProjectSignalingMobilityForm({
             </dd>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground">Criado em</dt>
+            <dt className="text-muted-foreground">Usuário responsável</dt>
+            <dd className="text-right font-medium text-foreground">
+              {autoContext?.creatorName || autoContext?.creatorEmail || "Não informado"}
+            </dd>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-muted-foreground">Data do registro</dt>
             <dd className="text-right font-medium text-foreground">
               {autoContext?.createdAtIso ? formatDateTime(autoContext.createdAtIso) : "Agora"}
             </dd>

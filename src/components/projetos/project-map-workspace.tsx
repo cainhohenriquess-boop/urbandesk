@@ -788,6 +788,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     useState<(InfrastructureLayerFeatureRecord & { linkedOperationalCount: number }) | null>(null);
   const [arborizationRiskLocked, setArborizationRiskLocked] = useState(false);
   const [drainageCriticalityLocked, setDrainageCriticalityLocked] = useState(false);
+  const [signalingMobilityPriorityLocked, setSignalingMobilityPriorityLocked] = useState(false);
   const [pavementWidthLocked, setPavementWidthLocked] = useState(false);
   const [pavementConditionLocked, setPavementConditionLocked] = useState(false);
   const [pavementPriorityLocked, setPavementPriorityLocked] = useState(false);
@@ -1464,6 +1465,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       setTechnicalFieldValues(nextTechnicalValues);
       setArborizationRiskLocked(false);
       setDrainageCriticalityLocked(false);
+      setSignalingMobilityPriorityLocked(false);
       setPavementWidthLocked(rawTechnicalValues.widthSource === "INFORMADA");
       setPavementConditionLocked(Boolean(rawTechnicalValues.surfaceCondition));
       setPavementPriorityLocked(Boolean(rawTechnicalValues.interventionPriority));
@@ -1573,6 +1575,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       setTechnicalFieldValues(nextTechnicalValues);
       setArborizationRiskLocked(false);
       setDrainageCriticalityLocked(false);
+      setSignalingMobilityPriorityLocked(false);
       setPavementWidthLocked(rawTechnicalValues.widthSource === "INFORMADA");
       setPavementConditionLocked(Boolean(rawTechnicalValues.surfaceCondition));
       setPavementPriorityLocked(Boolean(rawTechnicalValues.interventionPriority));
@@ -1584,6 +1587,7 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
     setTechnicalFieldValues({});
     setArborizationRiskLocked(false);
     setDrainageCriticalityLocked(false);
+    setSignalingMobilityPriorityLocked(false);
     setPavementWidthLocked(false);
     setPavementConditionLocked(false);
     setPavementPriorityLocked(false);
@@ -1617,6 +1621,23 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
       };
     });
   }, [drainageCriticalityLocked, drainageSegmentAssessment]);
+
+  useEffect(() => {
+    if (!signalingMobilityAssessment || signalingMobilityPriorityLocked) return;
+    const suggestedPriority = signalingMobilityAssessment.suggestedValues.priorityLevel;
+    if (!suggestedPriority) return;
+
+    setTechnicalFieldValues((current) => {
+      if (current.priorityLevel === suggestedPriority) {
+        return current;
+      }
+
+      return {
+        ...current,
+        priorityLevel: suggestedPriority,
+      };
+    });
+  }, [signalingMobilityAssessment, signalingMobilityPriorityLocked]);
 
   useEffect(() => {
     if (!arborizationTreeAssessment || arborizationRiskLocked) return;
@@ -1712,6 +1733,10 @@ export function ProjectMapWorkspace({ project, currentUser }: ProjectMapWorkspac
 
     if (key === "criticality") {
       setDrainageCriticalityLocked(true);
+    }
+
+    if (key === "priorityLevel") {
+      setSignalingMobilityPriorityLocked(true);
     }
 
     if (key === "surfaceCondition") {

@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 import type { BaseLayerData, DrawnFeature } from "@/store/useMapStore";
 import {
@@ -72,7 +72,7 @@ const ciclofaixaFeature: DrawnFeature = {
   },
 };
 
-test("monta contexto assistido de sinalização com rua e projeto", () => {
+test("monta contexto assistido de sinalização com rua, projeto e sentido da via", () => {
   const autoContext = buildSignalingMobilityAutoContext({
     feature: semaforoFeature,
     baseLayersData,
@@ -97,9 +97,11 @@ test("monta contexto assistido de sinalização com rua e projeto", () => {
   assert.equal(autoContext.streetName, "Rua Coronel Júlio Pinheiro");
   assert.equal(autoContext.neighborhood, "Centro");
   assert.equal(autoContext.technicalArea, "SINALIZACAO");
+  assert.ok(autoContext.suggestedRoadDirection);
+  assert.ok(autoContext.suggestedRoadDirectionLabel);
 });
 
-test("sugere nome, defaults e atributos assistidos da disciplina", () => {
+test("sugere defaults, prioridade e atributos assistidos da disciplina", () => {
   const autoContext = buildSignalingMobilityAutoContext({
     feature: semaforoFeature,
     baseLayersData,
@@ -129,10 +131,49 @@ test("sugere nome, defaults e atributos assistidos da disciplina", () => {
   const assist = buildSignalingMobilityAssistAttributes(autoContext, "SEMAFORO");
 
   assert.equal(defaults.suggestedValues.signalMode, "VEICULAR");
+  assert.equal(defaults.suggestedValues.signalingType, "SEMAFORO");
+  assert.equal(defaults.suggestedValues.materialType, "METAL");
   assert.equal(defaults.suggestedValues.conformityStatus, "A_VERIFICAR");
+  assert.equal(defaults.suggestedValues.priorityLevel, "BAIXA");
+  assert.equal(defaults.suggestedValues.roadDirection, autoContext.suggestedRoadDirection);
   assert.equal(suggestedName, "Semáforo · Rua Coronel Júlio Pinheiro");
   assert.equal(assist.linkedProjectId, "project-1");
   assert.equal(assist.streetName, "Rua Coronel Júlio Pinheiro");
+  assert.equal(assist.roadDirection, autoContext.suggestedRoadDirection);
+});
+
+test("recalcula prioridade sugerida quando condição e conformidade pioram", () => {
+  const autoContext = buildSignalingMobilityAutoContext({
+    feature: semaforoFeature,
+    baseLayersData,
+    project: {
+      id: "project-1",
+      name: "Requalificação do centro",
+      code: "MOB-2026-001",
+      neighborhood: "Centro",
+      district: "Sede",
+      region: "Urbana",
+    },
+    currentUser: {
+      id: "user-1",
+      name: "Engenheira de trânsito",
+      email: "transito@santacruz.rn.gov.br",
+      role: "ENGENHEIRO",
+    },
+    technicalArea: "SINALIZACAO",
+  });
+
+  const defaults = buildSignalingMobilityTechnicalDefaults({
+    autoContext,
+    technicalObjectType: "PLACA_TRANSITO",
+    currentValues: {
+      operationCondition: "RUIM",
+      conformityStatus: "NAO_CONFORME",
+      priorityLevel: "MEDIA",
+    },
+  });
+
+  assert.equal(defaults.suggestedValues.priorityLevel, "URGENTE");
 });
 
 test("valida geometria pontual e linear da disciplina", () => {
