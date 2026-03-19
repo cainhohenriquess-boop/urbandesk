@@ -6,8 +6,10 @@ export type ProjectSchemaMode = "full" | "legacy";
 export type ProjectSchemaCompatibility = {
   executiveSchemaReady: boolean;
   governanceSchemaReady: boolean;
+  measurementSchemaReady: boolean;
   schemaMode: ProjectSchemaMode;
   notice: string | null;
+  measurementNotice: string | null;
 };
 
 type ProjectSchemaCheckRow = {
@@ -15,6 +17,8 @@ type ProjectSchemaCheckRow = {
   hasEstimatedBudget: boolean;
   hasProjectContracts: boolean;
   hasProjectComments: boolean;
+  hasProjectMeasurements: boolean;
+  hasMeasurementTechnicalArea: boolean;
 };
 
 function buildCompatibilityNotice(
@@ -30,6 +34,12 @@ function buildCompatibilityNotice(
   }
 
   return null;
+}
+
+function buildMeasurementNotice(measurementSchemaReady: boolean) {
+  if (measurementSchemaReady) return null;
+
+  return "As medições do projeto ainda dependem da migration complementar do módulo Projetos. Aplique `npx prisma migrate deploy` no ambiente publicado para liberar registro, anexos e indicadores por área técnica.";
 }
 
 export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaCompatibility> {
@@ -60,7 +70,20 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
         FROM information_schema.tables
         WHERE table_schema = 'public'
           AND table_name = 'project_comments'
-      ) AS "hasProjectComments"
+      ) AS "hasProjectComments",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'project_measurements'
+      ) AS "hasProjectMeasurements",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_measurements'
+          AND column_name = 'technicalArea'
+      ) AS "hasMeasurementTechnicalArea"
   `);
 
   const row = rows[0] ?? {
@@ -68,17 +91,23 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
     hasEstimatedBudget: false,
     hasProjectContracts: false,
     hasProjectComments: false,
+    hasProjectMeasurements: false,
+    hasMeasurementTechnicalArea: false,
   };
 
   const executiveSchemaReady = row.hasProjectCode && row.hasEstimatedBudget;
   const governanceSchemaReady =
     executiveSchemaReady && row.hasProjectContracts && row.hasProjectComments;
+  const measurementSchemaReady =
+    governanceSchemaReady && row.hasProjectMeasurements && row.hasMeasurementTechnicalArea;
 
   return {
     executiveSchemaReady,
     governanceSchemaReady,
+    measurementSchemaReady,
     schemaMode: governanceSchemaReady ? "full" : "legacy",
     notice: buildCompatibilityNotice(executiveSchemaReady, governanceSchemaReady),
+    measurementNotice: buildMeasurementNotice(measurementSchemaReady),
   };
 }
 

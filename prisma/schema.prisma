@@ -758,6 +758,7 @@ model ProjectMeasurement {
   periodEnd            DateTime?
   measuredAt           DateTime?
   status               ProjectMeasurementStatus @default(RASCUNHO)
+  technicalArea        ProjectTechnicalArea?
   physicalProgressPct  Int                      @default(0)
   financialProgressPct Int                      @default(0)
   measuredAmount       Decimal?                 @db.Decimal(15, 2)
@@ -787,6 +788,7 @@ model ProjectMeasurement {
   @@unique([projectId, measurementNumber])
   @@index([tenantId, projectId])
   @@index([projectId, status])
+  @@index([projectId, technicalArea])
   @@index([contractId])
   @@index([phaseId])
   @@index([measuredById])

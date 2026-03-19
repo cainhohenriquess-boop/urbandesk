@@ -7,7 +7,7 @@
     "build": "prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
-    "test": "tsx --test src/lib/ponnot.test.ts src/lib/infrastructure-layer-import.test.ts src/lib/infrastructure-layer-access.test.ts src/lib/infrastructure-layer-map.test.ts src/lib/infrastructure-layer-storage.test.ts src/lib/lighting-discipline.test.ts src/lib/arborization-technical-panel.test.ts src/lib/arborization-tree.test.ts src/lib/signaling-mobility.test.ts",
+    "test": "tsx --test src/lib/ponnot.test.ts src/lib/infrastructure-layer-import.test.ts src/lib/infrastructure-layer-access.test.ts src/lib/infrastructure-layer-map.test.ts src/lib/infrastructure-layer-storage.test.ts src/lib/lighting-discipline.test.ts src/lib/arborization-technical-panel.test.ts src/lib/arborization-tree.test.ts src/lib/signaling-mobility.test.ts src/lib/project-measurements.test.ts",
     "lint": "next lint",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",

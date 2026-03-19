@@ -2,6 +2,11 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getProjectShellData, type ProjectShellRecord } from "@/lib/project-pages";
 import { summarizePavementProjectAssets } from "@/lib/pavement-technical";
+import {
+  buildEmptyMeasurementIndicators,
+  buildProjectMeasurementIndicators,
+  serializeProjectMeasurements,
+} from "@/lib/project-measurements";
 
 type ProjectContext = {
   tenantId: string;
@@ -34,7 +39,7 @@ export function resolveProjectLocation(project: {
 }) {
   return [project.neighborhood, project.district, project.region]
     .filter((value): value is string => Boolean(value && value.trim()))
-    .join(" · ");
+    .join(" Â· ");
 }
 
 export function resolvePrimaryContract(project: ProjectShellRecord) {
@@ -232,16 +237,38 @@ async function loadMeasurementData(context: ProjectContext) {
         select: {
           id: true,
           name: true,
+          email: true,
         },
       },
       approvedBy: {
         select: {
           id: true,
           name: true,
+          email: true,
         },
       },
-    },
-  });
+      documents: {
+        orderBy: [{ createdAt: "desc" }],
+        select: {
+          id: true,
+          title: true,
+          fileName: true,
+          fileUrl: true,
+          mimeType: true,
+          fileSize: true,
+          documentDate: true,
+          isPublic: true,
+          uploadedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+     },
+   });
 
   return { measurements };
 }
@@ -556,13 +583,67 @@ export async function getProjectDocumentsData(projectId: string) {
 }
 
 export async function getProjectMeasurementsData(projectId: string) {
-  const context = await getProjectContext(projectId);
-  if (!context) return null;
+  const { tenantId, project, compatibility } = await getProjectShellData(projectId);
+  if (!tenantId || !project) return null;
+
+  if (!compatibility.measurementSchemaReady) {
+    return {
+      tenantId,
+      project,
+      compatibility,
+      measurements: [],
+      measurementIndicators: buildEmptyMeasurementIndicators(),
+      options: {
+        technicalAreas: project.technicalAreas,
+        phases: [],
+        contracts: [],
+      },
+    };
+  }
+
+  const context = { tenantId, project };
+  const [{ measurements }, phases, contracts] = await Promise.all([
+    loadMeasurementData(context),
+    prisma.projectPhase.findMany({
+      where: { tenantId, projectId: project.id },
+      orderBy: [{ sequence: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        sequence: true,
+        technicalArea: true,
+        status: true,
+      },
+    }),
+    prisma.projectContract.findMany({
+      where: { tenantId, projectId: project.id },
+      orderBy: [{ updatedAt: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        contractNumber: true,
+        status: true,
+        contractedAmount: true,
+      },
+    }),
+  ]);
+
+  const serializedMeasurements = serializeProjectMeasurements(measurements);
 
   return {
-    tenantId: context.tenantId,
-    project: context.project,
-    ...(await loadMeasurementData(context)),
+    tenantId,
+    project,
+    compatibility,
+    measurements: serializedMeasurements,
+    measurementIndicators: buildProjectMeasurementIndicators(serializedMeasurements),
+    options: {
+      technicalAreas: project.technicalAreas,
+      phases,
+      contracts: contracts.map((contract) => ({
+        ...contract,
+        contractedAmount: contract.contractedAmount ? Number(contract.contractedAmount) : null,
+      })),
+    },
   };
 }
 
