@@ -571,6 +571,7 @@ model Asset {
   project     Project?            @relation(fields: [projectId], references: [id])
   inspections ProjectInspection[]
   issues      ProjectIssue[]
+  risks       ProjectRisk[]
   logs        AssetLog[]
 
   @@index([tenantId])
@@ -853,6 +854,7 @@ model ProjectIssue {
   issueType           ProjectIssueType      @default(OUTRO)
   status              ProjectIssueStatus    @default(ABERTA)
   priority            ProjectPriority       @default(MEDIA)
+  severity            ProjectCriticality    @default(MEDIA)
   dueDate             DateTime?
   resolvedAt          DateTime?
   resolutionNotes     String?
@@ -881,6 +883,7 @@ model ProjectIssue {
   @@index([tenantId, projectId])
   @@index([projectId, status])
   @@index([projectId, priority])
+  @@index([projectId, severity])
   @@index([phaseId])
   @@index([inspectionId])
   @@index([assetId])
@@ -892,27 +895,31 @@ model ProjectIssue {
 }
 
 model ProjectRisk {
-  id              String                 @id @default(cuid())
-  title           String
-  description     String?
-  category        ProjectRiskCategory    @default(OUTRO)
-  status          ProjectRiskStatus      @default(IDENTIFICADO)
-  probability     ProjectRiskProbability @default(MEDIA)
-  impact          ProjectRiskImpact      @default(MEDIO)
-  mitigationPlan  String?
-  contingencyPlan String?
-  reviewDate      DateTime?
-  metadata        Json                   @default("{}")
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-  tenantId        String
-  projectId       String
-  phaseId         String?
-  ownerId         String?
+  id                  String                 @id @default(cuid())
+  title               String
+  description         String?
+  category            ProjectRiskCategory    @default(OUTRO)
+  status              ProjectRiskStatus      @default(IDENTIFICADO)
+  probability         ProjectRiskProbability @default(MEDIA)
+  impact              ProjectRiskImpact      @default(MEDIO)
+  mitigationPlan      String?
+  contingencyPlan     String?
+  reviewDate          DateTime?
+  metadata            Json                   @default("{}")
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  tenantId            String
+  projectId           String
+  phaseId             String?
+  assetId             String?
+  technicalArea       ProjectTechnicalArea?
+  technicalObjectType String?
+  ownerId             String?
 
   tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   project  Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   phase    ProjectPhase?    @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  asset    Asset?           @relation(fields: [assetId], references: [id], onDelete: SetNull)
   owner    User?            @relation("ProjectRiskOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   comments ProjectComment[]
 
@@ -920,6 +927,9 @@ model ProjectRisk {
   @@index([projectId, status])
   @@index([projectId, category])
   @@index([phaseId])
+  @@index([assetId])
+  @@index([technicalArea])
+  @@index([projectId, technicalArea])
   @@index([ownerId])
   @@map("project_risks")
 }

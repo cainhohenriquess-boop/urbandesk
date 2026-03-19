@@ -6,11 +6,13 @@ export type ProjectSchemaMode = "full" | "legacy";
 export type ProjectSchemaCompatibility = {
   executiveSchemaReady: boolean;
   governanceSchemaReady: boolean;
+  governanceOpsSchemaReady: boolean;
   measurementSchemaReady: boolean;
   fieldSchemaReady: boolean;
   documentSchemaReady: boolean;
   schemaMode: ProjectSchemaMode;
   notice: string | null;
+  governanceOpsNotice: string | null;
   measurementNotice: string | null;
   fieldNotice: string | null;
   documentNotice: string | null;
@@ -30,6 +32,11 @@ type ProjectSchemaCheckRow = {
   hasInspectionTechnicalObjectType: boolean;
   hasIssueTechnicalArea: boolean;
   hasIssueTechnicalObjectType: boolean;
+  hasIssueSeverity: boolean;
+  hasProjectRisks: boolean;
+  hasRiskAssetId: boolean;
+  hasRiskTechnicalArea: boolean;
+  hasRiskTechnicalObjectType: boolean;
   hasDocumentTechnicalArea: boolean;
   hasDocumentTypeEdital: boolean;
   hasDocumentTypeOrdemServico: boolean;
@@ -56,6 +63,12 @@ function buildMeasurementNotice(measurementSchemaReady: boolean) {
   if (measurementSchemaReady) return null;
 
   return "As medições do projeto ainda dependem da migration complementar do módulo Projetos. Aplique `npx prisma migrate deploy` no ambiente publicado para liberar registro, anexos e indicadores por área técnica.";
+}
+
+function buildGovernanceOpsNotice(governanceOpsSchemaReady: boolean) {
+  if (governanceOpsSchemaReady) return null;
+
+  return "Pendências, riscos e histórico técnico ampliado ainda dependem da migration complementar do módulo Projetos. Aplique `npx prisma migrate deploy` no ambiente publicado para liberar severidade, vínculos por área técnica e trilha executiva consolidada.";
 }
 
 function buildFieldNotice(fieldSchemaReady: boolean) {
@@ -158,8 +171,41 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
         WHERE table_schema = 'public'
           AND table_name = 'project_issues'
           AND column_name = 'technicalObjectType'
-      ) AS "hasIssueTechnicalObjectType"
-      ,
+      ) AS "hasIssueTechnicalObjectType",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_issues'
+          AND column_name = 'severity'
+      ) AS "hasIssueSeverity",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'project_risks'
+      ) AS "hasProjectRisks",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_risks'
+          AND column_name = 'assetId'
+      ) AS "hasRiskAssetId",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_risks'
+          AND column_name = 'technicalArea'
+      ) AS "hasRiskTechnicalArea",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_risks'
+          AND column_name = 'technicalObjectType'
+      ) AS "hasRiskTechnicalObjectType",
       EXISTS (
         SELECT 1
         FROM information_schema.columns
@@ -211,6 +257,11 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
     hasInspectionTechnicalObjectType: false,
     hasIssueTechnicalArea: false,
     hasIssueTechnicalObjectType: false,
+    hasIssueSeverity: false,
+    hasProjectRisks: false,
+    hasRiskAssetId: false,
+    hasRiskTechnicalArea: false,
+    hasRiskTechnicalObjectType: false,
     hasDocumentTechnicalArea: false,
     hasDocumentTypeEdital: false,
     hasDocumentTypeOrdemServico: false,
@@ -232,6 +283,14 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
     row.hasInspectionTechnicalObjectType &&
     row.hasIssueTechnicalArea &&
     row.hasIssueTechnicalObjectType;
+  const governanceOpsSchemaReady =
+    governanceSchemaReady &&
+    row.hasProjectIssues &&
+    row.hasProjectRisks &&
+    row.hasIssueSeverity &&
+    row.hasRiskAssetId &&
+    row.hasRiskTechnicalArea &&
+    row.hasRiskTechnicalObjectType;
   const documentSchemaReady =
     governanceSchemaReady &&
     row.hasDocumentTechnicalArea &&
@@ -243,11 +302,13 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
   return {
     executiveSchemaReady,
     governanceSchemaReady,
+    governanceOpsSchemaReady,
     measurementSchemaReady,
     fieldSchemaReady,
     documentSchemaReady,
     schemaMode: governanceSchemaReady ? "full" : "legacy",
     notice: buildCompatibilityNotice(executiveSchemaReady, governanceSchemaReady),
+    governanceOpsNotice: buildGovernanceOpsNotice(governanceOpsSchemaReady),
     measurementNotice: buildMeasurementNotice(measurementSchemaReady),
     fieldNotice: buildFieldNotice(fieldSchemaReady),
     documentNotice: buildDocumentNotice(documentSchemaReady),

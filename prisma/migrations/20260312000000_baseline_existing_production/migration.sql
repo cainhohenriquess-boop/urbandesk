@@ -1,4 +1,4 @@
-﻿-- Baseline for the pre-migration production schema.
+-- Baseline for the pre-migration production schema.
 -- This migration is meant to bootstrap fresh databases and to baseline
 -- existing production environments that were created without Prisma Migrate.
 

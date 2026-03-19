@@ -1,5 +1,6 @@
 ﻿import type {
   ProjectContractStatus,
+  ProjectCriticality,
   ProjectDocumentType,
   ProjectInspectionStatus,
   ProjectInspectionType,
@@ -100,11 +101,11 @@ const PROJECT_MEASUREMENT_STATUS_LABELS: Record<ProjectMeasurementStatus, string
 
 const PROJECT_INSPECTION_TYPE_LABELS: Record<ProjectInspectionType, string> = {
   ROTINA: "Rotina",
-  MEDICAO: "MediÃ§Ã£o",
+  MEDICAO: "Medição",
   QUALIDADE: "Qualidade",
-  SEGURANCA: "SeguranÃ§a",
+  SEGURANCA: "Segurança",
   RECEBIMENTO: "Recebimento",
-  EXTRAORDINARIA: "ExtraordinÃ¡ria",
+  EXTRAORDINARIA: "Extraordinária",
 };
 
 const PROJECT_INSPECTION_STATUS_LABELS: Record<ProjectInspectionStatus, string> = {
@@ -115,14 +116,14 @@ const PROJECT_INSPECTION_STATUS_LABELS: Record<ProjectInspectionStatus, string> 
 
 const PROJECT_ISSUE_TYPE_LABELS: Record<ProjectIssueType, string> = {
   BLOQUEIO: "Bloqueio",
-  NAO_CONFORMIDADE: "NÃ£o conformidade",
-  SEGURANCA: "SeguranÃ§a",
+  NAO_CONFORMIDADE: "Não conformidade",
+  SEGURANCA: "Segurança",
   AMBIENTAL: "Ambiental",
   PRAZO: "Prazo",
   FINANCEIRO: "Financeiro",
   DOCUMENTAL: "Documental",
-  COMUNITARIO: "ComunitÃ¡rio",
-  TECNICO: "TÃ©cnico",
+  COMUNITARIO: "Comunitário",
+  TECNICO: "Técnico",
   OUTRO: "Outro",
 };
 
@@ -137,13 +138,13 @@ const PROJECT_ISSUE_STATUS_LABELS: Record<ProjectIssueStatus, string> = {
 const PROJECT_RISK_CATEGORY_LABELS: Record<ProjectRiskCategory, string> = {
   PRAZO: "Prazo",
   FINANCEIRO: "Financeiro",
-  TECNICO: "TÃ©cnico",
+  TECNICO: "Técnico",
   AMBIENTAL: "Ambiental",
-  JURIDICO: "JurÃ­dico",
+  JURIDICO: "Jurídico",
   OPERACIONAL: "Operacional",
   SOCIAL: "Social",
-  SEGURANCA: "SeguranÃ§a",
-  CLIMATICO: "ClimÃ¡tico",
+  SEGURANCA: "Segurança",
+  CLIMATICO: "Climático",
   OUTRO: "Outro",
 };
 
@@ -157,15 +158,22 @@ const PROJECT_RISK_STATUS_LABELS: Record<ProjectRiskStatus, string> = {
 
 const PROJECT_RISK_PROBABILITY_LABELS: Record<ProjectRiskProbability, string> = {
   BAIXA: "Baixa",
-  MEDIA: "MÃ©dia",
+  MEDIA: "Média",
   ALTA: "Alta",
 };
 
 const PROJECT_RISK_IMPACT_LABELS: Record<ProjectRiskImpact, string> = {
   BAIXO: "Baixo",
-  MEDIO: "MÃ©dio",
+  MEDIO: "Médio",
   ALTO: "Alto",
-  CRITICO: "CrÃ­tico",
+  CRITICO: "Crítico",
+};
+
+const PROJECT_CRITICALITY_LABELS: Record<ProjectCriticality, string> = {
+  BAIXA: "Baixa",
+  MEDIA: "Média",
+  ALTA: "Alta",
+  CRITICA: "Crítica",
 };
 
 export function getProjectOperationalStatusLabel(
@@ -228,6 +236,10 @@ export function getProjectRiskProbabilityLabel(value: ProjectRiskProbability) {
 
 export function getProjectRiskImpactLabel(value: ProjectRiskImpact) {
   return normalizeProjectLabelText(PROJECT_RISK_IMPACT_LABELS[value] ?? titleCase(value));
+}
+
+export function getProjectCriticalityLabel(value: ProjectCriticality) {
+  return normalizeProjectLabelText(PROJECT_CRITICALITY_LABELS[value] ?? titleCase(value));
 }
 
 export function getGovernanceTone(status: string | null | undefined) {

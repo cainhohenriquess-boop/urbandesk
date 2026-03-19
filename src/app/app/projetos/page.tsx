@@ -12,11 +12,13 @@ type SearchParams = Promise<{ projectId?: string }>;
 const FALLBACK_SCHEMA_COMPATIBILITY: ProjectSchemaCompatibility = {
   executiveSchemaReady: false,
   governanceSchemaReady: false,
+  governanceOpsSchemaReady: false,
   measurementSchemaReady: false,
   fieldSchemaReady: false,
   documentSchemaReady: false,
   schemaMode: "legacy",
   notice: null,
+  governanceOpsNotice: null,
   measurementNotice: null,
   fieldNotice: null,
   documentNotice: null,

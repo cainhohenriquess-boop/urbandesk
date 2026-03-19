@@ -12,6 +12,10 @@ import {
   buildProjectDocumentIndicators,
   serializeProjectDocuments,
 } from "@/lib/project-documents";
+import {
+  loadProjectGovernanceData as loadProjectGovernanceBundle,
+  loadProjectHistoryData as loadProjectHistoryBundle,
+} from "@/lib/project-governance-data";
 
 type ProjectContext = {
   tenantId: string;
@@ -447,7 +451,22 @@ async function loadIssuesAndRisksData(context: ProjectContext) {
           where: { tenantId, projectId: project.id },
           orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
           take: 24,
-          include: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            issueType: true,
+            status: true,
+            priority: true,
+            dueDate: true,
+            resolvedAt: true,
+            resolutionNotes: true,
+            createdAt: true,
+            updatedAt: true,
+            metadata: true,
+            technicalArea: true,
+            technicalObjectType: true,
+            ...(compatibility.governanceOpsSchemaReady ? { severity: true } : {}),
             phase: {
               select: {
                 id: true,
@@ -488,7 +507,33 @@ async function loadIssuesAndRisksData(context: ProjectContext) {
       where: { tenantId, projectId: project.id },
       orderBy: [{ reviewDate: "asc" }, { updatedAt: "desc" }],
       take: 24,
-      include: {
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        category: true,
+        status: true,
+        probability: true,
+        impact: true,
+        mitigationPlan: true,
+        contingencyPlan: true,
+        reviewDate: true,
+        metadata: true,
+        createdAt: true,
+        updatedAt: true,
+        ...(compatibility.governanceOpsSchemaReady
+          ? {
+              technicalArea: true,
+              technicalObjectType: true,
+              asset: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                },
+              },
+            }
+          : {}),
         phase: {
           select: {
             id: true,
@@ -506,7 +551,19 @@ async function loadIssuesAndRisksData(context: ProjectContext) {
     }),
   ]);
 
-  return { issues, risks };
+  return {
+    issues: issues.map((issue) => ({
+      ...issue,
+      severity: ("severity" in issue ? issue.severity : null) ?? "MEDIA",
+    })),
+    risks: risks.map((risk) => ({
+      ...risk,
+      technicalArea: ("technicalArea" in risk ? risk.technicalArea : null) ?? null,
+      technicalObjectType:
+        ("technicalObjectType" in risk ? risk.technicalObjectType : null) ?? null,
+      asset: ("asset" in risk ? risk.asset : null) ?? null,
+    })),
+  };
 }
 
 async function loadHistoryData(context: ProjectContext) {
@@ -836,7 +893,13 @@ export async function getProjectIssuesAndRisksData(projectId: string) {
   return {
     tenantId: context.tenantId,
     project: context.project,
-    ...(await loadIssuesAndRisksData(context)),
+    compatibility: context.compatibility,
+    ...(await loadProjectGovernanceBundle({
+      tenantId: context.tenantId,
+      projectId: context.project.id,
+      projectTechnicalAreas: context.project.technicalAreas,
+      compatibility: context.compatibility,
+    })),
   };
 }
 
@@ -847,7 +910,13 @@ export async function getProjectHistoryData(projectId: string) {
   return {
     tenantId: context.tenantId,
     project: context.project,
-    ...(await loadHistoryData(context)),
+    compatibility: context.compatibility,
+    ...(await loadProjectHistoryBundle({
+      tenantId: context.tenantId,
+      projectId: context.project.id,
+      projectTechnicalAreas: context.project.technicalAreas,
+      compatibility: context.compatibility,
+    })),
   };
 }
 

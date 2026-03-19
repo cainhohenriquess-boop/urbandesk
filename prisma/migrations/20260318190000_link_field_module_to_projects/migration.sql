@@ -1,4 +1,4 @@
-﻿ALTER TABLE "project_inspections"
+ALTER TABLE "project_inspections"
 ADD COLUMN IF NOT EXISTS "assetId" TEXT,
 ADD COLUMN IF NOT EXISTS "technicalArea" "ProjectTechnicalArea",
 ADD COLUMN IF NOT EXISTS "technicalObjectType" TEXT;
