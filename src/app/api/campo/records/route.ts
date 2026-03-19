@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -11,6 +11,15 @@ import {
   type CampoInspectionStatus,
   type CampoIssueStatus,
 } from "@/lib/campo-project-links";
+import {
+  CAMPO_CHECKLIST_STATUS_VALUES,
+  buildCampoChecklistDefaultIssueTitle,
+  buildCampoChecklistIssueDescription,
+  deriveCampoChecklistIssuePriority,
+  getCampoChecklistDefinition,
+  summarizeCampoChecklist,
+  validateCampoChecklistEntries,
+} from "@/lib/campo-checklists";
 import { AUDIT_ACTIONS, extractRequestContext, writeAuditLog } from "@/lib/audit";
 import { enforceRequestRateLimit } from "@/lib/rate-limit";
 import { requireJsonContentType } from "@/lib/request-guards";
@@ -18,6 +27,7 @@ import {
   PRISMA_PROJECT_TECHNICAL_AREAS,
   isTechnicalObjectType,
 } from "@/lib/project-disciplines";
+import { PROJECT_PRIORITY_VALUES } from "@/lib/project-portfolio";
 
 const nullableCuidSchema = z.preprocess(
   (value) => (value === "" || value === undefined || value === null ? null : value),
@@ -55,6 +65,22 @@ const campoRecordSchema = z
     ).optional(),
     inspectionStatus: z.enum(CAMPO_INSPECTION_STATUS_VALUES).optional(),
     issueStatus: z.enum(CAMPO_ISSUE_STATUS_VALUES).optional(),
+    checklistEntries: z
+      .array(
+        z
+          .object({
+            itemId: z.string().trim().min(1).max(120),
+            status: z.enum(CAMPO_CHECKLIST_STATUS_VALUES),
+          })
+          .strict()
+      )
+      .max(32)
+      .optional()
+      .default([]),
+    openIssueFromInspection: z.boolean().optional().default(false),
+    inspectionIssueTitle: nullableStringSchema.optional(),
+    inspectionIssueStatus: z.enum(CAMPO_ISSUE_STATUS_VALUES).optional(),
+    inspectionIssuePriority: z.enum(PROJECT_PRIORITY_VALUES).optional(),
     clientRef: z.preprocess(
       (value) => (value === "" || value === undefined || value === null ? null : value),
       z.string().trim().min(1).max(120).nullable()
@@ -94,6 +120,8 @@ function buildFieldMetadata(input: {
   lng: number | null;
   photos: string[];
   recordType: "VISTORIA" | "OCORRENCIA";
+  checklist?: unknown;
+  issueOpened?: boolean;
 }) {
   return {
     source: "campo",
@@ -105,6 +133,8 @@ function buildFieldMetadata(input: {
     photos: input.photos,
     capturedAt: new Date().toISOString(),
     fieldRecordType: input.recordType,
+    checklist: input.checklist ?? null,
+    issueOpened: input.issueOpened ?? false,
   } satisfies Record<string, unknown>;
 }
 
@@ -204,6 +234,16 @@ export async function POST(req: NextRequest) {
       (body.technicalArea as (typeof PRISMA_PROJECT_TECHNICAL_AREAS)[number] | null) ??
       null;
     const technicalObjectType = assetContext?.technicalObjectType ?? body.technicalObjectType ?? null;
+    const checklistValidation =
+      body.recordType === "VISTORIA"
+        ? validateCampoChecklistEntries(technicalArea, body.checklistEntries)
+        : { ok: true as const, entries: [], error: null };
+    const checklistDefinition =
+      body.recordType === "VISTORIA" ? getCampoChecklistDefinition(technicalArea) : null;
+    const checklistSummary =
+      body.recordType === "VISTORIA"
+        ? summarizeCampoChecklist(technicalArea, checklistValidation.entries)
+        : summarizeCampoChecklist(null, []);
 
     if (!technicalArea) {
       return NextResponse.json({ error: "Selecione a área técnica da vistoria ou ocorrência." }, { status: 400 });
@@ -212,6 +252,25 @@ export async function POST(req: NextRequest) {
     if (!technicalObjectType) {
       return NextResponse.json(
         { error: "Selecione o objeto técnico relacionado ou vincule um item técnico do projeto." },
+        { status: 400 }
+      );
+    }
+
+    if (!checklistValidation.ok) {
+      return NextResponse.json({ error: checklistValidation.error }, { status: 400 });
+    }
+
+    if (
+      body.recordType === "VISTORIA" &&
+      body.openIssueFromInspection &&
+      checklistDefinition &&
+      checklistSummary.nonConformingCount === 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Marque pelo menos uma não conformidade no checklist para abrir uma pendência a partir da vistoria.",
+        },
         { status: 400 }
       );
     }
@@ -266,6 +325,16 @@ export async function POST(req: NextRequest) {
       lng: body.lng ?? null,
       photos,
       recordType: body.recordType,
+      checklist:
+        body.recordType === "VISTORIA" && checklistDefinition
+          ? {
+              area: technicalArea,
+              title: checklistDefinition.title,
+              entries: checklistValidation.entries,
+              summary: checklistSummary,
+            }
+          : null,
+      issueOpened: body.recordType === "VISTORIA" ? body.openIssueFromInspection : false,
     });
 
     if (body.recordType === "VISTORIA") {
@@ -293,6 +362,75 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      let openedIssue: { id: string; title: string } | null = null;
+
+      if (body.openIssueFromInspection && checklistSummary.nonConformingCount > 0) {
+        const issue = await prisma.projectIssue.create({
+          data: {
+            tenantId,
+            projectId: project.id,
+            phaseId: phase?.id ?? null,
+            inspectionId: inspection.id,
+            assetId: asset?.id ?? null,
+            reportedById: session.user.id ?? null,
+            title:
+              body.inspectionIssueTitle?.trim() ||
+              buildCampoChecklistDefaultIssueTitle({
+                area: technicalArea,
+                checklistEntries: checklistValidation.entries,
+                fallbackName: body.name,
+              }),
+            description: buildCampoChecklistIssueDescription({
+              area: technicalArea,
+              checklistEntries: checklistValidation.entries,
+              note,
+            }),
+            issueType: "NAO_CONFORMIDADE",
+            status: body.inspectionIssueStatus ?? "ABERTA",
+            priority:
+              body.inspectionIssuePriority ??
+              deriveCampoChecklistIssuePriority(checklistValidation.entries),
+            metadata: {
+              ...metadata,
+              generatedFromInspectionId: inspection.id,
+              checklistSummary,
+            } as Prisma.InputJsonValue,
+            technicalArea,
+            technicalObjectType,
+          },
+          select: {
+            id: true,
+            title: true,
+          },
+        });
+
+        openedIssue = issue;
+
+        await writeAuditLog({
+          action: AUDIT_ACTIONS.FIELD_ISSUE_CREATE,
+          entityType: "project_issue",
+          entityId: issue.id,
+          actor: {
+            userId: session.user.id ?? null,
+            userName: session.user.name ?? null,
+            userEmail: session.user.email ?? null,
+            userRole: session.user.role ?? null,
+            tenantId,
+          },
+          requestContext: extractRequestContext(req),
+          metadata: {
+            projectId: project.id,
+            technicalArea,
+            technicalObjectType,
+            phaseId: phase?.id ?? null,
+            assetId: asset?.id ?? null,
+            inspectionId: inspection.id,
+            source: "campo",
+            checklistSummary,
+          },
+        });
+      }
+
       await writeAuditLog({
         action: AUDIT_ACTIONS.FIELD_INSPECTION_CREATE,
         entityType: "project_inspection",
@@ -312,10 +450,11 @@ export async function POST(req: NextRequest) {
           phaseId: phase?.id ?? null,
           assetId: asset?.id ?? null,
           source: "campo",
+          checklistSummary,
         },
       });
 
-      return NextResponse.json({ data: inspection }, { status: 201 });
+      return NextResponse.json({ data: inspection, openedIssue }, { status: 201 });
     }
 
     const issue = await prisma.projectIssue.create({
@@ -368,4 +507,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Erro interno do servidor." }, { status: 500 });
   }
 }
+
+
 

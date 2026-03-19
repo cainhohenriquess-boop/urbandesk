@@ -99,11 +99,10 @@ export function resolveCampoAssetTechnicalContext(asset: {
 }
 
 export function getCampoTechnicalAreaOptions(projectAreas: ProjectTechnicalArea[]) {
-  return projectAreas
-    .map((area) => ({
-      value: area as ProjectDisciplineId,
-      label: getProjectTechnicalAreaLabel(area),
-    }));
+  return projectAreas.map((area) => ({
+    value: area as ProjectDisciplineId,
+    label: getProjectTechnicalAreaLabel(area),
+  }));
 }
 
 export function getCampoTechnicalObjectLabel(value: TechnicalObjectTypeId | null | undefined) {

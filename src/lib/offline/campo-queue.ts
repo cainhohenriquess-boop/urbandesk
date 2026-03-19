@@ -1,4 +1,7 @@
-﻿export type CampoAssetType = "PONTO" | "TRECHO" | "AREA";
+﻿import type { CampoChecklistEntry } from "@/lib/campo-checklists";
+import type { ProjectPriorityValue } from "@/lib/project-portfolio";
+
+export type CampoAssetType = "PONTO" | "TRECHO" | "AREA";
 export type CampoRecordType = "VISTORIA" | "OCORRENCIA";
 export type CampoInspectionStatus = "AGENDADA" | "REALIZADA" | "CANCELADA";
 export type CampoIssueStatus =
@@ -27,6 +30,11 @@ export interface CampoQueueItem {
   relatedAssetLabel: string | null;
   inspectionStatus: CampoInspectionStatus | null;
   issueStatus: CampoIssueStatus | null;
+  checklistEntries: CampoChecklistEntry[];
+  openIssueFromInspection: boolean;
+  inspectionIssueTitle: string | null;
+  inspectionIssueStatus: CampoIssueStatus | null;
+  inspectionIssuePriority: ProjectPriorityValue | null;
   createdAt: string;
   updatedAt: string;
   status: CampoSyncStatus;
@@ -56,6 +64,11 @@ export interface CampoCaptureDraft {
   relatedAssetLabel?: string | null;
   inspectionStatus?: CampoInspectionStatus | null;
   issueStatus?: CampoIssueStatus | null;
+  checklistEntries?: CampoChecklistEntry[];
+  openIssueFromInspection?: boolean;
+  inspectionIssueTitle?: string | null;
+  inspectionIssueStatus?: CampoIssueStatus | null;
+  inspectionIssuePriority?: ProjectPriorityValue | null;
   photos: File[];
   createdAt?: string;
 }
@@ -86,6 +99,11 @@ interface CampoQueueRecord {
   relatedAssetLabel: string | null;
   inspectionStatus: CampoInspectionStatus | null;
   issueStatus: CampoIssueStatus | null;
+  checklistEntries: CampoChecklistEntry[];
+  openIssueFromInspection: boolean;
+  inspectionIssueTitle: string | null;
+  inspectionIssueStatus: CampoIssueStatus | null;
+  inspectionIssuePriority: ProjectPriorityValue | null;
   createdAt: string;
   updatedAt: string;
   status: CampoSyncStatus;
@@ -153,9 +171,30 @@ function normalizeText(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeChecklistEntries(
+  value: CampoChecklistEntry[] | null | undefined
+): CampoChecklistEntry[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter(
+    (entry): entry is CampoChecklistEntry =>
+      Boolean(
+        entry &&
+          typeof entry.itemId === "string" &&
+          entry.itemId.trim().length > 0 &&
+          typeof entry.status === "string"
+      )
+  );
+}
+
 function toQueueItem(record: CampoQueueRecord, attachmentCount: number): CampoQueueItem {
   return {
     ...record,
+    checklistEntries: normalizeChecklistEntries(record.checklistEntries),
+    openIssueFromInspection: Boolean(record.openIssueFromInspection),
+    inspectionIssueTitle: normalizeText(record.inspectionIssueTitle),
+    inspectionIssueStatus: record.inspectionIssueStatus ?? null,
+    inspectionIssuePriority: record.inspectionIssuePriority ?? null,
     attachmentCount,
   };
 }
@@ -361,6 +400,11 @@ function buildCampoFieldRecordPayload(item: CampoQueueRecord, photoUrls: string[
     relatedAssetId: item.relatedAssetId,
     inspectionStatus: item.inspectionStatus,
     issueStatus: item.issueStatus,
+    checklistEntries: normalizeChecklistEntries(item.checklistEntries),
+    openIssueFromInspection: item.openIssueFromInspection,
+    inspectionIssueTitle: item.inspectionIssueTitle,
+    inspectionIssueStatus: item.inspectionIssueStatus,
+    inspectionIssuePriority: item.inspectionIssuePriority,
     clientRef: item.id,
   };
 }
@@ -452,6 +496,11 @@ export async function createCampoQueueItem(draft: CampoCaptureDraft): Promise<Ca
       relatedAssetLabel: normalizeText(draft.relatedAssetLabel),
       inspectionStatus: draft.inspectionStatus ?? null,
       issueStatus: draft.issueStatus ?? null,
+      checklistEntries: normalizeChecklistEntries(draft.checklistEntries),
+      openIssueFromInspection: Boolean(draft.openIssueFromInspection),
+      inspectionIssueTitle: normalizeText(draft.inspectionIssueTitle),
+      inspectionIssueStatus: draft.inspectionIssueStatus ?? null,
+      inspectionIssuePriority: draft.inspectionIssuePriority ?? null,
       createdAt: draft.createdAt ?? now,
       updatedAt: now,
       status: "pending",
@@ -710,3 +759,4 @@ export async function getCampoQueueItem(id: string): Promise<CampoQueueItem | nu
   const attachments = await getAttachmentsByQueueId(id);
   return toQueueItem(record, attachments.length);
 }
+

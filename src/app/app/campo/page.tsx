@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
@@ -24,6 +24,13 @@ import {
   type CampoProjectOption,
 } from "@/lib/campo-project-links";
 import {
+  buildCampoChecklistDefaultIssueTitle,
+  getCampoChecklistDefinition,
+  getCampoChecklistStatusLabel,
+  summarizeCampoChecklist,
+  type CampoChecklistStatus,
+} from "@/lib/campo-checklists";
+import {
   PRISMA_PROJECT_TECHNICAL_AREAS,
   getDisciplineObjectTypes,
   getTechnicalObjectLabel,
@@ -38,6 +45,7 @@ import {
   getProjectIssueStatusLabel,
   getProjectTechnicalAreaLabel,
 } from "@/lib/project-labels";
+import { getProjectPriorityLabel, PROJECT_PRIORITY_VALUES, type ProjectPriorityValue } from "@/lib/project-portfolio";
 import { cn, formatCoords, formatDateTime } from "@/lib/utils";
 
 const MAX_PHOTOS = 5;
@@ -95,6 +103,11 @@ export default function CampoPage() {
   const [relatedAssetId, setRelatedAssetId] = useState("");
   const [inspectionStatus, setInspectionStatus] = useState<CampoInspectionStatus>("REALIZADA");
   const [issueStatus, setIssueStatus] = useState<CampoIssueStatus>("ABERTA");
+  const [checklistState, setChecklistState] = useState<Record<string, CampoChecklistStatus | "">>({});
+  const [openIssueFromInspection, setOpenIssueFromInspection] = useState(false);
+  const [inspectionIssueTitle, setInspectionIssueTitle] = useState("");
+  const [inspectionIssueStatus, setInspectionIssueStatus] = useState<CampoIssueStatus>("ABERTA");
+  const [inspectionIssuePriority, setInspectionIssuePriority] = useState<ProjectPriorityValue>("MEDIA");
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
@@ -140,6 +153,38 @@ export default function CampoPage() {
   }, [projectAssets, technicalArea, technicalAreaOptions, technicalObjectType]);
   const selectedRelatedAsset = useMemo(() => projectAssets.find((asset) => asset.id === relatedAssetId) ?? null, [projectAssets, relatedAssetId]);
   const fieldStatusOptions = useMemo(() => getFieldStatusOptions(recordType), [recordType]);
+  const checklistDefinition = useMemo(
+    () => (recordType === "VISTORIA" ? getCampoChecklistDefinition(technicalArea || null) : null),
+    [recordType, technicalArea]
+  );
+  const checklistEntries = useMemo(
+    () =>
+      checklistDefinition
+        ? checklistDefinition.items
+            .map((item) => {
+              const status = checklistState[item.id];
+              return status ? { itemId: item.id, status } : null;
+            })
+            .filter((entry): entry is { itemId: string; status: CampoChecklistStatus } => Boolean(entry))
+        : [],
+    [checklistDefinition, checklistState]
+  );
+  const checklistSummary = useMemo(
+    () => summarizeCampoChecklist(technicalArea || null, checklistEntries),
+    [checklistEntries, technicalArea]
+  );
+  const checklistComplete = Boolean(
+    !checklistDefinition || checklistEntries.length === checklistDefinition.items.length
+  );
+  const suggestedInspectionIssueTitle = useMemo(
+    () =>
+      buildCampoChecklistDefaultIssueTitle({
+        area: technicalArea || null,
+        checklistEntries,
+        fallbackName: name.trim() || "Pendência gerada a partir da vistoria",
+      }),
+    [checklistEntries, name, technicalArea]
+  );
 
   const refreshQueue = useCallback(async () => {
     if (!isCampoOfflineSupported()) return void setQueue([]);
@@ -269,6 +314,31 @@ export default function CampoPage() {
   }, [selectedProject, technicalArea, technicalAreaOptions]);
 
   useEffect(() => {
+    if (!checklistDefinition) {
+      setChecklistState({});
+      setOpenIssueFromInspection(false);
+      setInspectionIssueTitle("");
+      setInspectionIssueStatus("ABERTA");
+      setInspectionIssuePriority("MEDIA");
+      return;
+    }
+
+    setChecklistState((current) => {
+      const next: Record<string, CampoChecklistStatus | ""> = {};
+      for (const item of checklistDefinition.items) {
+        next[item.id] = current[item.id] ?? "";
+      }
+      return next;
+    });
+  }, [checklistDefinition]);
+
+  useEffect(() => {
+    if (!checklistDefinition || checklistSummary.nonConformingCount === 0) {
+      setOpenIssueFromInspection(false);
+    }
+  }, [checklistDefinition, checklistSummary.nonConformingCount]);
+
+  useEffect(() => {
     if (!selectedRelatedAsset) return;
     const assetArea =
       selectedRelatedAsset.technicalArea && isProjectDisciplineId(selectedRelatedAsset.technicalArea)
@@ -328,6 +398,11 @@ export default function CampoPage() {
     previews.forEach((url) => URL.revokeObjectURL(url));
     setPreviews([]);
     setRelatedAssetId("");
+    setChecklistState({});
+    setOpenIssueFromInspection(false);
+    setInspectionIssueTitle("");
+    setInspectionIssueStatus("ABERTA");
+    setInspectionIssuePriority("MEDIA");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, [previews]);
 
@@ -363,6 +438,19 @@ export default function CampoPage() {
         relatedAssetLabel: selectedRelatedAsset?.name ?? null,
         inspectionStatus: recordType === "VISTORIA" ? inspectionStatus : null,
         issueStatus: recordType === "OCORRENCIA" ? issueStatus : null,
+        checklistEntries: recordType === "VISTORIA" ? checklistEntries : [],
+        openIssueFromInspection:
+          recordType === "VISTORIA" ? openIssueFromInspection : false,
+        inspectionIssueTitle:
+          recordType === "VISTORIA" ? inspectionIssueTitle.trim() : null,
+        inspectionIssueStatus:
+          recordType === "VISTORIA" && openIssueFromInspection
+            ? inspectionIssueStatus
+            : null,
+        inspectionIssuePriority:
+          recordType === "VISTORIA" && openIssueFromInspection
+            ? inspectionIssuePriority
+            : null,
         photos,
       });
       clearCaptureForm();
@@ -376,7 +464,7 @@ export default function CampoPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [clearCaptureForm, coords?.lat, coords?.lng, inspectionStatus, issueStatus, name, note, phaseId, photos, projectId, recordType, refreshQueue, relatedAssetId, runSync, selectedPhase, selectedProject, selectedRelatedAsset, technicalArea, technicalObjectType]);
+  }, [checklistEntries, clearCaptureForm, coords?.lat, coords?.lng, inspectionIssuePriority, inspectionIssueStatus, inspectionIssueTitle, inspectionStatus, issueStatus, name, note, openIssueFromInspection, phaseId, photos, projectId, recordType, refreshQueue, relatedAssetId, runSync, selectedPhase, selectedProject, selectedRelatedAsset, technicalArea, technicalObjectType]);
 
   const handleRetryItem = useCallback(async (id: string) => {
     await markCampoItemForRetry(id);
@@ -391,7 +479,13 @@ export default function CampoPage() {
 
   const unsyncedCount = queue.filter((item) => item.status !== "synced").length;
   const errorCount = queue.filter((item) => item.status === "error" || item.status === "conflict").length;
-  const canSubmit = Boolean(name.trim()) && Boolean(projectId) && Boolean(technicalArea) && Boolean(technicalObjectType);
+  const canSubmit =
+    Boolean(name.trim()) &&
+    Boolean(projectId) &&
+    Boolean(technicalArea) &&
+    Boolean(technicalObjectType) &&
+    (recordType !== "VISTORIA" || checklistComplete) &&
+    (!openIssueFromInspection || checklistSummary.nonConformingCount > 0);
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 pb-20">
@@ -489,6 +583,146 @@ export default function CampoPage() {
                   <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Observações de campo</label>
                   <textarea rows={4} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Achados, condição encontrada, risco observado, encaminhamento ou recomendação técnica..." className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30" />
                 </div>
+                {recordType === "VISTORIA" && checklistDefinition ? (
+                  <div className="space-y-4 rounded-xl border border-border bg-background/60 p-4">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        {checklistDefinition.title}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {checklistDefinition.description}
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      {checklistDefinition.items.map((item) => (
+                        <div key={item.id} className="rounded-lg border border-border bg-background px-3 py-3">
+                          <p className="text-sm font-medium text-foreground">{item.label}</p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                            {(["CONFORME", "NAO_CONFORME", "NAO_SE_APLICA"] as const).map((status) => {
+                              const active = checklistState[item.id] === status;
+                              return (
+                                <button
+                                  key={status}
+                                  type="button"
+                                  onClick={() =>
+                                    setChecklistState((current) => ({
+                                      ...current,
+                                      [item.id]: status,
+                                    }))
+                                  }
+                                  className={cn(
+                                    "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                                    active
+                                      ? status === "NAO_CONFORME"
+                                        ? "border-danger-300 bg-danger-50 text-danger-700"
+                                        : status === "CONFORME"
+                                          ? "border-accent-300 bg-accent-50 text-accent-700"
+                                          : "border-warning-300 bg-warning-50 text-warning-700"
+                                      : "border-border bg-background text-muted-foreground hover:text-foreground"
+                                  )}
+                                >
+                                  {getCampoChecklistStatusLabel(status)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-lg border border-border bg-background px-3 py-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Conforme</p>
+                        <p className="mt-1 text-lg font-semibold text-foreground">{checklistSummary.conformingCount}</p>
+                      </div>
+                      <div className="rounded-lg border border-danger-200 bg-danger-50 px-3 py-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-danger-700">Não conformidades</p>
+                        <p className="mt-1 text-lg font-semibold text-danger-700">{checklistSummary.nonConformingCount}</p>
+                      </div>
+                      <div className="rounded-lg border border-border bg-background px-3 py-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Não se aplica</p>
+                        <p className="mt-1 text-lg font-semibold text-foreground">{checklistSummary.notApplicableCount}</p>
+                      </div>
+                    </div>
+
+                    {!checklistComplete ? (
+                      <p className="text-xs text-warning-700">
+                        Responda todos os itens do checklist antes de salvar a vistoria.
+                      </p>
+                    ) : null}
+
+                    {checklistSummary.nonConformingCount > 0 ? (
+                      <div className="rounded-lg border border-danger-200 bg-danger-50 px-3 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-danger-800">Abrir pendência a partir da vistoria</p>
+                            <p className="mt-1 text-xs text-danger-700">
+                              Use quando a vistoria já identificar uma não conformidade que precisa entrar em tratativa.
+                            </p>
+                          </div>
+                          <label className="inline-flex items-center gap-2 text-sm font-medium text-danger-800">
+                            <input
+                              type="checkbox"
+                              checked={openIssueFromInspection}
+                              onChange={(event) => setOpenIssueFromInspection(event.target.checked)}
+                            />
+                            Gerar pendência
+                          </label>
+                        </div>
+
+                        {openIssueFromInspection ? (
+                          <div className="mt-4 grid gap-3 md:grid-cols-2">
+                            <div className="md:col-span-2">
+                              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                                Título da pendência
+                              </label>
+                              <input
+                                type="text"
+                                value={inspectionIssueTitle}
+                                onChange={(event) => setInspectionIssueTitle(event.target.value)}
+                                placeholder={suggestedInspectionIssueTitle}
+                                className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                                Status da pendência
+                              </label>
+                              <select
+                                value={inspectionIssueStatus}
+                                onChange={(event) => setInspectionIssueStatus(event.target.value as CampoIssueStatus)}
+                                className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30"
+                              >
+                                {CAMPO_ISSUE_STATUS_VALUES.map((value) => (
+                                  <option key={value} value={value}>
+                                    {getProjectIssueStatusLabel(value)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                                Prioridade
+                              </label>
+                              <select
+                                value={inspectionIssuePriority}
+                                onChange={(event) => setInspectionIssuePriority(event.target.value as ProjectPriorityValue)}
+                                className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30"
+                              >
+                                {PROJECT_PRIORITY_VALUES.map((value) => (
+                                  <option key={value} value={value}>
+                                    {getProjectPriorityLabel(value)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </section>
 
@@ -499,6 +733,12 @@ export default function CampoPage() {
                 <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto técnico</p><p className="mt-1 font-medium text-foreground">{getObjectLabel(technicalObjectType)}</p></div>
                 <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Etapa</p><p className="mt-1 font-medium text-foreground">{selectedPhase ? buildCampoPhaseLabel(selectedPhase) : "Sem etapa vinculada"}</p></div>
                 <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objeto relacionado</p><p className="mt-1 font-medium text-foreground">{selectedRelatedAsset ? `${selectedRelatedAsset.name} · ${getCampoTechnicalObjectLabel(selectedRelatedAsset.technicalObjectType)}` : "Sem vínculo direto"}</p></div>
+                {recordType === "VISTORIA" && checklistDefinition ? (
+                  <div><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Checklist</p><p className="mt-1 font-medium text-foreground">{checklistSummary.answeredCount}/{checklistDefinition.items.length} item(ns) respondido(s)</p></div>
+                ) : null}
+                {recordType === "VISTORIA" && checklistSummary.nonConformingCount > 0 ? (
+                  <div><p className="text-xs uppercase tracking-[0.16em] text-danger-700">Não conformidades</p><p className="mt-1 font-medium text-danger-700">{checklistSummary.nonConformingCount} item(ns) marcados</p></div>
+                ) : null}
               </div>
 
               <div className="rounded-xl border bg-card p-4">
@@ -560,6 +800,16 @@ export default function CampoPage() {
                     {contextLine && <p className="mt-1 text-xs text-muted-foreground">{contextLine}</p>}
                     {item.relatedAssetLabel && <p className="mt-1 text-xs text-muted-foreground">Relacionado a {item.relatedAssetLabel}</p>}
                     {item.note && <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{item.note}</p>}
+                    {item.checklistEntries.length > 0 ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Checklist: {item.checklistEntries.filter((entry) => entry.status === "NAO_CONFORME").length} não conformidade(s).
+                      </p>
+                    ) : null}
+                    {item.openIssueFromInspection ? (
+                      <p className="mt-1 text-xs text-danger-700">
+                        Pendência automática habilitada para esta vistoria.
+                      </p>
+                    ) : null}
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">{typeof item.lat === "number" && typeof item.lng === "number" && <span className="geo-label">{formatCoords(item.lat, item.lng)}</span>}<span>{formatDateTime(item.createdAt)}</span>{attachmentTotal > 0 && <span>{attachmentTotal} foto(s)</span>}</div>
                     <p className="mt-2 text-[11px] text-muted-foreground">{syncState.description}</p>
                     {item.status === "error" && item.nextRetryAt && <p className="mt-1 text-[11px] text-warning-600">Próxima tentativa automática: {formatDateTime(item.nextRetryAt)}</p>}
@@ -579,3 +829,4 @@ export default function CampoPage() {
     </div>
   );
 }
+
