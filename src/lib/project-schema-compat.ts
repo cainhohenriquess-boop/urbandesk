@@ -7,9 +7,11 @@ export type ProjectSchemaCompatibility = {
   executiveSchemaReady: boolean;
   governanceSchemaReady: boolean;
   measurementSchemaReady: boolean;
+  fieldSchemaReady: boolean;
   schemaMode: ProjectSchemaMode;
   notice: string | null;
   measurementNotice: string | null;
+  fieldNotice: string | null;
 };
 
 type ProjectSchemaCheckRow = {
@@ -19,6 +21,13 @@ type ProjectSchemaCheckRow = {
   hasProjectComments: boolean;
   hasProjectMeasurements: boolean;
   hasMeasurementTechnicalArea: boolean;
+  hasProjectInspections: boolean;
+  hasProjectIssues: boolean;
+  hasInspectionAssetId: boolean;
+  hasInspectionTechnicalArea: boolean;
+  hasInspectionTechnicalObjectType: boolean;
+  hasIssueTechnicalArea: boolean;
+  hasIssueTechnicalObjectType: boolean;
 };
 
 function buildCompatibilityNotice(
@@ -40,6 +49,12 @@ function buildMeasurementNotice(measurementSchemaReady: boolean) {
   if (measurementSchemaReady) return null;
 
   return "As medições do projeto ainda dependem da migration complementar do módulo Projetos. Aplique `npx prisma migrate deploy` no ambiente publicado para liberar registro, anexos e indicadores por área técnica.";
+}
+
+function buildFieldNotice(fieldSchemaReady: boolean) {
+  if (fieldSchemaReady) return null;
+
+  return "Fiscalização, pendências e vínculos de campo ainda dependem da migration complementar do módulo Projetos. Aplique `npx prisma migrate deploy` no ambiente publicado para liberar vínculos por área técnica e objeto relacionado.";
 }
 
 export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaCompatibility> {
@@ -83,7 +98,54 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
         WHERE table_schema = 'public'
           AND table_name = 'project_measurements'
           AND column_name = 'technicalArea'
-      ) AS "hasMeasurementTechnicalArea"
+      ) AS "hasMeasurementTechnicalArea",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'project_inspections'
+      ) AS "hasProjectInspections",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'project_issues'
+      ) AS "hasProjectIssues",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_inspections'
+          AND column_name = 'assetId'
+      ) AS "hasInspectionAssetId",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_inspections'
+          AND column_name = 'technicalArea'
+      ) AS "hasInspectionTechnicalArea",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_inspections'
+          AND column_name = 'technicalObjectType'
+      ) AS "hasInspectionTechnicalObjectType",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_issues'
+          AND column_name = 'technicalArea'
+      ) AS "hasIssueTechnicalArea",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'project_issues'
+          AND column_name = 'technicalObjectType'
+      ) AS "hasIssueTechnicalObjectType"
   `);
 
   const row = rows[0] ?? {
@@ -93,6 +155,13 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
     hasProjectComments: false,
     hasProjectMeasurements: false,
     hasMeasurementTechnicalArea: false,
+    hasProjectInspections: false,
+    hasProjectIssues: false,
+    hasInspectionAssetId: false,
+    hasInspectionTechnicalArea: false,
+    hasInspectionTechnicalObjectType: false,
+    hasIssueTechnicalArea: false,
+    hasIssueTechnicalObjectType: false,
   };
 
   const executiveSchemaReady = row.hasProjectCode && row.hasEstimatedBudget;
@@ -100,14 +169,25 @@ export async function getProjectSchemaCompatibility(): Promise<ProjectSchemaComp
     executiveSchemaReady && row.hasProjectContracts && row.hasProjectComments;
   const measurementSchemaReady =
     governanceSchemaReady && row.hasProjectMeasurements && row.hasMeasurementTechnicalArea;
+  const fieldSchemaReady =
+    governanceSchemaReady &&
+    row.hasProjectInspections &&
+    row.hasProjectIssues &&
+    row.hasInspectionAssetId &&
+    row.hasInspectionTechnicalArea &&
+    row.hasInspectionTechnicalObjectType &&
+    row.hasIssueTechnicalArea &&
+    row.hasIssueTechnicalObjectType;
 
   return {
     executiveSchemaReady,
     governanceSchemaReady,
     measurementSchemaReady,
+    fieldSchemaReady,
     schemaMode: governanceSchemaReady ? "full" : "legacy",
     notice: buildCompatibilityNotice(executiveSchemaReady, governanceSchemaReady),
     measurementNotice: buildMeasurementNotice(measurementSchemaReady),
+    fieldNotice: buildFieldNotice(fieldSchemaReady),
   };
 }
 

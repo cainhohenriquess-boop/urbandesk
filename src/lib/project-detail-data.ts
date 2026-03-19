@@ -163,6 +163,8 @@ async function loadPlanningData(context: ProjectContext) {
     ...phase,
     _count: {
       ...phase._count,
+      inspections: compatibility.fieldSchemaReady ? phase._count.inspections : 0,
+      issues: compatibility.fieldSchemaReady ? phase._count.issues : 0,
       measurements: phaseMeasurementCountMap.get(phase.id) ?? 0,
     },
   }));
@@ -351,6 +353,10 @@ async function loadMeasurementData(context: ProjectContext) {
 async function loadInspectionData(context: ProjectContext) {
   const { tenantId, project, compatibility } = context;
 
+  if (!compatibility.fieldSchemaReady) {
+    return { inspections: [] };
+  }
+
   const inspections = compatibility.measurementSchemaReady
     ? await prisma.projectInspection.findMany({
         where: { tenantId, projectId: project.id },
@@ -436,49 +442,51 @@ async function loadInspectionData(context: ProjectContext) {
 }
 
 async function loadIssuesAndRisksData(context: ProjectContext) {
-  const { tenantId, project } = context;
+  const { tenantId, project, compatibility } = context;
 
   const [issues, risks] = await Promise.all([
-    prisma.projectIssue.findMany({
-      where: { tenantId, projectId: project.id },
-      orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
-      take: 24,
-      include: {
-        phase: {
-          select: {
-            id: true,
-            name: true,
-            sequence: true,
+    compatibility.fieldSchemaReady
+      ? prisma.projectIssue.findMany({
+          where: { tenantId, projectId: project.id },
+          orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
+          take: 24,
+          include: {
+            phase: {
+              select: {
+                id: true,
+                name: true,
+                sequence: true,
+              },
+            },
+            inspection: {
+              select: {
+                id: true,
+                occurredAt: true,
+                inspectionType: true,
+              },
+            },
+            asset: {
+              select: {
+                id: true,
+                name: true,
+                type: true,
+              },
+            },
+            reportedBy: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            assignedTo: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
-        },
-        inspection: {
-          select: {
-            id: true,
-            occurredAt: true,
-            inspectionType: true,
-          },
-        },
-        asset: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-          },
-        },
-        reportedBy: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        assignedTo: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    }),
+        })
+      : Promise.resolve([]),
     prisma.projectRisk.findMany({
       where: { tenantId, projectId: project.id },
       orderBy: [{ reviewDate: "asc" }, { updatedAt: "desc" }],

@@ -136,6 +136,8 @@ const getProjectShellDataCached = cache(async (projectId: string): Promise<Proje
         where: { tenantId, projectId: project.id },
       })
     : 0;
+  const inspectionCount = compatibility.fieldSchemaReady ? project._count.inspections : 0;
+  const issueCount = compatibility.fieldSchemaReady ? project._count.issues : 0;
 
   return {
     tenantId,
@@ -143,6 +145,8 @@ const getProjectShellDataCached = cache(async (projectId: string): Promise<Proje
       ...project,
       _count: {
         ...project._count,
+        inspections: inspectionCount,
+        issues: issueCount,
         measurements: measurementCount,
       },
     },
